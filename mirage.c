@@ -59,8 +59,11 @@
 #include <netinet/in.h>
 
 /* Vorbis */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 #include "vorbis/codec.h"
 #include "vorbisfile.h"
+#pragma GCC diagnostic pop
 
 /* POSIX Message Queue */
 #include <fcntl.h>
@@ -91,6 +94,9 @@
 #include <cuda_runtime.h>
 //#include <nvbuf_utils.h>
 
+#include <GL/glew.h>
+#include <stdbool.h>
+
 /* Local */
 #include "defines.h" /* Out of order due to dependencies */
 #include "audio.h"
@@ -120,6 +126,10 @@ int buffer_num = 0;                 /* Video is double buffered. This swaps betw
 
 static char record_path[PATH_MAX];  /* Where do we store recordings? */
 
+static int window_width = 0;
+static int window_height = 0;
+static pthread_mutex_t windowSizeMutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* Video Buffers */
 typedef struct _video_out_data {
    DestinationType output;
@@ -134,14 +144,14 @@ typedef struct _video_out_data {
 } video_out_data;
 video_out_data this_vod;
 
-pthread_t vid_out_thread;           /* Video output thread ID. */
+pthread_t vid_out_thread;                    /* Video output thread ID. */
 
-static struct mosquitto *mosq = NULL;     /* MQTT pointer */
+static struct mosquitto *mosq = NULL;        /* MQTT pointer */
 
-static int quit = 0;                      /* Global to sync exiting of threads. */
-static int detect_enabled = 0;            /* Is object detection enabled? */
+static int quit = 0;                         /* Global to sync exiting of threads. */
+static int detect_enabled = 0;               /* Is object detection enabled? */
 
-static int snapshot = 0;                  /* Take snapshot flag */
+static int snapshot = 0;                     /* Take snapshot flag */
 static char snapshot_filename[PATH_MAX+29];  /* Filename to store the snapshot */
 
 
@@ -992,10 +1002,16 @@ void *video_next_thread(void *arg)
    struct timespec start_time, end_time;
    long processing_time_us = 0L, delay_time_us = 0L;
 
+   int local_window_width = 0, local_window_height = 0;
+
    GstBus *bus = NULL;
 
-   hud_display_settings *this_hds = get_hud_display_settings();
    stream_settings *this_ss = get_stream_settings();
+
+   pthread_mutex_lock(&windowSizeMutex);
+   local_window_width = window_width;
+   local_window_height = window_height;
+   pthread_mutex_unlock(&windowSizeMutex);
 
    /* We date code our recordings. */
    time(&r_time);
@@ -1015,16 +1031,16 @@ void *video_next_thread(void *arg)
    } else if (this_vod.output == RECORD) {
       LOG_INFO("New recording: %s", this_vod.filename);
 #ifndef RECORD_AUDIO
-      g_snprintf(descr, 1024, GST_ENC_PIPELINE, DEFAULT_EYE_OUTPUT_WIDTH * 2, DEFAULT_EYE_OUTPUT_HEIGHT,
+      g_snprintf(descr, 1024, GST_ENC_PIPELINE, local_window_width, local_window_height,
                  TARGET_RECORDING_FPS, this_vod.filename);
 #else
-      g_snprintf(descr, 1024, GST_ENC_PIPELINE, DEFAULT_EYE_OUTPUT_WIDTH * 2, DEFAULT_EYE_OUTPUT_HEIGHT,
+      g_snprintf(descr, 1024, GST_ENC_PIPELINE, local_window_width, local_window_height,
                  TARGET_RECORDING_FPS, RECORD_PULSE_AUDIO_DEVICE, this_vod.filename);
 #endif
       LOG_INFO("desc: %s", descr);
    } else if (this_vod.output == STREAM) {
       g_snprintf(descr, 1024, GST_STR_PIPELINE,
-                 DEFAULT_EYE_OUTPUT_WIDTH * 2, DEFAULT_EYE_OUTPUT_HEIGHT, TARGET_RECORDING_FPS,
+                 local_window_width, local_window_height, TARGET_RECORDING_FPS,
                  STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
                  RECORD_PULSE_AUDIO_DEVICE,
                  YOUTUBE_STREAM_KEY);
@@ -1053,8 +1069,8 @@ void *video_next_thread(void *arg)
    caps = gst_caps_new_simple ("video/x-raw",
       "bpp", G_TYPE_INT, 32,
       "depth", G_TYPE_INT, 32,
-      "width", G_TYPE_INT, DEFAULT_EYE_OUTPUT_WIDTH * 2,
-      "height", G_TYPE_INT, DEFAULT_EYE_OUTPUT_HEIGHT,
+      "width", G_TYPE_INT, local_window_width,
+      "height", G_TYPE_INT, local_window_height,
       NULL);
    gst_app_src_set_caps(GST_APP_SRC(srcEncode), caps);
    gst_caps_unref(caps);
@@ -1082,7 +1098,7 @@ void *video_next_thread(void *arg)
 
          if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
             buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.buffer_num],
-                                            this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
+                                            local_window_width * RGB_OUT_SIZE * local_window_height);
             if (buffer == NULL) {
                LOG_ERROR("Failure to allocate new buffer for encoding.");
                break;
@@ -1408,6 +1424,112 @@ int computeScaledWindowSize(int desktop_width, int desktop_height,
    return 0; // Success
 }
 
+// Two PBOs for double buffering
+static GLuint g_pboIds[2] = {0, 0};
+static int g_pboIndex = 0;
+static bool g_pboInitialized = false;
+
+/**
+ * @brief Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer
+ *        using a double-buffered Pixel Buffer Object (PBO) approach.
+ *
+ * This function is somewhat analogous to SDL_RenderReadPixels(), but uses asynchronous
+ * PBO transfers to reduce CPU-GPU stalls. It currently assumes RGBA-8-bit format and uses
+ * GL_RGBA / GL_UNSIGNED_BYTE for reading.
+ *
+ * @param[in] renderer  Pointer to the SDL_Renderer (must be using an OpenGL backend).
+ * @param[in] rect      Optional rectangle specifying the area to read. If NULL, the entire
+ *                      render output is read.
+ * @param[in] format    SDL pixel format (currently not deeply used; assumes RGBA).
+ * @param[out] pixels   Pointer to the user-allocated buffer where pixels will be copied.
+ * @param[in] pitch     Byte pitch (row stride) of the user buffer, typically (width * 4).
+ *
+ * @return int  Returns 0 on success, 1 on failure.
+ */
+int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
+                                const SDL_Rect *rect,
+                                Uint32 format,
+                                void *pixels,
+                                int pitch)
+{
+   // Basic parameter checks
+   if (!renderer || !pixels) {
+      LOG_ERROR("Invalid arguments: renderer=%p, pixels=%p",
+                (void*)renderer, (void*)pixels);
+      return 1;
+   }
+
+   // Grab current GL context from SDL (assumes we've made it current).
+   SDL_GLContext currentContext = SDL_GL_GetCurrentContext();
+   if (!currentContext) {
+      LOG_ERROR("No current GL context found.");
+      return 1;
+   }
+
+   // Determine the rectangle to read
+   int readX = 0, readY = 0, readW = 0, readH = 0;
+   if (rect) {
+      readX = rect->x;
+      readY = rect->y;
+      readW = rect->w;
+      readH = rect->h;
+   } else {
+      // If rect is NULL, read the entire render target
+      SDL_GetRendererOutputSize(renderer, &readW, &readH);
+   }
+
+   // Lazy-init the PBOs if needed
+   if (!g_pboInitialized) {
+      glGenBuffers(2, g_pboIds);
+      g_pboInitialized = true;
+      LOG_INFO("Generated two PBOs for double-buffered readback.");
+   }
+
+   // Calculate the data size (assuming RGBA 8-bit).
+   const int bytesPerPixel = 4;  // RGBA
+   const GLsizeiptr dataSize = (GLsizeiptr)(readW * readH * bytesPerPixel);
+
+   // Bind the “current” PBO for asynchronous readback
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_pboIndex]);
+   glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
+
+   // Kick off the async read from the current framebuffer
+   glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+   // Now bind the “previous” PBO and try to map it to system memory
+   int prevIndex = (g_pboIndex + 1) % 2;
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[prevIndex]);
+
+   GLubyte* mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
+                                                      0,
+                                                      dataSize,
+                                                      GL_MAP_READ_BIT);
+
+   if (mappedBuffer) {
+      // Copy the pixel data into the user-provided buffer
+      // For simplicity, we assume pitch == width * 4. Adjust if needed.
+      for (int y = 0; y < readH; ++y) {
+         int flippedY = (readH - 1) - y; // Invert the row index
+         GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
+         GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
+         memcpy(dstRow, srcRow, readW * bytesPerPixel);
+      }
+
+      // Unmap after copying
+      glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+   } else {
+      LOG_WARNING("Mapped buffer was NULL. Possible missed frame or GPU is still busy?");
+   }
+
+   // Unbind the PBO
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+   // Flip the index so next call reads the other buffer
+   g_pboIndex = prevIndex;
+
+   return 0;
+}
+
 void display_help(int argc, char *argv[]) {
    if (argc > 0) {
       printf("Usage: %s [options]\n", argv[0]);
@@ -1438,8 +1560,8 @@ int main(int argc, char **argv)
    SDL_Window *window = NULL;
    SDL_DisplayMode desktop_mode;
    int desktop_width = 0, desktop_height = 0;
-   int window_width = this_hds->eye_output_width * 2;
-   int window_height = this_hds->eye_output_height;
+   window_width = this_hds->eye_output_width * 2;
+   window_height = this_hds->eye_output_height;
    int native_width = this_hds->eye_output_width * 2;
    int native_height = this_hds->eye_output_height;
    Uint32 sdl_flags = 0;
@@ -1594,7 +1716,7 @@ int main(int argc, char **argv)
 
    if (SDL_Init(SDL_INIT_VIDEO) == -1) {
       SDL_Log("SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
 
    if (getcwd(record_path, sizeof(record_path)) == NULL) {
@@ -1618,7 +1740,7 @@ int main(int argc, char **argv)
          if (SDL_GetDesktopDisplayMode(0, &desktop_mode) != 0) {
             fprintf(stderr, "SDL_GetDesktopDisplayMode failed: %s\n", SDL_GetError());
             SDL_Quit();
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
          }
 
          desktop_width = desktop_mode.w;
@@ -1627,13 +1749,13 @@ int main(int argc, char **argv)
          if (computeScaledWindowSize(desktop_width, desktop_height, native_width, native_height,
                                      &window_width, &window_height) == 1) {
             fprintf(stderr, "computeScaledWindowSize() failed!\n");
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
          }
 
          break;
       case 'h':
          display_help(argc, argv);
-         exit(EXIT_SUCCESS);
+         return EXIT_SUCCESS;
       case 'l':
          log_filename = optarg;
          break;
@@ -1663,7 +1785,7 @@ int main(int argc, char **argv)
          break;
       default:
          display_help(argc, argv);
-         exit(EXIT_FAILURE);
+         return EXIT_FAILURE;
       }
    }
 
@@ -1697,7 +1819,7 @@ int main(int argc, char **argv)
 
    if ((qd_server = mq_open(SERVER_QUEUE_NAME, O_RDONLY | O_CREAT, QUEUE_PERMISSIONS, &attr)) == -1) {
       perror("Server: mq_open (server)");
-      exit(1);
+      return EXIT_FAILURE;
    }
 
    /* If we don't get an argument, read from stdin. */
@@ -1737,7 +1859,7 @@ int main(int argc, char **argv)
       if (pthread_create
           (&thread_handles[current_thread], NULL, audio_thread, &audio_threads[current_thread])) {
          LOG_ERROR("Error creating thread [%d]", current_thread);
-         exit(1);
+         return EXIT_FAILURE;
       }
    }
 
@@ -1748,20 +1870,44 @@ int main(int argc, char **argv)
 
    if (IMG_Init(IMG_INIT_PNG) < 0) {
       SDL_Log("Error initializing SDL_image: %s\n", IMG_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
 
    if (TTF_Init() < 0) {
       SDL_Log("Error initializing SDL_ttf: %s\n", TTF_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
 
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
    if ((window =
         SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                          window_width, window_height, sdl_flags)) == NULL) {
       SDL_Log("SDL_CreateWindow() failed: %s\n", SDL_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
+
+   // Create GL context
+   SDL_GLContext glContext = SDL_GL_CreateContext(window);
+   if (!glContext) {
+      LOG_ERROR("Failed to create GL context: %s", SDL_GetError());
+      // Handle error ...
+      return EXIT_FAILURE;
+   }
+
+   // Make the context current
+   if (SDL_GL_MakeCurrent(window, glContext) < 0) {
+      LOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
+      // Handle error ...
+      return EXIT_FAILURE;
+   }
+
+   // Initialize GLEW (if you're using GLEW)
+   GLenum glewError = glewInit();
+   if (GLEW_OK != glewError) {
+      LOG_ERROR("GLEW Error: %s", glewGetErrorString(glewError));
+      return EXIT_FAILURE;
+   }
+
 #ifdef REFRESH_SYNC
    if ((renderer =
         SDL_CreateRenderer(window, -1,
@@ -1770,7 +1916,7 @@ int main(int argc, char **argv)
    if ((renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)) == NULL) {
 #endif
       SDL_Log("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
 
    // Set the logical size to your native resolution
@@ -1792,7 +1938,8 @@ int main(int argc, char **argv)
    intro_element.enabled = 0;
 
    if (parse_json_config(config_file) == FAILURE) {
-      return 1;
+      LOG_ERROR("Failed to parse config file. Exiting.");
+      return EXIT_FAILURE;
    }
 
    textureL =
@@ -1800,14 +1947,14 @@ int main(int argc, char **argv)
                          this_hds->cam_input_width, this_hds->cam_input_height);
    if (textureL == NULL) {
       SDL_Log("SDL_CreateTexture() failed on textureL: %s\n", SDL_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
    textureR =
        SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
                          this_hds->cam_input_width, this_hds->cam_input_height);
    if (textureR == NULL) {
       SDL_Log("SDL_CreateTexture() failed on textureR: %s\n", SDL_GetError());
-      return (2);
+      return EXIT_FAILURE;
    }
 
    /* Draw a background pattern in case the image has transparency */
@@ -1826,7 +1973,7 @@ int main(int argc, char **argv)
    mosq = mosquitto_new(NULL, true, NULL);
    if(mosq == NULL){
       LOG_ERROR("Error: Out of memory.");
-      return 1;
+      return EXIT_FAILURE;
    }
 
    /* Configure callbacks. This should be done before connecting ideally. */
@@ -1840,7 +1987,7 @@ int main(int argc, char **argv)
    if(rc != MOSQ_ERR_SUCCESS){
       mosquitto_destroy(mosq);
       LOG_ERROR("Error: %s", mosquitto_strerror(rc));
-      return 1;
+      return EXIT_FAILURE;
    }
 
    /* This is the main hud service. I have others based on external devices. */
@@ -1887,7 +2034,7 @@ int main(int argc, char **argv)
 
    if (pthread_create(&video_proc_thread, NULL, video_processing_thread, NULL) != 0) {
       LOG_ERROR("Error creating video processing thread.");
-      return (2);
+      return EXIT_FAILURE;
    }
 
    lastPTime = SDL_GetPerformanceCounter();
@@ -1901,12 +2048,12 @@ int main(int argc, char **argv)
 
       if (pthread_create(&command_proc_thread, NULL, socket_command_processing_thread, NULL) != 0) {
          LOG_ERROR("Error creating command processing thread.");
-         return (2);
+         return EXIT_FAILURE;
       }
    } else {
       if (pthread_create(&command_proc_thread, NULL, serial_command_processing_thread, (void *) usb_port) != 0) {
          LOG_ERROR("Error creating command processing thread.");
-         return (2);
+         return EXIT_FAILURE;
       }
    }
 
@@ -1940,14 +2087,20 @@ int main(int argc, char **argv)
             /* Process special keys. */
             switch (event.key.keysym.sym) {
             case SDLK_f:
-               if (fullscreen) {
-                  SDL_SetWindowFullscreen(window,0);
-                  SDL_ShowCursor(1);
+               if (this_vod.output) {
+                  LOG_WARNING("Unable to change window size while recording.");
                } else {
-                  SDL_SetWindowFullscreen(window,SDL_WINDOW_FULLSCREEN_DESKTOP);
-                  SDL_ShowCursor(0);
+                  if (fullscreen) {
+                     LOG_INFO("Switching to windowed mode.");
+                     SDL_SetWindowFullscreen(window, 0);
+                     SDL_ShowCursor(1);
+                  } else {
+                     LOG_INFO("Switching to fullscreen mode.");
+                     SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+                     SDL_ShowCursor(0);
+                  }
+                  fullscreen = !fullscreen;
                }
-               fullscreen = !fullscreen;
                break;
             case SDLK_r:
                if (!this_vod.output) {
@@ -1996,6 +2149,20 @@ int main(int argc, char **argv)
                break;
             default:
                break;
+            }
+            break;
+         case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                int newWidth = event.window.data1;
+                int newHeight = event.window.data2;
+
+                // Safely update the shared width and height
+                pthread_mutex_lock(&windowSizeMutex);
+                window_width = newWidth;
+                window_height = newHeight;
+                pthread_mutex_unlock(&windowSizeMutex);
+
+                LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
             }
             break;
          case SDL_QUIT:
@@ -3006,6 +3173,10 @@ int main(int argc, char **argv)
 #ifdef ENCODE_TIMING
             Uint32 start = 0, stop = 0;
 #endif
+            pthread_mutex_lock(&windowSizeMutex);
+            int local_window_width = window_width;
+            int local_window_height = window_height;
+            pthread_mutex_unlock(&windowSizeMutex);
 
             /* Is recording working? */
             if (((this_vod.output == RECORD) || (this_vod.output == RECORD_STREAM)) && 
@@ -3026,7 +3197,7 @@ int main(int argc, char **argv)
             }
 
             this_vod.rgb_out_pixels[!this_vod.buffer_num] =
-                malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
+                malloc(local_window_width * RGB_OUT_SIZE * local_window_height);
             if (this_vod.rgb_out_pixels[!this_vod.buffer_num] == NULL) {
                LOG_ERROR("Unable to malloc rgb frame 0.");
                return (2);
@@ -3036,10 +3207,10 @@ int main(int argc, char **argv)
             start = SDL_GetTicks();
 #endif
 
-            if (SDL_RenderReadPixels(renderer, NULL, PIXEL_FORMAT_OUT,
+            if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
                                      this_vod.rgb_out_pixels[!this_vod.buffer_num],
-                                     this_hds->eye_output_width * 2 * RGB_OUT_SIZE) != 0 ) {
-               LOG_ERROR("SDL_RenderReadPixels() failed: %s", SDL_GetError());
+                                     local_window_width * RGB_OUT_SIZE) != 0 ) {
+               LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed: %s", SDL_GetError());
 #ifdef ENCODE_TIMING
             } else {
                stop = SDL_GetTicks();
@@ -3050,7 +3221,7 @@ int main(int argc, char **argv)
                   max_time = cur_time;
                if ((cur_time < min_time) || (min_time == 0))
                   min_time = cur_time;
-               LOG_INFO("SDL_RenderReadPixels(): %0.2f ms, min: %d, max: %d. weight: %d",
+               printf("OpenGL_RenderReadPixelsAsync(): %0.2f ms, min: %d, max: %d. weight: %d\r",
                       avg_time, min_time, max_time, weight);
 #endif
             }
@@ -3084,6 +3255,7 @@ int main(int argc, char **argv)
    this_vod.buffer_num = 0;
    pthread_mutex_destroy(&this_vod.p_mutex);
    pthread_mutex_destroy(&v_mutex);
+   pthread_mutex_destroy(&windowSizeMutex);
 
    /* Close audio threads. */
 #ifdef DEBUG_SHUTDOWN
@@ -3097,7 +3269,8 @@ int main(int argc, char **argv)
 
    LOG_INFO("Waiting on command processing thread to stop.");
 #endif
-   pthread_join(command_proc_thread, NULL);
+   //pthread_join(command_proc_thread, NULL); // TODO: This is hanging.
+   pthread_cancel(command_proc_thread);
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
 
@@ -3132,12 +3305,6 @@ int main(int argc, char **argv)
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
 
-   LOG_INFO("Waiting on command processing to stop.");
-#endif
-   pthread_join(command_proc_thread, NULL);
-#ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
-
    LOG_INFO("Wainting on video processing to stop.");
 #endif
    pthread_join(video_proc_thread, NULL);
@@ -3153,6 +3320,16 @@ int main(int argc, char **argv)
       LOG_INFO("Done.");
 #endif
    }
+
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Delete GL buffers.");
+#endif
+   glDeleteBuffers(2, g_pboIds);
+
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Delete the GL context.");
+#endif
+   SDL_GL_DeleteContext(glContext);
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting on SDL renderer and window destruction.");

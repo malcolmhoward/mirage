@@ -1,5 +1,10 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
 project(mirage)
+
+# If the policy exists in your CMake version, set it to NEW
+if(POLICY CMP0072)
+    cmake_policy(SET CMP0072 NEW)
+endif()
 
 # Define the version number in the header file directly
 set(VERSION_NUMBER "1.0.0")
@@ -73,6 +78,12 @@ include_directories(${GLIB_INCLUDE_DIRS})
 pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 include_directories(${MOSQUITTO_INCLUDE_DIRS})
 
+# Find the OpenGL package
+find_package(OpenGL REQUIRED)
+
+# If you also need GLEW (for example), find it here
+find_package(GLEW REQUIRED)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CUDA REQUIRED cuda-12.2 cudart-12.2)
 include_directories(${CUDA_INCLUDE_DIRS})
@@ -88,6 +99,8 @@ set(LIBRARIES
   ${GSTREAMER_LIBRARIES}
   ${GLIB_LIBRARIES}
   ${MOSQUITTO_LIBRARIES}
+  ${OPENGL_LIBRARIES}
+  ${GLEW_LIBRARIES}
   gd
   ${CUDA_LIBRARIES}
   SDL2_image

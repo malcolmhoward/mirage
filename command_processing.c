@@ -417,8 +417,12 @@ void *serial_command_processing_thread(void *arg)
 
       retval = select(max_socket + 1, &set, NULL, NULL, &timeout);
       if (retval < 0) {
-         LOG_ERROR("Select error.");
-         continue; // break;
+         if (errno == EBADF) {
+            LOG_ERROR("Select error: FD closed, exiting thread.");
+            break;  // Break out of the while loop
+         }
+         LOG_ERROR("Select error (other).");
+         continue;
       } else if (retval == 0) {
          LOG_ERROR("USB/Serial Data Timeout.\n");
          continue;
