@@ -145,6 +145,7 @@ typedef struct _video_out_data {
 video_out_data this_vod;
 
 pthread_t vid_out_thread;                    /* Video output thread ID. */
+static int single_cam = 0;                   /* Single Camera Mode Enable */
 
 static struct mosquitto *mosq = NULL;        /* MQTT pointer */
 
@@ -794,6 +795,55 @@ void *object_detection_thread(void *arg)
    return NULL;
 }
 
+/**
+ * Builds a complete GStreamer pipeline string for stereo camera setup
+ * @param descr Output buffer for the complete pipeline string
+ * @param descr_size Size of the output buffer
+ * @param cam_type Type of camera ("csi" or "usb")
+ * @param this_hds Struct containing camera configuration parameters
+ *
+ * The function constructs separate pipelines for left and right cameras
+ * based on the camera type and combines them into a single pipeline string.
+ * For CSI cameras, sensor_id 0 is used for left and 1 for right.
+ * For USB cameras, /dev/video0 is used for left and /dev/video2 for right.
+ */
+static void build_pipeline_string(char* descr, size_t descr_size, const char* cam_type,
+                         const hud_display_settings* this_hds) {
+    char left_pipeline[GSTREAMER_PIPELINE_LENGTH/2];
+    char right_pipeline[GSTREAMER_PIPELINE_LENGTH/2];
+    bool is_csi = (cam_type == NULL) || (strncmp(cam_type, "csi", 3) == 0);
+
+    if (is_csi) {
+        g_snprintf(left_pipeline, sizeof(left_pipeline), GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT,
+                   0, this_hds->cam_input_width, this_hds->cam_input_height,
+                   this_hds->cam_input_fps, this_hds->cam_frame_duration,
+                   single_cam ? "" : "L");
+
+        if (!single_cam) {
+            g_snprintf(right_pipeline, sizeof(right_pipeline), GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT,
+                       1, this_hds->cam_input_width, this_hds->cam_input_height,
+                       this_hds->cam_input_fps, this_hds->cam_frame_duration, "R");
+        }
+    } else {
+        g_snprintf(left_pipeline, sizeof(left_pipeline), GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT,
+                   0, this_hds->cam_input_width, this_hds->cam_input_height,
+                   this_hds->cam_input_fps, this_hds->cam_frame_duration,
+                   single_cam ? "" : "L");
+
+        if (!single_cam) {
+            g_snprintf(right_pipeline, sizeof(right_pipeline), GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT,
+                       2, this_hds->cam_input_width, this_hds->cam_input_height,
+                       this_hds->cam_input_fps, this_hds->cam_frame_duration, "R");
+        }
+    }
+
+    if (single_cam) {
+        g_snprintf(descr, descr_size, "%s", left_pipeline);
+    } else {
+        g_snprintf(descr, descr_size, "%s %s", left_pipeline, right_pipeline);
+    }
+}
+
 /* Video input handling thread.
  * This thread handles input from the cameras and camera sync using timestamps.
  */
@@ -802,13 +852,10 @@ void *video_processing_thread(void *arg)
    GstElement *pipeline = NULL, *sinkL = NULL, *sinkR = NULL;
    GstSample *sampleL[2] = { NULL }, *sampleR[2] = { NULL };
    GstBuffer *bufferL[2] = { NULL }, *bufferR[2] = { NULL };
-#ifdef NVIDIA_MAPPING
-   NvBufferParams buffer_paramsL[2] = {0}, buffer_paramsR[2] = {0};
-   void *mapped_ptr_L[2] = { NULL }, *mapped_ptr_R[2] = { NULL };
-#endif
-   gchar descr[1024] = "";
+   gchar descr[GSTREAMER_PIPELINE_LENGTH] = "";
    GError *error = NULL;
    gboolean eosL = false, eosR = false;
+   const char *cam_type = (const char *) arg;
 
 #ifdef DEBUG_BUFFERS
    int sync_comp = 0;
@@ -816,9 +863,9 @@ void *video_processing_thread(void *arg)
 
    hud_display_settings *this_hds = get_hud_display_settings();
 
-   g_snprintf(descr, 1024, GST_CAM_PIPELINE,
-              this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps, this_hds->cam_frame_duration,
-              this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps, this_hds->cam_frame_duration);
+   /* build and start pipeline */
+   build_pipeline_string(descr, sizeof(descr), cam_type, this_hds);
+
    pipeline = gst_parse_launch(descr, &error);
    if (error != NULL) {
       SDL_Log("could not construct pipeline: %s\n", error->message);
@@ -827,30 +874,38 @@ void *video_processing_thread(void *arg)
    }
 
    /* get sink */
-   sinkL = gst_bin_get_by_name(GST_BIN(pipeline), "sinkL");
-   sinkR = gst_bin_get_by_name(GST_BIN(pipeline), "sinkR");
+   if (single_cam) {
+      sinkL = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+   } else {
+      sinkL = gst_bin_get_by_name(GST_BIN(pipeline), "sinkL");
+      sinkR = gst_bin_get_by_name(GST_BIN(pipeline), "sinkR");
+   }
+   // From here on out, we'll check sinkR to see if we need to process it.
 
    gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
    while (!quit) {
+      // Unmap buffers and unref the samples
       if (bufferL[!buffer_num] != NULL) {
          gst_buffer_unmap(bufferL[!buffer_num], &mapL[!buffer_num]);
       }
       if (sampleL[!buffer_num] != NULL) {
-         //NvBufferMemUnMap(gst_buffer_get_fd(bufferL[!buffer_num]), 0, &mapped_ptr_L[!buffer_num]);
          gst_sample_unref(sampleL[!buffer_num]);
       }
-      if (bufferR[!buffer_num] != NULL) {
-         gst_buffer_unmap(bufferR[!buffer_num], &mapR[!buffer_num]);
-      }
-      if (sampleR[!buffer_num] != NULL) {
-         //NvBufferMemUnMap(gst_buffer_get_fd(bufferR[!buffer_num]), 0, &mapped_ptr_R[!buffer_num]);
-         gst_sample_unref(sampleR[!buffer_num]);
+      if (sinkR) {
+         if (bufferR[!buffer_num] != NULL) {
+            gst_buffer_unmap(bufferR[!buffer_num], &mapR[!buffer_num]);
+         }
+         if (sampleR[!buffer_num] != NULL) {
+            gst_sample_unref(sampleR[!buffer_num]);
+         }
       }
 
       /* get the preroll buffer from appsink */
       g_signal_emit_by_name(sinkL, "pull-sample", &sampleL[!buffer_num], NULL);
-      g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
+      if (sinkR) {
+         g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
+      }
 
       if (sampleL[!buffer_num] == NULL) {
          eosL = gst_app_sink_is_eos(GST_APP_SINK(sinkL));
@@ -864,15 +919,17 @@ void *video_processing_thread(void *arg)
          }
       }
 
-      if (sampleR[!buffer_num] == NULL) {
-         eosR = gst_app_sink_is_eos(GST_APP_SINK(sinkR));
-         if (eosR) {
-            LOG_ERROR("sinkR returned NULL. It is EOS.");
-            quit = 1;
-            return NULL;
-         } else {
-            LOG_ERROR("sinkR returned NULL. It is NOT EOS!?!?");
-            continue;
+      if (sinkR) {
+         if (sampleR[!buffer_num] == NULL) {
+            eosR = gst_app_sink_is_eos(GST_APP_SINK(sinkR));
+            if (eosR) {
+               LOG_ERROR("sinkR returned NULL. It is EOS.");
+               quit = 1;
+               return NULL;
+            } else {
+               LOG_ERROR("sinkR returned NULL. It is NOT EOS!?!?");
+               continue;
+            }
          }
       }
 
@@ -881,77 +938,80 @@ void *video_processing_thread(void *arg)
 #endif
 
       /* if we have a buffer now, convert it to a pixbuf */
-      if (sampleL[!buffer_num] && sampleR[!buffer_num]) {
-         /* get the pixbuf */
-         bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
-         bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
-
-         /* handle sync */
-         while (((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts) >
-                this_hds->cam_frame_duration) {
-            gst_sample_unref(sampleR[!buffer_num]);
-            g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
-            bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
-#ifdef DEBUG_BUFFERS
-            LOG_WARNING("Catching up R buffer.");
-            LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                   bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                   (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                   (this_hds->cam_frame_duration) >
-                   abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
-                   sync_comp);
-            sync_comp++;
-#endif
-         }
-         while (((long)bufferR[!buffer_num]->pts - (long)bufferL[!buffer_num]->pts) >
-                this_hds->cam_frame_duration) {
-            gst_sample_unref(sampleL[!buffer_num]);
-            g_signal_emit_by_name(sinkL, "pull-sample", &sampleL[!buffer_num], NULL);
+      /* We only need to sync left and right if they're from different cameras. */
+      if (sinkR) {
+         if (sampleL[!buffer_num] && sampleR[!buffer_num]) {
+            /* get the pixbuf */
             bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
+            bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
+
+            /* handle sync */
+            while (((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts) >
+                  this_hds->cam_frame_duration) {
+               gst_sample_unref(sampleR[!buffer_num]);
+               g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
+               bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
 #ifdef DEBUG_BUFFERS
-            LOG_WARNING("Catching up L buffer.");
-            LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                   bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                   (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                   (this_hds->cam_frame_duration) >
-                   abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
-                   sync_comp);
-            sync_comp++;
+               LOG_WARNING("Catching up R buffer.");
+               LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                     (this_hds->cam_frame_duration) >
+                     abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
+                     sync_comp);
+               sync_comp++;
 #endif
+            }
+            while (((long)bufferR[!buffer_num]->pts - (long)bufferL[!buffer_num]->pts) >
+                  this_hds->cam_frame_duration) {
+               gst_sample_unref(sampleL[!buffer_num]);
+               g_signal_emit_by_name(sinkL, "pull-sample", &sampleL[!buffer_num], NULL);
+               bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
+#ifdef DEBUG_BUFFERS
+               LOG_WARNING("Catching up L buffer.");
+               LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                     (this_hds->cam_frame_duration) >
+                     abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
+                     sync_comp);
+               sync_comp++;
+#endif
+            }
+
+#ifdef DEBUG_BUFFERS
+            LOG_INFO("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                  bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                  (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                  (this_hds->cam_frame_duration) >
+                  abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts), sync_comp);
+#endif
+
+            gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
+            gst_buffer_map(bufferR[!buffer_num], &mapR[!buffer_num], GST_MAP_READ);
+
+            pthread_mutex_lock(&v_mutex);
+            video_posted = 1;
+            buffer_num = !buffer_num;
+            pthread_mutex_unlock(&v_mutex);
+         } else {
+            g_print("could not make snapshot\n");
          }
-
-#ifdef NVIDIA_MAPPING
-         NvBufferGetParams(gst_buffer_get_fd(bufferL[!buffer_num]), &buffer_paramsL[!buffer_num]);
-         NvBufferGetParams(gst_buffer_get_fd(bufferR[!buffer_num]), &buffer_paramsR[!buffer_num]);
-         NvBufferMemMap(gst_buffer_get_fd(bufferL[!buffer_num]), 0, NvBufferMem_Read_Write, &mapped_ptr_L[!buffer_num]);
-         NvBufferMemMap(gst_buffer_get_fd(bufferR[!buffer_num]), 0, NvBufferMem_Read_Write, &mapped_ptr_R[!buffer_num]);
-         NvBufferMemSyncForCpu(gst_buffer_get_fd(bufferL[!buffer_num]), 0, &mapped_ptr_L[!buffer_num]);
-         NvBufferMemSyncForCpu(gst_buffer_get_fd(bufferR[!buffer_num]), 0, &mapped_ptr_R[!buffer_num]);
-#endif
-
-#ifdef DEBUG_BUFFERS
-         LOG_INFO("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                (this_hds->cam_frame_duration) >
-                abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts), sync_comp);
-#endif
-
-#ifdef NVIDIA_MAPPING
-         gst_buffer_map(mapped_ptr_L[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
-         gst_buffer_map(mapped_ptr_R[!buffer_num], &mapR[!buffer_num], GST_MAP_READ);
-#else
-         gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
-         gst_buffer_map(bufferR[!buffer_num], &mapR[!buffer_num], GST_MAP_READ);
-#endif
-
-         pthread_mutex_lock(&v_mutex);
-         video_posted = 1;
-         buffer_num = !buffer_num;
-         pthread_mutex_unlock(&v_mutex);
       } else {
-         g_print("could not make snapshot\n");
-      }                         /*end if(sample) */
+         if (sampleL[!buffer_num]) {
+            /* get the pixbuf */
+            bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
+
+            gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
+
+            pthread_mutex_lock(&v_mutex);
+            video_posted = 1;
+            buffer_num = !buffer_num;
+            pthread_mutex_unlock(&v_mutex);
+         } else {
+            g_print("could not make snapshot\n");
+         }
+      }
    }
 
    /* Video */
@@ -982,7 +1042,7 @@ void *video_next_thread(void *arg)
    struct tm *l_time = NULL;
    char datetime[16];
 
-   gchar descr[1024];
+   gchar descr[GSTREAMER_PIPELINE_LENGTH];
    GstElement *pipeline = NULL, *srcEncode = NULL;
    GError *error = NULL;
 
@@ -1026,20 +1086,20 @@ void *video_next_thread(void *arg)
 
    if (this_vod.output == RECORD_STREAM) {
       LOG_INFO("New recording: %s", this_vod.filename);
-      g_snprintf(descr, 1024, GST_ENCSTR_PIPELINE, this_vod.filename,
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE, this_vod.filename,
                  this_ss->stream_width, this_ss->stream_height, this_ss->stream_dest_ip);
    } else if (this_vod.output == RECORD) {
       LOG_INFO("New recording: %s", this_vod.filename);
 #ifndef RECORD_AUDIO
-      g_snprintf(descr, 1024, GST_ENC_PIPELINE, local_window_width, local_window_height,
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, local_window_width, local_window_height,
                  TARGET_RECORDING_FPS, this_vod.filename);
 #else
-      g_snprintf(descr, 1024, GST_ENC_PIPELINE, local_window_width, local_window_height,
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, local_window_width, local_window_height,
                  TARGET_RECORDING_FPS, RECORD_PULSE_AUDIO_DEVICE, this_vod.filename);
 #endif
       LOG_INFO("desc: %s", descr);
    } else if (this_vod.output == STREAM) {
-      g_snprintf(descr, 1024, GST_STR_PIPELINE,
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
                  local_window_width, local_window_height, TARGET_RECORDING_FPS,
                  STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
                  RECORD_PULSE_AUDIO_DEVICE,
@@ -1541,12 +1601,17 @@ void display_help(int argc, char *argv[]) {
    printf("  -f, --fullscreen       Run in fullscreen mode.\n");
    printf("  -h, --help             Display this help message and exit.\n");
    printf("  -l, --logfile LOGFILE  Specify the log filename instead of stdout/stderr.\n");
+   printf("\n");
    printf("  -p, --record_path PATH Specify the path for recordings.\n");
    printf("  -r, --record           Start recording on startup.\n");
    printf("  -s, --stream           Start streaming on startup.\n");
    printf("  -t, --record_stream    Start both recording and streaming on startup.\n");
+   printf("\n");
    printf("  -u, --usb              Connect via USB/serial.\n");
    printf("  -d, --device DEVICE    Specify the device for USB/serial connection.\n");
+   printf("  -c, --camera TYPE      Specify the camera type, csi or usb.\n");
+   printf("  -n, --camcount [1/2]   Specify the number of cameras for display, 1 or 2.\n");
+   printf("\n");
 }
 
 /* MAIN: Start here. */
@@ -1687,30 +1752,35 @@ int main(int argc, char **argv)
 
    /*
     * Process Command Line
+    * c: - camera type, usb/csi
     * f  - fullscreen
     * h  - help text
     * l  - log filename
+    * n: - number of cameras
     * p: - path for recordings
     * r  - record on startup
     * s  - stream on startup
     * t  - record and stream on startup
-    * u::- USB/serial with port
+    * u: - USB/serial with port
     */
    static struct option long_options[] = {
+      {"camera", required_argument, NULL, 'c'},
+      {"device", required_argument, NULL, 'd'},
       {"fullscreen", no_argument, NULL, 'f'},
       {"help", no_argument, NULL, 'h'},
       {"logfile", required_argument, NULL, 'l'},
+      {"camcount", required_argument, NULL, 'n'},
       {"record_path", required_argument, NULL, 'p'},
       {"record", no_argument, NULL, 'r'},
       {"stream", no_argument, NULL, 's'},
       {"record_stream", no_argument, NULL, 't'},
       {"usb", no_argument, NULL, 'u'},
-      {"device", required_argument, NULL, 'd'},
       {0, 0, 0, 0}
    };
    int option_index = 0;
 
    const char *log_filename = NULL;
+   const char *cam_type = NULL;
 
    printf("%s Version %s: %s\n", APP_NAME, VERSION_NUMBER, GIT_SHA);
 
@@ -1726,13 +1796,21 @@ int main(int argc, char **argv)
    }
 
    while (1) {
-      opt = getopt_long(argc, argv, "fhp:rstud:l:", long_options, &option_index);
+      opt = getopt_long(argc, argv, "c:d:fhl:n:p:rstu", long_options, &option_index);
 
       if (opt == -1) {
          break;
       }
 
       switch (opt) {
+      case 'c':
+         if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {
+            fprintf(stderr, "Camera type must be \"usb\" or \"csi\".\n");
+            return EXIT_FAILURE;
+         }
+
+         cam_type = optarg;
+         break;
       case 'f':
          fullscreen = 1;
          sdl_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -1758,6 +1836,19 @@ int main(int argc, char **argv)
          return EXIT_SUCCESS;
       case 'l':
          log_filename = optarg;
+         break;
+      case 'n':
+         switch (atoi(optarg)) {
+            case 1:
+               single_cam = 1;
+               break;
+            case 2:
+               single_cam = 0;
+               break;
+            default:
+               fprintf(stderr, "camcount (number of cameras) must be 1 or 2!\n");
+               return EXIT_FAILURE;
+         }
          break;
       case 'p':
          snprintf(record_path, 256, "%s", optarg);
@@ -2032,7 +2123,7 @@ int main(int argc, char **argv)
       }
    }
 
-   if (pthread_create(&video_proc_thread, NULL, video_processing_thread, NULL) != 0) {
+   if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
       LOG_ERROR("Error creating video processing thread.");
       return EXIT_FAILURE;
    }
@@ -2209,24 +2300,36 @@ int main(int argc, char **argv)
                        oddataL.detect_obj.l_width * oddataL.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
             detect_image(&oddataL.detect_obj, oddataL.pix_data, this_detect[oddataL.eye], MAX_DETECT);
 
-            oddataR.pix_data = mapR[buffer_num].data;
-            oddataR.eye = 1;
-            cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
-                       oddataR.detect_obj.l_width * oddataR.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
-            detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye], MAX_DETECT);
-#else
-            if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
-               oddataL.pix_data = mapL[buffer_num].data;
-               oddataL.eye = 0;
-               oddataL.complete = 0;
-               oddataL.processed = 0;
-               pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
-
+            if (!single_cam) {
                oddataR.pix_data = mapR[buffer_num].data;
                oddataR.eye = 1;
-               oddataR.complete = 0;
-               oddataR.processed = 0;
-               pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+               cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
+                          oddataR.detect_obj.l_width * oddataR.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
+               detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye], MAX_DETECT);
+            }
+#else
+            if (single_cam) {
+               if (oddataL.processed == 1) {
+                  oddataL.pix_data = mapL[buffer_num].data;
+                  oddataL.eye = 0;
+                  oddataL.complete = 0;
+                  oddataL.processed = 0;
+                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+               }
+            } else {
+               if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
+                  oddataL.pix_data = mapL[buffer_num].data;
+                  oddataL.eye = 0;
+                  oddataL.complete = 0;
+                  oddataL.processed = 0;
+                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+
+                  oddataR.pix_data = mapR[buffer_num].data;
+                  oddataR.eye = 1;
+                  oddataR.complete = 0;
+                  oddataR.processed = 0;
+                  pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+               }
             }
 #endif
          }
@@ -2234,8 +2337,12 @@ int main(int argc, char **argv)
          SDL_UpdateTexture(textureL, NULL, mapL[buffer_num].data, this_hds->cam_input_width * 4);
          SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectL);
 
-         SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data, this_hds->cam_input_width * 4);
-         SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
+         if (single_cam) {
+            SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectR);
+         } else {
+            SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data, this_hds->cam_input_width * 4);
+            SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
+         }
 
 #ifdef SNAPSHOT_NOOVERLAY
          if (snapshot) {

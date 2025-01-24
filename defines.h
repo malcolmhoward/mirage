@@ -161,16 +161,27 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
  * FIXME: These are getting a bit out of hand, so I think I need to break these up into their components.
  *        After my latest work getting YouTube streaming working... it's worse. Sorry.
  */
-#define GST_CAM_PIPELINE   "nvarguscamerasrc exposurecompensation=-2 tnr-mode=0 sensor_id=0 ! " \
-                           "video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! " \
-                           "nvvidconv flip-method=0 ! " \
-                           "video/x-raw, format=(string)RGBA ! queue max-size-time=%lu leaky=2 ! appsink processing-deadline=0 name=sinkL " \
-                              "caps=\"video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\" " \
-                           "nvarguscamerasrc exposurecompensation=-2 tnr-mode=0 sensor_id=1 ! " \
-                           "video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! " \
-                           "nvvidconv flip-method=0 ! " \
-                           "video/x-raw, format=(string)RGBA ! queue max-size-time=%lu leaky=2 ! appsink processing-deadline=0 name=sinkR " \
-                              "caps=\"video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\""
+#define GSTREAMER_PIPELINE_LENGTH   1024
+
+// Common output pipeline portion
+#define GST_CAM_PIPELINE_OUTPUT \
+    "video/x-raw, format=(string)RGBA ! " \
+    "queue max-size-time=%lu leaky=2 ! " \
+    "appsink processing-deadline=0 name=sink%s " \
+    "caps=\"video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\""
+
+// Input pipeline portions for CSI cameras
+#define GST_CAM_PIPELINE_CSI_INPUT \
+    "nvarguscamerasrc exposurecompensation=-2 tnr-mode=0 sensor_id=%d ! " \
+    "video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! " \
+    "nvvidconv flip-method=0 ! "
+
+// Input pipeline portions for USB cameras
+#define GST_CAM_PIPELINE_USB_INPUT \
+    "v4l2src device=/dev/video%d ! " \
+    "image/jpeg, width=%d, height=%d, framerate=%d/1, format=MJPG ! " \
+    "jpegdec ! nvvidconv ! "
+
 
 #if defined(MKV_OUT) && defined(SOFTWARE_ENCODE)
 
