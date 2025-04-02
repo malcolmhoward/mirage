@@ -38,3 +38,48 @@ sudo make install
 VI. Update user permissions.
 Add groups to user: `dialout`
 
+## OASIS Communication Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant MIRAGE as MIRAGE (HUD)
+    participant AURA as AURA (Helmet Sensors)
+    participant DAWN as DAWN (AI Assistant)
+    participant SPARK as SPARK (Armor Sensors)
+    participant LLM as Cloud/Local LLM
+    
+    %% System Startup and Shutdown
+    MIRAGE->>DAWN: Text-to-Speech Notifications (System Status, Component Notification)
+    MIRAGE->>DAWN: Text-to-Speech Notifications (Recording Status)
+    DAWN->>MIRAGE: Shutdown Command (Emergency)
+    
+    %% Sensor Data Flows
+    AURA->>MIRAGE: Motion/Orientation Data
+    AURA->>MIRAGE: Environmental Sensor Data
+    AURA->>MIRAGE: Location/GPS Data
+    
+    %% Armor Component Communications
+    SPARK->>MIRAGE: Armor Component Status Data (Temperature, Voltage, etc.)
+
+    %% Audio System
+    SPARK->>MIRAGE: Audio Commands
+    DAWN->>MIRAGE: Audio Commands
+    AURA->>MIRAGE: Audio Commands
+    
+    %% AI Interactions
+    DAWN->>MIRAGE: AI State Updates (SILENCE, WAKEWORD_LISTEN, COMMAND_RECORDING, etc.)
+    DAWN->>DAWN: Text-to-Speech Processing
+    
+    %% LLM Integration
+    DAWN->>LLM: Text Processing Requests
+    LLM->>DAWN: AI Response Generation
+    
+    %% Image Capture Flow (with proper request/response)
+    DAWN->>+MIRAGE: Image Capture Request
+    MIRAGE-->>-DAWN: Snapshot Notification
+    DAWN->>LLM: Vision AI Processing
+
+    %% Music Playback
+    DAWN->>DAWN: Music Playback Commands (Play/Stop/Next/Previous)
+    DAWN->>DAWN: Volume Control
+```
