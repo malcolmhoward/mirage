@@ -27,6 +27,7 @@
 #include "mirage.h"
 #include "config_manager.h"
 #include "config_parser.h"
+#include "hud_manager.h"
 #include "logging.h"
 
 /* Parse json animation files. */
@@ -438,6 +439,42 @@ int parse_json_config(char *filename)
             }
          }
 
+         /* Parse HUDs section */
+         if (strcmp(json_object_iter_peek_name(&it), "HUDs") == 0) {
+            tmpobj = json_object_iter_peek_value(&it);
+            if (json_object_get_type(tmpobj) == json_type_array) {
+               array_length = json_object_array_length(tmpobj);
+               for (i = 0; i < array_length; i++) {
+                  tmpobj2 = json_object_array_get_idx(tmpobj, i);
+
+                  /* Get HUD name */
+                  json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
+                  if (tmpobj3 == NULL) {
+                     LOG_ERROR("HUD definition missing name");
+                     continue;
+                  }
+                  const char *hud_name = json_object_get_string(tmpobj3);
+
+                  /* Get hotkey if present */
+                  const char *hotkey = NULL;
+                  json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3);
+                  if (tmpobj3 != NULL) {
+                     hotkey = json_object_get_string(tmpobj3);
+                  }
+
+                  /* Get transition if present */
+                  const char *transition = NULL;
+                  json_object_object_get_ex(tmpobj2, "transition", &tmpobj3);
+                  if (tmpobj3 != NULL) {
+                     transition = json_object_get_string(tmpobj3);
+                  }
+
+                  /* Register the HUD */
+                  register_hud(hud_name, hotkey, transition);
+               }
+            }
+         }
+
          /* Elements Section Loop */
          if (strcmp(json_object_iter_peek_name(&it), "Elements") == 0) {
             tmpobj = json_object_iter_peek_value(&it);
@@ -551,6 +588,30 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
                         //printf("Loading static element: %s\n", curr_element->filename);
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
@@ -647,6 +708,30 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
                         //printf("Loading static element: %s\n", curr_element->filename);
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
@@ -751,6 +836,30 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
                         //printf("Loading static element: %s\n", curr_element->filename);
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
@@ -851,6 +960,30 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
 
                         parse_animated_json(curr_element);
 
@@ -946,6 +1079,31 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
 
                      } else
                         /* SPECIAL */
@@ -1046,6 +1204,31 @@ int parse_json_config(char *filename)
                               strncpy(curr_element->hotkey, tmpstr_ptr, 2);
                            }
                         }
+
+                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
+if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
+   /* Clear HUD flags first */
+   memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+   int hud_count = json_object_array_length(tmpobj3);
+   for (int h = 0; h < hud_count; h++) {
+      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
+      const char *hud_name = json_object_get_string(hud_name_obj);
+
+      hud_screen *screen = find_hud_by_name(hud_name);
+      if (screen != NULL) {
+         curr_element->hud_flags[screen->hud_id] = 1;
+      } else {
+         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+      }
+   }
+} else {
+   /* If no HUDs specified, add to the default (first) HUD */
+   hud_screen *default_hud = get_hud_manager()->screens;
+   if (default_hud != NULL) {
+      curr_element->hud_flags[default_hud->hud_id] = 1;
+   }
+}
 
                         json_object_object_get_ex(tmpobj2, "center_x_offset", &tmpobj3);
                         if (tmpobj3 != NULL) {
@@ -1211,6 +1394,28 @@ int parse_json_config(char *filename)
                   curr_element->dst_rect.y = curr_element->dest_y = 0;
 
                   prev_element = curr_element;
+               }
+            }
+         }
+
+         /* Parse Transitions section */
+         if (strcmp(json_object_iter_peek_name(&it), "Transitions") == 0) {
+            tmpobj = json_object_iter_peek_value(&it);
+
+            /* Default transition type */
+            json_object_object_get_ex(tmpobj, "default_type", &tmpobj2);
+            if (tmpobj2 != NULL) {
+               const char *type_name = json_object_get_string(tmpobj2);
+               transition_t transition_type = find_transition_by_name(type_name);
+               get_hud_manager()->transition_type = transition_type;
+            }
+
+            /* Default transition duration */
+            json_object_object_get_ex(tmpobj, "default_duration", &tmpobj2);
+            if (tmpobj2 != NULL) {
+               int duration = json_object_get_int(tmpobj2);
+               if (duration > 0) {
+                  get_hud_manager()->transition_duration_ms = duration;
                }
             }
          }

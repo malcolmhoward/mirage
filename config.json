@@ -5,7 +5,7 @@
       "Image Path": "ui_assets/mk2/",
       "Font Path": "ui_assets/fonts/",
       "Sound Path": "sound_assets/",
-      "Stereo Offset": -90,
+      "Stereo Offset": 0,
       "Pitch Offset": 10.0,
       "Wifi": "wlP1p1s0",
       "Invert Compass": true,
@@ -22,6 +22,22 @@
       "Armor notice dest_h": 1000,
       "Armor notice timeout": 5
    },
+   "HUDs": [
+      {
+         "name": "default",
+         "hotkey": "1",
+         "transition": "fade"
+      },
+      {
+         "name": "environmental",
+         "hotkey": "2",
+         "transition": "slide_left"
+      }
+   ],
+   "Transitions": {
+      "default_type": "zoom",
+      "default_duration": 500
+   },
    "Elements": [
       {
          "type": "intro",
@@ -37,7 +53,8 @@
          "dest_x": 0,
          "dest_y": 0,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "type": "special",
@@ -46,7 +63,8 @@
          "dest_x": 0,
          "dest_y": 0,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "type": "static",
@@ -54,7 +72,8 @@
          "dest_x": 165,
          "dest_y": 696,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -66,7 +85,8 @@
          "dest_y": 707,
          "halign": "left",
          "angle": 0,
-         "layer": 1
+         "layer": 1,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -78,7 +98,8 @@
          "dest_y": 0,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "special",
@@ -88,7 +109,8 @@
          "dest_y": 0,
          "angle": 0,
          "fixed": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -101,7 +123,8 @@
          "halign": "center",
          "angle": 0,
          "fixed": 0,
-         "layer": 1
+         "layer": 1,
+         "huds": ["default"]
       },
       {
          "type": "static",
@@ -110,7 +133,8 @@
          "dest_y": 635,
          "angle": "opposite roll",
          "fixed": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "special",
@@ -121,7 +145,8 @@
          "dest_y": 923,
          "angle": 0,
          "layer": 1,
-         "enabled": 1
+         "enabled": 1,
+         "huds": ["default", "environmental"]
       },
       {
          "name": "map",
@@ -130,7 +155,8 @@
          "dest_x": 848,
          "dest_y": 872,
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default", "environmental"]
       },
       {
          "name": "map",
@@ -143,7 +169,8 @@
          "dest_y": 1090,
          "halign": "left",
          "angle": 0,
-         "layer": 3
+         "layer": 3,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "static",
@@ -151,7 +178,8 @@
          "dest_x": 928,
          "dest_y": 770,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -163,7 +191,8 @@
          "dest_y": 804,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -175,7 +204,8 @@
          "dest_y": 838,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -187,19 +217,21 @@
          "dest_y": 872,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default"]
       },
       {
          "type": "text",
-         "string": "*HELMTEMP*",
+         "string": "*HELMTEMP_F*",
          "font": "devgothic.ttf",
          "color": "0x75, 0xCE, 0xFA, 0xFF",
          "size": 34,
-         "dest_x": 1100,
+         "dest_x": 1125,
          "dest_y": 804,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default"]
       },
       {
          "type": "text",
@@ -211,7 +243,8 @@
          "dest_y": 838,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default"]
       },
       {
          "type": "record-ui",
@@ -223,7 +256,8 @@
          "dest_y": 109,
          "angle": 0,
          "fixed": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "text",
@@ -235,7 +269,8 @@
          "dest_y": 200,
          "halign": "right",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "ai-ui",
@@ -247,7 +282,8 @@
          "dest_y": 160,
          "angle": 0,
          "fixed": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "text",
@@ -260,7 +296,8 @@
          "halign": "center",
          "angle": 0,
          "fixed": 0,
-         "layer": 1
+         "layer": 1,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "special",
@@ -269,7 +306,8 @@
          "dest_x": 1285,
          "dest_y": 681,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default"]
       },
       {
          "name": "info",
@@ -280,7 +318,8 @@
          "angle": 0,
          "layer": 0,
          "hotkey": "i",
-         "enabled": 0
+         "enabled": 0,
+         "huds": ["default"]
       },
       {
          "name": "info",
@@ -295,7 +334,8 @@
          "angle": 0,
          "layer": 1,
          "hotkey": "i",
-         "enabled": 0
+         "enabled": 0,
+         "huds": ["default"]
       },
       {
          "type": "special",
@@ -310,7 +350,8 @@
          "center_y_offset": 150,
          "text_x_offset": 450,
          "text_y_offset": 350,
-         "hotkey": "d"
+         "hotkey": "d",
+         "huds": ["default", "environmental"]
       },
       {
          "name": "armor",
@@ -320,7 +361,8 @@
          "dest_y": 1115,
          "width": 230,
          "angle": 0,
-         "layer": 0
+         "layer": 0,
+         "huds": ["default", "environmental"]
       },
       {
          "type": "text",
@@ -332,7 +374,8 @@
          "dest_y": 180,
          "halign": "left",
          "angle": 0,
-         "layer": 2
+         "layer": 2,
+         "huds": ["default", "environmental"]
       }
    ],
    "Components": [
