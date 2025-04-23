@@ -143,7 +143,7 @@ static int cam1_id = -1, cam2_id = -1;       /* Camera IDs for CSI or USB */
 static struct mosquitto *mosq = NULL;        /* MQTT pointer */
 
 static int quit = 0;                         /* Global to sync exiting of threads */
-int detect_enabled = 0;               /* Is object detection enabled? */
+int detect_enabled = 0;                      /* Is object detection enabled? */
 
 static int snapshot = 0;                     /* Take snapshot flag */
 static char snapshot_filename[PATH_MAX+29];  /* Filename to store the snapshot */
@@ -284,7 +284,7 @@ local_font *font_list = NULL;
 detect this_detect[2][MAX_DETECT];
 detect this_detect_sorted[2][MAX_DETECT];
 
-SDL_Renderer *renderer = NULL;               /* Global SDL Renderer */
+static SDL_Renderer *renderer = NULL;               /* Global SDL Renderer */
 
 od_data oddataL, oddataR;
 
@@ -1242,7 +1242,22 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    }
    dest_rect_r.x += this_hds->eye_output_width;
 
-   /* Left */
+   /* Handle bounds for left eye */
+
+   /* Left edge of left eye */
+   if (dest_rect_l.x < 0) {
+      if (src_rect_l.w != dest_rect_l.w) {
+         scale = ((double) src_rect_l.w) / ((double) dest_rect_l.w);
+      }
+
+      overage = -dest_rect_l.x;
+      src_rect_l.x += (scale * overage);
+      src_rect_l.w -= (scale * overage);
+      dest_rect_l.w -= overage;
+      dest_rect_l.x = 0;
+   }
+
+   /* Right edge of left eye */
    if ((dest_rect_l.x + dest_rect_l.w) > this_hds->eye_output_width) {
       if (src_rect_l.w != dest_rect_l.w) {
          scale = ((double) src_rect_l.w) / ((double) dest_rect_l.w);
@@ -1253,18 +1268,46 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
       src_rect_l.w = src_rect_l.w - (scale * overage);
    }
 
-   /* Right */
+   /* Top edge of left eye */
+   if (dest_rect_l.y < 0) {
+      if (src_rect_l.h != dest_rect_l.h) {
+         scale = ((double) src_rect_l.h) / ((double) dest_rect_l.h);
+      }
+
+      overage = -dest_rect_l.y;
+      src_rect_l.y += (scale * overage);
+      src_rect_l.h -= (scale * overage);
+      dest_rect_l.h -= overage;
+      dest_rect_l.y = 0;
+   }
+
+   /* Bottom edge of left eye */
+   if ((dest_rect_l.y + dest_rect_l.h) > this_hds->eye_output_height) {
+      if (src_rect_l.h != dest_rect_l.h) {
+         scale = ((double) src_rect_l.h) / ((double) dest_rect_l.h);
+      }
+
+      overage = (dest_rect_l.y + dest_rect_l.h) - this_hds->eye_output_height;
+      dest_rect_l.h = dest_rect_l.h - overage;
+      src_rect_l.h = src_rect_l.h - (scale * overage);
+   }
+
+   /* Handle bounds for right eye */
+
+   /* Left edge of right eye */
    if (dest_rect_r.x < this_hds->eye_output_width) {
-      overage = this_hds->eye_output_width - dest_rect_r.x;
       if (src_rect_r.w != dest_rect_r.w) {
          scale = ((double) src_rect_r.w) / ((double) dest_rect_r.w);
       }
 
-      dest_rect_r.w -= overage;
-      src_rect_r.w -= (scale * overage);
+      overage = this_hds->eye_output_width - dest_rect_r.x;
       src_rect_r.x += (scale * overage);
-      dest_rect_r.x += overage;
+      src_rect_r.w -= (scale * overage);
+      dest_rect_r.w -= overage;
+      dest_rect_r.x = this_hds->eye_output_width;
    }
+
+   /* Right edge of right eye */
    if ((dest_rect_r.x + dest_rect_r.w) > (2 * this_hds->eye_output_width)) {
       if (src_rect_r.w != dest_rect_r.w) {
          scale = ((double) src_rect_r.w) / ((double) dest_rect_r.w);
@@ -1275,12 +1318,47 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
       src_rect_r.w -= (scale * overage);
    }
 
-   if (!angle) {
-      SDL_RenderCopy(renderer, tex, &src_rect_l, &dest_rect_l);
-      SDL_RenderCopy(renderer, tex, &src_rect_r, &dest_rect_r);
-   } else {
-      SDL_RenderCopyEx(renderer, tex, &src_rect_r, &dest_rect_l, angle, NULL, SDL_FLIP_NONE);
-      SDL_RenderCopyEx(renderer, tex, &src_rect_r, &dest_rect_r, angle, NULL, SDL_FLIP_NONE);
+   /* Top edge of right eye */
+   if (dest_rect_r.y < 0) {
+      if (src_rect_r.h != dest_rect_r.h) {
+         scale = ((double) src_rect_r.h) / ((double) dest_rect_r.h);
+      }
+
+      overage = -dest_rect_r.y;
+      src_rect_r.y += (scale * overage);
+      src_rect_r.h -= (scale * overage);
+      dest_rect_r.h -= overage;
+      dest_rect_r.y = 0;
+   }
+
+   /* Bottom edge of right eye */
+   if ((dest_rect_r.y + dest_rect_r.h) > this_hds->eye_output_height) {
+      if (src_rect_r.h != dest_rect_r.h) {
+         scale = ((double) src_rect_r.h) / ((double) dest_rect_r.h);
+      }
+
+      overage = (dest_rect_r.y + dest_rect_r.h) - this_hds->eye_output_height;
+      dest_rect_r.h = dest_rect_r.h - overage;
+      src_rect_r.h = src_rect_r.h - (scale * overage);
+   }
+
+   /* Render each eye independently */
+   /* Left eye */
+   if (dest_rect_l.w > 0 && dest_rect_l.h > 0 && src_rect_l.w > 0 && src_rect_l.h > 0) {
+      if (!angle) {
+         SDL_RenderCopy(renderer, tex, &src_rect_l, &dest_rect_l);
+      } else {
+         SDL_RenderCopyEx(renderer, tex, &src_rect_l, &dest_rect_l, angle, NULL, SDL_FLIP_NONE);
+      }
+   }
+
+   /* Right eye */
+   if (dest_rect_r.w > 0 && dest_rect_r.h > 0 && src_rect_r.w > 0 && src_rect_r.h > 0) {
+      if (!angle) {
+         SDL_RenderCopy(renderer, tex, &src_rect_r, &dest_rect_r);
+      } else {
+         SDL_RenderCopyEx(renderer, tex, &src_rect_r, &dest_rect_r, angle, NULL, SDL_FLIP_NONE);
+      }
    }
 }
 
@@ -1593,19 +1671,6 @@ int main(int argc, char **argv)
    int rc = -1;
 
    pthread_t command_proc_thread = 0;
-
-   /* Google API Key */
-   int g_api_status = 0;
-
-   SDL_Rect *src_rect = NULL;
-   SDL_Rect dst_rect_l, dst_rect_r;
-   int r_offset = 0, l_offset = 0;
-   SDL_Texture *this_texture = NULL;
-
-   /* Detect Surface Building */
-   SDL_Rect detect_src_l, detect_src_r;
-   SDL_Texture *detect_texture = NULL;
-   SDL_Texture *detect_text_texture = NULL;
 
    /* Video */
    SDL_Texture *textureL = NULL, *textureR = NULL;

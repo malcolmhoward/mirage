@@ -46,42 +46,42 @@
 #include "secrets.h"
 
 /* Globals and external references */
-extern element *first_element;
-extern int detect_enabled;
-extern motion this_motion;
-extern enviro this_enviro;
-extern gps this_gps;
+// AI elements
 extern char aiName[];
 extern char aiState[];
-extern SDL_Renderer *renderer;
+
+// video elements
 extern video_out_data this_vod;
-extern int map_thread_started;
 extern od_data oddataL, oddataR;
 extern pthread_t od_L_thread, od_R_thread;
+
+// detection elements
+extern int detect_enabled;
 extern detect this_detect[2][MAX_DETECT];
 extern detect this_detect_sorted[2][MAX_DETECT];
-extern double averageFrameRate;
+
+// alert elements
 extern alert_t active_alerts;
 extern const struct Alert alert_messages[];
 
-struct curl_data this_data;
+extern double averageFrameRate;
 
 /* Reset alpha values for all textures of an element */
 static void reset_texture_alpha(element *curr_element) {
-    if (curr_element->texture)
-        SDL_SetTextureAlphaMod(curr_element->texture, 255);
-    if (curr_element->texture_r)
-        SDL_SetTextureAlphaMod(curr_element->texture_r, 255);
-    if (curr_element->texture_s)
-        SDL_SetTextureAlphaMod(curr_element->texture_s, 255);
-    if (curr_element->texture_rs)
-        SDL_SetTextureAlphaMod(curr_element->texture_rs, 255);
-    if (curr_element->texture_l)
-        SDL_SetTextureAlphaMod(curr_element->texture_l, 255);
-    if (curr_element->texture_w)
-        SDL_SetTextureAlphaMod(curr_element->texture_w, 255);
-    if (curr_element->texture_p)
-        SDL_SetTextureAlphaMod(curr_element->texture_p, 255);
+   if (curr_element->texture)
+      SDL_SetTextureAlphaMod(curr_element->texture, 255);
+   if (curr_element->texture_r)
+      SDL_SetTextureAlphaMod(curr_element->texture_r, 255);
+   if (curr_element->texture_s)
+      SDL_SetTextureAlphaMod(curr_element->texture_s, 255);
+   if (curr_element->texture_rs)
+      SDL_SetTextureAlphaMod(curr_element->texture_rs, 255);
+   if (curr_element->texture_l)
+      SDL_SetTextureAlphaMod(curr_element->texture_l, 255);
+   if (curr_element->texture_w)
+      SDL_SetTextureAlphaMod(curr_element->texture_w, 255);
+   if (curr_element->texture_p)
+      SDL_SetTextureAlphaMod(curr_element->texture_p, 255);
 }
 
 /**
@@ -95,395 +95,398 @@ static void reset_texture_alpha(element *curr_element) {
 
 /* Render a static element */
 void render_static_element(element *curr_element) {
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
 
-    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
-    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
+   dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
 
-    /* Apply fixed/stereo offset */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply fixed/stereo offset */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
-    /* Select appropriate texture based on state */
-    if (this_vod.started && (this_vod.output == RECORD_STREAM) && curr_element->texture_rs) {
-        this_texture = curr_element->texture_rs;
-    } else if (this_vod.started && (this_vod.output == RECORD) && curr_element->texture_r) {
-        this_texture = curr_element->texture_r;
-    } else if (this_vod.started && (this_vod.output == STREAM) && curr_element->texture_s) {
-        this_texture = curr_element->texture_s;
-    } else if (curr_element->texture_l && strcmp("SILENCE", aiState) == 0) {
-        this_texture = curr_element->texture_l;
-    } else if (curr_element->texture_w && strcmp("WAKEWORD_LISTEN", aiState) == 0) {
-        this_texture = curr_element->texture_w;
-    } else if (curr_element->texture_l && strcmp("COMMAND_RECORDING", aiState) == 0) {
-        this_texture = curr_element->texture_l;
-    } else if (curr_element->texture_p && strcmp("PROCESS_COMMAND", aiState) == 0) {
-        this_texture = curr_element->texture_p;
-    } else if (curr_element->texture_p && strcmp("VISION_AI_READY", aiState) == 0) {
-        this_texture = curr_element->texture_p;
-    } else {
-        this_texture = curr_element->texture;
-    }
+   /* Select appropriate texture based on state */
+   if (this_vod.started && (this_vod.output == RECORD_STREAM) && curr_element->texture_rs) {
+      this_texture = curr_element->texture_rs;
+   } else if (this_vod.started && (this_vod.output == RECORD) && curr_element->texture_r) {
+      this_texture = curr_element->texture_r;
+   } else if (this_vod.started && (this_vod.output == STREAM) && curr_element->texture_s) {
+      this_texture = curr_element->texture_s;
+   } else if (curr_element->texture_l && strcmp("SILENCE", aiState) == 0) {
+      this_texture = curr_element->texture_l;
+   } else if (curr_element->texture_w && strcmp("WAKEWORD_LISTEN", aiState) == 0) {
+      this_texture = curr_element->texture_w;
+   } else if (curr_element->texture_l && strcmp("COMMAND_RECORDING", aiState) == 0) {
+      this_texture = curr_element->texture_l;
+   } else if (curr_element->texture_p && strcmp("PROCESS_COMMAND", aiState) == 0) {
+      this_texture = curr_element->texture_p;
+   } else if (curr_element->texture_p && strcmp("VISION_AI_READY", aiState) == 0) {
+      this_texture = curr_element->texture_p;
+   } else {
+      this_texture = curr_element->texture;
+   }
 
-    /* Render the element */
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion.roll);
-        } else {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Render the element */
+   if (this_texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
 }
 
 /* Render an animated element */
 void render_animated_element(element *curr_element) {
-    SDL_Rect src_rect;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    double ratio = 0.0;
-    hud_display_settings *this_hds = get_hud_display_settings();
+   SDL_Rect src_rect;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   double ratio = 0.0;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
     
-    /* Set up source rectangle from animation frame */
-    src_rect.x = curr_element->this_anim.current_frame->source_x;
-    src_rect.y = curr_element->this_anim.current_frame->source_y;
-    src_rect.w = curr_element->this_anim.current_frame->source_w;
-    src_rect.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up source rectangle from animation frame */
+   src_rect.x = curr_element->this_anim.current_frame->source_x;
+   src_rect.y = curr_element->this_anim.current_frame->source_y;
+   src_rect.w = curr_element->this_anim.current_frame->source_w;
+   src_rect.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Set up destination rectangle based on animation properties */
-    if ((curr_element->width == 0) && (curr_element->height == 0)) {
-        dst_rect_l.x = dst_rect_r.x =
-            curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-        dst_rect_l.y = dst_rect_r.y =
-            curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
-        dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-        dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
-    } else if ((curr_element->width == 0) && (curr_element->height != 0)) {
-        ratio = (double) curr_element->height /
-                (double) curr_element->this_anim.current_frame->source_size_h;
+   /* Set up destination rectangle based on animation properties */
+   if ((curr_element->width == 0) && (curr_element->height == 0)) {
+      dst_rect_l.x = dst_rect_r.x =
+         curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
+      dst_rect_l.y = dst_rect_r.y =
+         curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
+      dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+      dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+   } else if ((curr_element->width == 0) && (curr_element->height != 0)) {
+      ratio = (double) curr_element->height /
+              (double) curr_element->this_anim.current_frame->source_size_h;
 
-        dst_rect_l.x = dst_rect_r.x =
-            curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-        dst_rect_l.y = dst_rect_r.y =
-            curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.x = dst_rect_r.x =
+         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.y = dst_rect_r.y =
+         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
 
-        dst_rect_l.w = dst_rect_r.w =
-            curr_element->this_anim.current_frame->source_w * ratio;
-        dst_rect_l.h = dst_rect_r.h =
-            curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
-    } else if ((curr_element->width != 0) && (curr_element->height == 0)) {
-        ratio = (double) curr_element->width /
-                (double) curr_element->this_anim.current_frame->source_size_w;
+      dst_rect_l.w = dst_rect_r.w =
+         curr_element->this_anim.current_frame->source_w * ratio;
+      dst_rect_l.h = dst_rect_r.h =
+         curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
+   } else if ((curr_element->width != 0) && (curr_element->height == 0)) {
+      ratio = (double) curr_element->width /
+              (double) curr_element->this_anim.current_frame->source_size_w;
 
-        dst_rect_l.x = dst_rect_r.x =
-            curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-        dst_rect_l.y = dst_rect_r.y =
-            curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.x = dst_rect_r.x =
+         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.y = dst_rect_r.y =
+         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
 
-        dst_rect_l.w = dst_rect_r.w =
-            curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
-        dst_rect_l.h = dst_rect_r.h =
-            curr_element->this_anim.current_frame->source_h * ratio;
-    } else {
-        /* Both width and height specified */
-        /* Width Ratio */
-        ratio = (double) curr_element->width /
-                (double) curr_element->this_anim.current_frame->source_size_w;
+      dst_rect_l.w = dst_rect_r.w =
+         curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.h = dst_rect_r.h =
+         curr_element->this_anim.current_frame->source_h * ratio;
+   } else {
+      /* Both width and height specified */
+      /* Width Ratio */
+      ratio = (double) curr_element->width /
+              (double) curr_element->this_anim.current_frame->source_size_w;
 
-        dst_rect_l.x = dst_rect_r.x =
-            curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-        dst_rect_l.w = dst_rect_r.w =
-            curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.x = dst_rect_r.x =
+         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.w = dst_rect_r.w =
+         curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
 
-        /* Height Ratio */
-        ratio = (double) curr_element->height /
-                (double) curr_element->this_anim.current_frame->source_size_h;
+      /* Height Ratio */
+      ratio = (double) curr_element->height /
+              (double) curr_element->this_anim.current_frame->source_size_h;
 
-        dst_rect_l.y = dst_rect_r.y =
-            curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
-        dst_rect_l.h = dst_rect_r.h =
-            curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
-    }
+      dst_rect_l.y = dst_rect_r.y =
+         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.h = dst_rect_r.h =
+         curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
+   }
 
-    /* Animation frame update logic */
-    Uint32 currTime = SDL_GetTicks();
-    float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
-    int curr_fps = 60; /* You calculate this elsewhere */
-    int framesToUpdate = floor(dT / (1.0f / curr_fps));
-    if (framesToUpdate > 0) {
-        if ((currTime %
-            (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
-            if (curr_element->this_anim.current_frame->next != NULL) {
-                curr_element->this_anim.current_frame =
-                    curr_element->this_anim.current_frame->next;
-            } else {
-                curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
-            }
-        }
-        curr_element->this_anim.last_update = currTime;
-    }
+   /* Animation frame update logic */
+   Uint32 currTime = SDL_GetTicks();
+   float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
+   int curr_fps = 60; /* You calculate this elsewhere */
+   int framesToUpdate = floor(dT / (1.0f / curr_fps));
+   if (framesToUpdate > 0) {
+      if ((currTime %
+         (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
+         if (curr_element->this_anim.current_frame->next != NULL) {
+             curr_element->this_anim.current_frame =
+                curr_element->this_anim.current_frame->next;
+         } else {
+             curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
+         }
+      }
+      curr_element->this_anim.last_update = currTime;
+   }
 
-    /* Apply fixed/stereo offset */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply fixed/stereo offset */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
-    /* Select the appropriate texture */
-    this_texture = curr_element->texture; /* For animated, we usually only have one texture option */
+   /* Select the appropriate texture */
+   this_texture = curr_element->texture; /* For animated, we usually only have one texture option */
 
-    /* Render the element */
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion.roll);
-        } else {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Render the element */
+   if (this_texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
 }
 
 /* Render a text element */
 void render_text_element(element *curr_element) {
-    static int cpu_thread_started = 0;
-    static pthread_t cpu_util_thread = 0;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    //SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    char render_text[MAX_TEXT_LENGTH] = "";
-    static FILE *fan_file = NULL;
-    char fanstr[6] = "";
-    int fan_rpm = 0;
-    float fan_pct = 0.0;
-    unsigned int currTime = SDL_GetTicks();
-    static unsigned int last_log = 0;
-    char (*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
+   static int cpu_thread_started = 0;
+   static pthread_t cpu_util_thread = 0;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   char render_text[MAX_TEXT_LENGTH] = "";
+   static FILE *fan_file = NULL;
+   char fanstr[6] = "";
+   int fan_rpm = 0;
+   float fan_pct = 0.0;
+   unsigned int currTime = SDL_GetTicks();
+   static unsigned int last_log = 0;
+   char (*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
+   motion *this_motion = get_motion_dev();
+   enviro *this_enviro = get_enviro_dev();
+   gps *this_gps = get_gps_dev();
 
-    // Initialize first pass.
-    if (last_log == 0) {
-       last_log = currTime;
-    }
+   // Initialize first pass.
+   if (last_log == 0) {
+      last_log = currTime;
+   }
     
-    /* Process dynamic text content */
-    if (strcmp("*FPS*", curr_element->text) == 0) {
-        /* FPS display */
-        snprintf(render_text, MAX_TEXT_LENGTH, "Current FPS: %d", (int)averageFrameRate);
-    } else if (strcmp("*DATETIME*", curr_element->text) == 0) {
-        /* Date/time display */
-        snprintf(render_text, MAX_TEXT_LENGTH, "%s %s", this_gps.date, this_gps.time);
-    } else if (strcmp("*GPSTIME*", curr_element->text) == 0) {
-       /* TODO: Use Google API to convert GPS location into correct local time. */
-       /* https://maps.googleapis.com/maps/api/timezone/json?language=es&location=39.6034810%2C-119.6822510&timestamp=1331766000&key=GoogleAPIKey */
-        snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_gps.time);
-    } else if (strcmp("*SYSTIME*", curr_element->text) == 0) {
-        time_t stime;
-        struct tm *ltime;
-        stime = time(NULL);
-        ltime = localtime(&stime);
-        snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d",
-                ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
-    } else if (strcmp("*AINAME*", curr_element->text) == 0) {
-        snprintf(render_text, MAX_TEXT_LENGTH, "%s", aiName);
-    } else if (strcmp("*CPU*", curr_element->text) == 0) {
-        if (cpu_thread_started == 0) {
-           if (pthread_create(&cpu_util_thread, NULL, cpu_utilization_thread, NULL) != 0) {
-              LOG_ERROR("Error creating cpu utilization thread.");
-              cpu_thread_started = 0;
-           } else {
-              cpu_thread_started = 1;
-           }
-        }
+   /* Process dynamic text content */
+   if (strcmp("*FPS*", curr_element->text) == 0) {
+      /* FPS display */
+      snprintf(render_text, MAX_TEXT_LENGTH, "Current FPS: %d", (int)averageFrameRate);
+   } else if (strcmp("*DATETIME*", curr_element->text) == 0) {
+      /* Date/time display */
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s %s", this_gps->date, this_gps->time);
+   } else if (strcmp("*GPSTIME*", curr_element->text) == 0) {
+      /* TODO: Use Google API to convert GPS location into correct local time. */
+      /* https://maps.googleapis.com/maps/api/timezone/json?language=es&location=39.6034810%2C-119.6822510&timestamp=1331766000&key=GoogleAPIKey */
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_gps->time);
+   } else if (strcmp("*SYSTIME*", curr_element->text) == 0) {
+      time_t stime;
+      struct tm *ltime;
+      stime = time(NULL);
+      ltime = localtime(&stime);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d",
+              ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
+   } else if (strcmp("*AINAME*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", aiName);
+   } else if (strcmp("*CPU*", curr_element->text) == 0) {
+      if (cpu_thread_started == 0) {
+         if (pthread_create(&cpu_util_thread, NULL, cpu_utilization_thread, NULL) != 0) {
+            LOG_ERROR("Error creating cpu utilization thread.");
+            cpu_thread_started = 0;
+         } else {
+            cpu_thread_started = 1;
+         }
+      }
 
-        snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_loadavg());
-    } else if (strcmp("*MEM*", curr_element->text) == 0) {
-        snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_mem_usage());
-    } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
-        snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f C", this_enviro.temp);
-    } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
-        snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f F", this_enviro.temp * 9/5 + 32.0);
-    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
-        snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro.humidity);
-    } else if (strcmp("*FAN*", curr_element->text) == 0) {
-        if (fan_file == NULL) {
-           fan_file = fopen(FAN_RPM_FILE, "r");
-        }
-        if (fan_file == NULL) {
-           snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
-           LOG_ERROR("Unable to open fan file.");
-        } else {
-           rewind(fan_file);
-           if (fread(fanstr, 1, 5, fan_file) > 0) {
-              fan_rpm = atoi(fanstr);
-              fan_pct = ((float)fan_rpm / FAN_MAX_RPM) * 100.0;
-              if (fan_pct > 100) {
-                 fan_pct = 100;
-              }
-              snprintf(render_text, MAX_TEXT_LENGTH, "%03d", (int)fan_pct);
-           } else {
-              LOG_WARNING("Opened but nothing read.");
-              snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
-           }
-        }
-           // TODO: Close this file somewhere.
-           //fclose(fan_file);
-           //  fan_file = NULL;
-               } else if (strcmp("*LATLON*", curr_element->text) == 0) {
-                  if (this_gps.latitudeDegrees != 0.0) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f",
-                              this_gps.latitudeDegrees, this_gps.longitudeDegrees);
-                  } else {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s",
-                              this_gps.latitude, this_gps.lat, this_gps.longitude, this_gps.lon);
-                  }
-               } else if (strcmp("*PITCH*", curr_element->text) == 0) {
-                  snprintf(render_text, MAX_TEXT_LENGTH, "%d", (int)this_motion.pitch + (int)this_hds->pitch_offset);
-               } else if (strcmp("*COMPASS*", curr_element->text) == 0) {
-                  if ((this_motion.heading > 337.5) || (this_motion.heading <= 22.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "N");
-                  } else if ((this_motion.heading > 22.5) && (this_motion.heading <= 67.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NE");
-                  } else if ((this_motion.heading > 67.5) && (this_motion.heading <= 112.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "E");
-                  } else if ((this_motion.heading > 112.5) && (this_motion.heading <= 157.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SE");
-                  } else if ((this_motion.heading > 157.5) && (this_motion.heading <= 202.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "S");
-                  } else if ((this_motion.heading > 202.5) && (this_motion.heading <= 247.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SW");
-                  } else if ((this_motion.heading > 247.5) && (this_motion.heading <= 292.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "W");
-                  } else if ((this_motion.heading > 292.5) && (this_motion.heading <= 337.5)) {
-                     snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NW");
-                  }
-               } else if (strcmp("*LOG*", curr_element->text) == 0) {
-                  if ((currTime - last_log) > 500) {
-                     last_log = currTime;
-                     if (curr_element->texture != NULL) {
-                        SDL_DestroyTexture(curr_element->texture);
-                        curr_element->texture = NULL;
-                     }
-                     if (curr_element->surface != NULL) {
-                        SDL_FreeSurface(curr_element->surface);
-                        curr_element->surface = NULL;
-                     }
-
-                     curr_element->surface = SDL_CreateRGBSurface(0, 615, 345, 32, 0, 0, 0, 0);
-                     SDL_SetColorKey(curr_element->surface, SDL_TRUE,
-                                     SDL_MapRGB(curr_element->surface->format, 0, 0,
-                                                SDL_ALPHA_TRANSPARENT));
-
-                     for (int ii = 0; ii < LOG_ROWS; ii++) {
-                        if (strcmp("", raw_log[ii]) != 0) {
-                           SDL_Surface *tmpsfc = NULL;
-                           SDL_Rect tmprect;
-
-                           tmpsfc = TTF_RenderText_Blended(curr_element->ttf_font, raw_log[ii],
-                                                           curr_element->font_color);
-                           if (tmpsfc != NULL) {
-                              tmprect.x = 0;
-                              tmprect.y = ii * curr_element->font_size;
-                              tmprect.w = tmpsfc->w;
-                              tmprect.h = tmpsfc->h;
-
-                              SDL_BlitSurface(tmpsfc, NULL, curr_element->surface, &tmprect);
-                              SDL_FreeSurface(tmpsfc);
-                           } else {
-                              LOG_ERROR("Error creating log render, %d.", ii);
-                           }
-                        }
-                     }
-                  }
-               } else if (strcmp("*ALERT*", curr_element->text) == 0) {
-                  char alert_text[MAX_TEXT_LENGTH] = "";
-
-                  for (int k = 0; k < ALERT_MAX; k++) {
-                     if (active_alerts & alert_messages[k].flag) {
-                        /* TODO: Bounds checking */
-                        strcat(alert_text, alert_messages[k].message);
-                     }
-                  }
-
-                  snprintf(render_text, MAX_TEXT_LENGTH, "%s", alert_text);
-                  alert_text[0] = '\0';
-
-    } else {
-        strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH-1);
-        render_text[MAX_TEXT_LENGTH-1] = '\0';
-    }
-    
-    /* Recreate texture if needed */
-    if (curr_element->texture == NULL || 
-        render_text[0] != '\0') { /* Don't recreate for static text */
-        
-        /* Clean up old texture and surface if they exist */
-        if (curr_element->texture != NULL) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_loadavg());
+   } else if (strcmp("*MEM*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_mem_usage());
+   } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f C", this_enviro->temp);
+   } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f F", this_enviro->temp * 9/5 + 32.0);
+   } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->humidity);
+   } else if (strcmp("*FAN*", curr_element->text) == 0) {
+      if (fan_file == NULL) {
+         fan_file = fopen(FAN_RPM_FILE, "r");
+      }
+      if (fan_file == NULL) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
+         LOG_ERROR("Unable to open fan file.");
+      } else {
+         rewind(fan_file);
+         if (fread(fanstr, 1, 5, fan_file) > 0) {
+            fan_rpm = atoi(fanstr);
+            fan_pct = ((float)fan_rpm / FAN_MAX_RPM) * 100.0;
+            if (fan_pct > 100) {
+               fan_pct = 100;
+            }
+            snprintf(render_text, MAX_TEXT_LENGTH, "%03d", (int)fan_pct);
+         } else {
+            LOG_WARNING("Opened but nothing read.");
+            snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
+         }
+      }
+      // TODO: Close this file somewhere.
+      //fclose(fan_file);
+      //  fan_file = NULL;
+   } else if (strcmp("*LATLON*", curr_element->text) == 0) {
+      if (this_gps->latitudeDegrees != 0.0) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f",
+                 this_gps->latitudeDegrees, this_gps->longitudeDegrees);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s",
+                 this_gps->latitude, this_gps->lat, this_gps->longitude, this_gps->lon);
+      }
+   } else if (strcmp("*PITCH*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%d", (int)this_motion->pitch + (int)this_hds->pitch_offset);
+   } else if (strcmp("*COMPASS*", curr_element->text) == 0) {
+      if ((this_motion->heading > 337.5) || (this_motion->heading <= 22.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "N");
+      } else if ((this_motion->heading > 22.5) && (this_motion->heading <= 67.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NE");
+      } else if ((this_motion->heading > 67.5) && (this_motion->heading <= 112.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "E");
+      } else if ((this_motion->heading > 112.5) && (this_motion->heading <= 157.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SE");
+      } else if ((this_motion->heading > 157.5) && (this_motion->heading <= 202.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "S");
+      } else if ((this_motion->heading > 202.5) && (this_motion->heading <= 247.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SW");
+      } else if ((this_motion->heading > 247.5) && (this_motion->heading <= 292.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "W");
+      } else if ((this_motion->heading > 292.5) && (this_motion->heading <= 337.5)) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NW");
+      }
+   } else if (strcmp("*LOG*", curr_element->text) == 0) {
+      if ((currTime - last_log) > 500) {
+         last_log = currTime;
+         if (curr_element->texture != NULL) {
             SDL_DestroyTexture(curr_element->texture);
             curr_element->texture = NULL;
-        }
-        
-        if (curr_element->surface != NULL) {
+         }
+         if (curr_element->surface != NULL) {
             SDL_FreeSurface(curr_element->surface);
             curr_element->surface = NULL;
-        }
-        
-        /* Create new text surface and texture */
-        if (strlen(render_text) == 0) {
-            strcpy(render_text, " "); /* Prevent empty text */
-        }
-        
-        curr_element->surface = TTF_RenderText_Blended(
-            curr_element->ttf_font, render_text, curr_element->font_color);
-            
-        if (curr_element->surface != NULL) {
-            curr_element->dst_rect.w = curr_element->surface->w;
-            curr_element->dst_rect.h = curr_element->surface->h;
-            
-            /* Apply text alignment */
-            if (strcmp("left", curr_element->halign) == 0) {
-                curr_element->dst_rect.x = curr_element->dest_x;
-                curr_element->dst_rect.y = curr_element->dest_y;
-            } else if (strcmp("center", curr_element->halign) == 0) {
-                curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
-                curr_element->dst_rect.y = curr_element->dest_y;
-            } else if (strcmp("right", curr_element->halign) == 0) {
-                curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
-                curr_element->dst_rect.y = curr_element->dest_y;
+         }
+
+         curr_element->surface = SDL_CreateRGBSurface(0, 615, 345, 32, 0, 0, 0, 0);
+            SDL_SetColorKey(curr_element->surface, SDL_TRUE,
+            SDL_MapRGB(curr_element->surface->format, 0, 0,
+            SDL_ALPHA_TRANSPARENT));
+
+         for (int ii = 0; ii < LOG_ROWS; ii++) {
+            if (strcmp("", raw_log[ii]) != 0) {
+               SDL_Surface *tmpsfc = NULL;
+               SDL_Rect tmprect;
+
+               tmpsfc = TTF_RenderText_Blended(curr_element->ttf_font, raw_log[ii],
+                                               curr_element->font_color);
+               if (tmpsfc != NULL) {
+                  tmprect.x = 0;
+                  tmprect.y = ii * curr_element->font_size;
+                  tmprect.w = tmpsfc->w;
+                  tmprect.h = tmpsfc->h;
+
+                  SDL_BlitSurface(tmpsfc, NULL, curr_element->surface, &tmprect);
+                  SDL_FreeSurface(tmpsfc);
+               } else {
+                  LOG_ERROR("Error creating log render, %d.", ii);
+               }
             }
+         }
+      }
+   } else if (strcmp("*ALERT*", curr_element->text) == 0) {
+      char alert_text[MAX_TEXT_LENGTH] = "";
+
+      for (int k = 0; k < ALERT_MAX; k++) {
+         if (active_alerts & alert_messages[k].flag) {
+            /* TODO: Bounds checking */
+            strcat(alert_text, alert_messages[k].message);
+         }
+      }
+
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", alert_text);
+      alert_text[0] = '\0';
+   } else {
+      strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH-1);
+      render_text[MAX_TEXT_LENGTH-1] = '\0';
+   }
+
+   /* Recreate texture if needed */
+   if (curr_element->texture == NULL ||
+      render_text[0] != '\0') { /* Don't recreate for static text */
+
+      /* Clean up old texture and surface if they exist */
+      if (curr_element->texture != NULL) {
+         SDL_DestroyTexture(curr_element->texture);
+         curr_element->texture = NULL;
+      }
+
+      if (curr_element->surface != NULL) {
+         SDL_FreeSurface(curr_element->surface);
+         curr_element->surface = NULL;
+      }
+
+      /* Create new text surface and texture */
+      if (strlen(render_text) == 0) {
+         strcpy(render_text, " "); /* Prevent empty text */
+      }
+
+      curr_element->surface = TTF_RenderText_Blended(
+         curr_element->ttf_font, render_text, curr_element->font_color);
             
-            curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
-        }
-    }
+      if (curr_element->surface != NULL) {
+         curr_element->dst_rect.w = curr_element->surface->w;
+         curr_element->dst_rect.h = curr_element->surface->h;
+
+         /* Apply text alignment */
+         if (strcmp("left", curr_element->halign) == 0) {
+            curr_element->dst_rect.x = curr_element->dest_x;
+            curr_element->dst_rect.y = curr_element->dest_y;
+         } else if (strcmp("center", curr_element->halign) == 0) {
+            curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
+            curr_element->dst_rect.y = curr_element->dest_y;
+         } else if (strcmp("right", curr_element->halign) == 0) {
+            curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
+            curr_element->dst_rect.y = curr_element->dest_y;
+         }
+
+         curr_element->texture = SDL_CreateTextureFromSurface(get_sdl_renderer(), curr_element->surface);
+      }
+   }
     
-    /* Set up render coordinates */
-    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
-    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
+   /* Set up render coordinates */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
     
-    /* Apply fixed/stereo offset */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply fixed/stereo offset */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
     
-    /* Render the text */
-    if (curr_element->texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, this_motion.roll);
-        } else {
-            renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Render the text */
+   if (curr_element->texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
 }
 
 /* Forward declarations for special element types */
@@ -516,32 +519,37 @@ void render_special_element(element *curr_element) {
 }
 
 void render_map_element(element *curr_element) {
-   pthread_t map_download_thread;
+   static pthread_t map_download_thread;
    static int map_thread_started = 0;
+   struct curl_data this_data;
 
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    double lat = 0, lon = 0;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   double lat = 0, lon = 0;
+
+   SDL_Renderer *renderer = get_sdl_renderer();
+   motion *this_motion = get_motion_dev();
+   gps *this_gps = get_gps_dev();
 
     /* Get GPS coordinates */
-    if (this_gps.latitudeDegrees != 0.0) {
-        lat = this_gps.latitudeDegrees;
+    if (this_gps->latitudeDegrees != 0.0) {
+        lat = this_gps->latitudeDegrees;
     } else {
-        if (strcmp(this_gps.lat, "S") == 0) {
-            lat = this_gps.latitude * -1;
+        if (strcmp(this_gps->lat, "S") == 0) {
+            lat = this_gps->latitude * -1;
         } else {
-            lat = this_gps.latitude;
+            lat = this_gps->latitude;
         }
     }
 
-    if (this_gps.longitudeDegrees != 0.0) {
-        lon = this_gps.longitudeDegrees;
+    if (this_gps->longitudeDegrees != 0.0) {
+        lon = this_gps->longitudeDegrees;
     } else {
-        if (strcmp(this_gps.lon, "W") == 0) {
-            lon = this_gps.longitude * -1;
+        if (strcmp(this_gps->lon, "W") == 0) {
+            lon = this_gps->longitude * -1;
         } else {
-            lon = this_gps.longitude;
+            lon = this_gps->longitude;
         }
     }
 
@@ -603,9 +611,9 @@ void render_map_element(element *curr_element) {
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
         if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
+            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
         } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion.roll);
+            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
         } else {
             renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
         }
@@ -617,9 +625,10 @@ void render_pitch_element(element *curr_element) {
     SDL_Rect dst_rect_l, dst_rect_r;
     SDL_Texture *this_texture = NULL;
     hud_display_settings *this_hds = get_hud_display_settings();
+    motion *this_motion = get_motion_dev();
 
     /* Select animation frame based on pitch value */
-    int frame_index = (int)round((this_motion.pitch + 90.0 + this_hds->pitch_offset) * 2.0);
+    int frame_index = (int)round((this_motion->pitch + 90.0 + this_hds->pitch_offset) * 2.0);
 
     /* Clamp frame index to valid range */
     if (frame_index < 0) frame_index = 0;
@@ -653,9 +662,9 @@ void render_pitch_element(element *curr_element) {
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
         if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
         } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
         } else {
             renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
         }
@@ -667,9 +676,10 @@ void render_heading_element(element *curr_element) {
     SDL_Rect dst_rect_l, dst_rect_r;
     SDL_Texture *this_texture = NULL;
     hud_display_settings *this_hds = get_hud_display_settings();
+    motion *this_motion = get_motion_dev();
 
     /* Select animation frame based on heading value */
-    int frame_index = (int)this_motion.heading;
+    int frame_index = (int)this_motion->heading;
 
     /* Clamp frame index to valid range */
     if (frame_index < 0) frame_index = 0;
@@ -704,9 +714,9 @@ void render_heading_element(element *curr_element) {
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
         if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
         } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
         } else {
             renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
         }
@@ -714,13 +724,15 @@ void render_heading_element(element *curr_element) {
 }
 
 void render_altitude_element(element *curr_element) {
-    SDL_Rect src_rect;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
+   SDL_Rect src_rect;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
+   gps *this_gps = get_gps_dev();
 
     /* Select animation frame based on altitude value (in multiples of 10) */
-    int altitude = (int)this_gps.altitude;
+    int altitude = (int)this_gps->altitude;
 
     /* Clamp altitude to valid range */
     if (altitude < 0) altitude = 0;
@@ -757,9 +769,9 @@ void render_altitude_element(element *curr_element) {
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
         if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
         } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
         } else {
             renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
         }
@@ -771,6 +783,7 @@ void render_wifi_element(element *curr_element) {
     SDL_Rect dst_rect_l, dst_rect_r;
     SDL_Texture *this_texture = NULL;
     hud_display_settings *this_hds = get_hud_display_settings();
+    motion *this_motion = get_motion_dev();
 
     /* Get wifi signal level (0-9) */
     int signal_level = get_wifi_signal_level();
@@ -807,9 +820,9 @@ void render_wifi_element(element *curr_element) {
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
         if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
         } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion.roll);
+            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
         } else {
             renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
         }
@@ -869,6 +882,7 @@ void render_detect_element(element *curr_element) {
     SDL_Texture *detect_text_texture = NULL;
     int r_offset = 0, l_offset = 0;
     hud_display_settings *this_hds = get_hud_display_settings();
+    SDL_Renderer *renderer = get_sdl_renderer();
 
     /* Lazily create detection texture if needed */
     if (detect_texture == NULL) {
@@ -1095,7 +1109,22 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
     curr_element->dst_rect.x += offset_x;
     curr_element->dst_rect.y += offset_y;
 
-    /* Render with offset */
+    /* Get display settings for bounds checking */
+    hud_display_settings *this_hds = get_hud_display_settings();
+
+    /* Check if element is entirely off-screen in both eyes - don't render if so */
+    if ((curr_element->dst_rect.x + curr_element->dst_rect.w < 0 &&
+         curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
+        (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
+        (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
+        (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
+        /* Element is entirely off-screen, don't render */
+        curr_element->dst_rect.x = original_x;
+        curr_element->dst_rect.y = original_y;
+        return;
+    }
+
+    /* Render with offset - renderStereo will handle partial clipping */
     render_element(curr_element);
 
     /* Restore original position */
@@ -1131,9 +1160,10 @@ void render_element_with_scale(element *curr_element, float scale, float alpha) 
 
 /* Main HUD rendering function */
 void render_hud_elements(void) {
-    element *curr_element = NULL;
-    hud_manager *hud_mgr = get_hud_manager();
-    hud_display_settings *this_hds = get_hud_display_settings();
+   element *curr_element = NULL;
+   hud_manager *hud_mgr = get_hud_manager();
+   hud_display_settings *this_hds = get_hud_display_settings();
+   element *first_element = get_first_element();
 
     if (hud_mgr->transition_from != NULL) {
         /* In transition between HUDs */
@@ -1198,91 +1228,77 @@ void render_hud_elements(void) {
                     }
                     break;
 
-                case TRANSITION_SLIDE_LEFT: {
-                    int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+						case TRANSITION_SLIDE_LEFT: {
+							 int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
 
-                    /* Render "from" HUD sliding left */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id]) {
-                            /* If element is also in the target HUD and not shared, skip it here */
-                            if (curr_element->hud_flags[hud_mgr->current_screen->hud_id] &&
-                                !curr_element->hud_flags[hud_mgr->transition_from->hud_id]) {
-                                curr_element = curr_element->next;
-                                continue;
-                            }
+							 /* First, render the shared elements that appear in both HUDs normally */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element(curr_element);
+								  }
+								  curr_element = curr_element->next;
+							 }
 
-                            render_element_with_slide(curr_element, -slide_offset, 0);
-                        }
-                        curr_element = curr_element->next;
-                    }
+							 /* Then render "from" HUD sliding left (only elements not in new HUD) */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										!curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element_with_slide(curr_element, -slide_offset, 0);
+								  }
+								  curr_element = curr_element->next;
+							 }
 
-                    /* Render "to" HUD sliding in from right */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            /* If element is also in the source HUD and shared, skip it here */
-                            if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                                curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                                curr_element = curr_element->next;
-                                continue;
-                            }
+							 /* Finally render "to" HUD sliding in from right (only elements not in old HUD) */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element_with_slide(curr_element,
+											 this_hds->eye_output_width - slide_offset, 0);
+								  }
+								  curr_element = curr_element->next;
+							 }
+							 break;
+						}
 
-                            render_element_with_slide(curr_element,
-                                this_hds->eye_output_width - slide_offset, 0);
-                        }
-                        curr_element = curr_element->next;
-                    }
-                    break;
-                }
+						case TRANSITION_SLIDE_RIGHT: {
+							 int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
 
-                case TRANSITION_SLIDE_RIGHT: {
-                    int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+							 /* First, render the shared elements that appear in both HUDs normally */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element(curr_element);
+								  }
+								  curr_element = curr_element->next;
+							 }
 
-                    /* Render "from" HUD sliding right */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id]) {
-                            /* If element is also in the target HUD and shared, skip it here */
-                            if (curr_element->hud_flags[hud_mgr->current_screen->hud_id] &&
-                                curr_element->hud_flags[hud_mgr->transition_from->hud_id]) {
-                                curr_element = curr_element->next;
-                                continue;
-                            }
+							 /* Then render "from" HUD sliding right (only elements not in new HUD) */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										!curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element_with_slide(curr_element, slide_offset, 0);
+								  }
+								  curr_element = curr_element->next;
+							 }
 
-                            render_element_with_slide(curr_element, slide_offset, 0);
-                        }
-                        curr_element = curr_element->next;
-                    }
-
-                    /* Render "to" HUD sliding in from left */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            /* If element is also in the source HUD and shared, skip it here */
-                            if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                                curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                                curr_element = curr_element->next;
-                                continue;
-                            }
-
-                            render_element_with_slide(curr_element,
-                                -this_hds->eye_output_width + slide_offset, 0);
-                        }
-                        curr_element = curr_element->next;
-                    }
-
-                    /* Render elements that are in both HUDs with no slide */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element(curr_element);
-                        }
-                        curr_element = curr_element->next;
-                    }
-                    break;
-                }
+							 /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
+							 curr_element = first_element;
+							 while (curr_element != NULL) {
+								  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+										render_element_with_slide(curr_element,
+											 -this_hds->eye_output_width + slide_offset, 0);
+								  }
+								  curr_element = curr_element->next;
+							 }
+							 break;
+						}
 
                 case TRANSITION_ZOOM: {
                     float from_scale = 1.0f + hud_mgr->transition_progress;
