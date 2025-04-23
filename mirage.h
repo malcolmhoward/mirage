@@ -22,9 +22,11 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#include <limits.h>
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_ttf.h"
 #include "config_parser.h"
+#include "detect.h"
 #include "devices.h"
 
 // Device gets
@@ -51,6 +53,41 @@ typedef enum {
    STREAM=2,
    RECORD_STREAM=4
 } DestinationType;
+
+typedef struct _video_out_data {
+   DestinationType output;
+   pthread_mutex_t p_mutex;
+   int buffer_num;
+
+   void *rgb_out_pixels[2];
+
+   char filename[PATH_MAX+64];
+   int started;
+   FILE *outfile;
+} video_out_data;
+
+/* Object detection data, one for each eye. */
+typedef struct _od_data {
+   detect_net detect_obj;
+   void *pix_data;
+
+   int eye;
+
+   int complete;
+   int processed;
+} od_data;
+
+/* ALERTS */
+typedef enum {
+   ALERT_NONE        = 0,
+   ALERT_RECORDING   = 1 << 0,
+   ALERT_MAX         = 1 << 1
+} alert_t;
+
+struct Alert {
+    alert_t flag;
+    const char* message;
+};
 
 // Set recording state.
 void set_recording_state(DestinationType state);

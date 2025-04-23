@@ -85,6 +85,7 @@ typedef struct _element {
    int enabled;
 
    char name[MAX_TEXT_LENGTH];
+   char hud_flags[MAX_HUDS];   /* Bitmap of HUD memberships (1 = belongs to that HUD) */
    char hotkey[2];   /* Hotkey to enable/disable element */
 
    /* Static and animated graphics */

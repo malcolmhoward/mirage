@@ -95,6 +95,9 @@
 #define SUCCESS 0
 #define FAILURE 1
 
+#define MAX_HUDS 16  /* Maximum number of HUDs supported */
+#define MAX_DETECT 4 /* Max number of auto-detected objects on the screen. */
+
 #define MAX_FILENAME_LENGTH      1024  /* Generic max filename supported. */
 #define MAX_SERIAL_BUFFER_LENGTH 4096  /* Size of the serial buffer. */
 #define MAX_WIFI_DEV_LENGTH      10    /* Max length for a wifi device name. */
@@ -137,8 +140,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 
 #define USB_PORT              "/dev/ttyACM0"       /* Default USB port. */
 
-//#define FAN_RPM_FILE          "/sys/class/hwmon/hwmon0/rpm"
-#define FAN_RPM_FILE          "/sys/class/hwmon/hwmon2/rpm"
+#define FAN_RPM_FILE          "/sys/class/hwmon/hwmon3/rpm"
 #define FAN_MAX_RPM           6000
 
 /* Defines for sound server. */

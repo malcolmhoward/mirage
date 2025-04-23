@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+#include <semaphore.h>
+
 typedef struct _detect {
    int active;
    char description[256];

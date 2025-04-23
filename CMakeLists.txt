@@ -68,7 +68,9 @@ set(SOURCE_FILES
     curl_download.c
     detect.cpp
     devices.c
+    element_renderer.c
     frame_rate_tracker.c
+    hud_manager.c
     image_utils.c
     logging.c
     mirage.c
