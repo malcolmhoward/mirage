@@ -399,17 +399,18 @@ void set_recording_state(DestinationType state)
 /* Free the UI element list. */
 void free_elements(element *start_element)
 {
-   element *this_element = NULL;
-   int i = 0;
+   element *this_element = start_element;
+   element *next_element = NULL;
 
-   if (start_element != NULL) {
-      this_element = start_element;
-   } else {
+   if (start_element == NULL) {
       LOG_ERROR("Unable to free NULL elements!");
       return;
    }
 
    while (this_element != NULL) {
+      // Save next element before freeing current
+      next_element = this_element->next;
+
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Freeing: %d.", this_element->type);
 #endif
@@ -498,23 +499,20 @@ void free_elements(element *start_element)
          SDL_DestroyTexture(this_element->texture_offline);
       }
 
-      for (i = 0; i < this_element->this_anim.frame_count; i++) {
+      for (int i = 0; i < this_element->this_anim.frame_count; i++) {
 #ifdef DEBUG_SHUTDOWN
          LOG_INFO("Freeing frame %d.", i);
 #endif
          free(this_element->this_anim.frame_lookup[i]);
       }
 
-      if (this_element->next != NULL) {
-         this_element = this_element->next;
 #ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing element.");
+      LOG_INFO("Freeing element.");
 #endif
-         free(this_element->prev);
-      } else {
-         free(this_element);
-         this_element = NULL;
-      }
+      free(this_element);
+
+      // Move to next element
+      this_element = next_element;
    }
 }
 
@@ -2590,9 +2588,12 @@ while (screen != NULL) {
    /* Free fonts. */
    this_font = font_list;
    while (this_font != NULL) {
+      local_font *next_font = this_font->next;
       TTF_CloseFont(this_font->ttf_font);
-      this_font = this_font->next;
+      free(this_font);
+      this_font = next_font;
    }
+
    cleanup_hud_manager();
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
@@ -2623,6 +2624,18 @@ while (screen != NULL) {
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Done.");
 #endif
+   }
+
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Destroy primary textures.");
+#endif
+   if (textureL != NULL) {
+      SDL_DestroyTexture(textureL);
+      textureL = NULL;
+   }
+   if (textureR != NULL) {
+      SDL_DestroyTexture(textureR);
+      textureR = NULL;
    }
 
 #ifdef DEBUG_SHUTDOWN
@@ -2669,6 +2682,7 @@ while (screen != NULL) {
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting for other library clean up.");
 #endif
+   mosquitto_destroy(mosq);
    mosquitto_lib_cleanup();
    curl_global_cleanup();
 #ifdef DEBUG_SHUTDOWN

@@ -462,6 +462,9 @@ void render_text_element(element *curr_element) {
          }
 
          curr_element->texture = SDL_CreateTextureFromSurface(get_sdl_renderer(), curr_element->surface);
+         if (curr_element->texture == NULL) {
+            LOG_ERROR("SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
+         }
       }
    }
     
@@ -521,7 +524,7 @@ void render_special_element(element *curr_element) {
 void render_map_element(element *curr_element) {
    static pthread_t map_download_thread;
    static int map_thread_started = 0;
-   struct curl_data this_data;
+   static struct curl_data map_data = {0};
 
    SDL_Rect dst_rect_l, dst_rect_r;
    SDL_Texture *this_texture = NULL;
@@ -532,92 +535,118 @@ void render_map_element(element *curr_element) {
    motion *this_motion = get_motion_dev();
    gps *this_gps = get_gps_dev();
 
-    /* Get GPS coordinates */
-    if (this_gps->latitudeDegrees != 0.0) {
-        lat = this_gps->latitudeDegrees;
-    } else {
-        if (strcmp(this_gps->lat, "S") == 0) {
-            lat = this_gps->latitude * -1;
-        } else {
-            lat = this_gps->latitude;
-        }
-    }
+   /* Get GPS coordinates */
+   if (this_gps->latitudeDegrees != 0.0) {
+      lat = this_gps->latitudeDegrees;
+   } else {
+      if (strcmp(this_gps->lat, "S") == 0) {
+         lat = this_gps->latitude * -1;
+      } else {
+         lat = this_gps->latitude;
+      }
+   }
 
-    if (this_gps->longitudeDegrees != 0.0) {
-        lon = this_gps->longitudeDegrees;
-    } else {
-        if (strcmp(this_gps->lon, "W") == 0) {
-            lon = this_gps->longitude * -1;
-        } else {
-            lon = this_gps->longitude;
-        }
-    }
+   if (this_gps->longitudeDegrees != 0.0) {
+      lon = this_gps->longitudeDegrees;
+   } else {
+      if (strcmp(this_gps->lon, "W") == 0) {
+         lon = this_gps->longitude * -1;
+      } else {
+         lon = this_gps->longitude;
+      }
+   }
 
-    /* Use default location if no GPS data available */
-    if ((lat == 0) && (lon == 0)) {
-        lat = DEFAULT_LATITUDE;
-        lon = DEFAULT_LONGITUDE;
-    }
+   /* Use default location if no GPS data available */
+   if ((lat == 0) && (lon == 0)) {
+      lat = DEFAULT_LATITUDE;
+      lon = DEFAULT_LONGITUDE;
+   }
 
-    /* Update map URL and start download thread if needed */
-    snprintf(this_data.url, 512, GOOGLE_MAPS_API, lat, lon,
-             curr_element->width, curr_element->height,
-             lat, lon, GOOGLE_API_KEY);
+   // Initialize mutex on first call
+   // TODO: We need to pthread_mutex_destroy(&map_data.mutex); somewheres.
+   if (map_thread_started == 0) {
+      pthread_mutex_init(&map_data.mutex, NULL);
+   }
 
-    if (map_thread_started == 0) {
-        this_data.update_interval_sec = MAP_UPDATE_SEC;
-        this_data.updated = 0;
-        this_data.image = NULL;
-        this_data.size = 0;
-        this_data.data = NULL;
-        if (pthread_create(&map_download_thread, NULL, image_download_thread, &this_data) != 0) {
-            LOG_ERROR("Error creating map download thread.");
-            map_thread_started = 0;
-        } else {
-            map_thread_started = 1;
-        }
-    }
+   /* Update map URL and start download thread if needed */
+   snprintf(map_data.url, 512, GOOGLE_MAPS_API, lat, lon,
+            curr_element->width, curr_element->height,
+            lat, lon, GOOGLE_API_KEY);
 
-    /* Update texture if new map data available */
-    if (this_data.updated) {
-        if (curr_element->texture != NULL) {
-            SDL_DestroyTexture(curr_element->texture);
-            curr_element->texture = NULL;
-        }
+   if (map_thread_started == 0) {
+      map_data.update_interval_sec = MAP_UPDATE_SEC;
+      map_data.updated = 0;
+      map_data.size = 0;
+      map_data.data = NULL;
 
-        if (this_data.image != NULL) {
-            curr_element->dst_rect.w = this_data.image->w;
-            curr_element->dst_rect.h = this_data.image->h;
+      if (pthread_create(&map_download_thread, NULL, image_download_thread, &map_data) != 0) {
+         LOG_ERROR("Error creating map download thread.");
+         map_thread_started = 0;
+      } else {
+         map_thread_started = 1;
+      }
+   }
+
+   // Check for new map data with mutex protection
+   pthread_mutex_lock(&map_data.mutex);
+
+   /* Update texture if new map data available */
+   if (map_data.updated && map_data.data != NULL) {
+      // We have new map data, convert to surface and texture
+      //
+      SDL_RWops *rw = SDL_RWFromMem(map_data.data, map_data.size);
+      if (rw != NULL) {
+         // Create the surface in the main thread
+         SDL_Surface *new_surface = IMG_Load_RW(rw, 0);
+         SDL_RWclose(rw);
+
+         if (new_surface != NULL) {
+            // Update the element's texture
+            if (curr_element->texture != NULL) {
+               SDL_DestroyTexture(curr_element->texture);
+               curr_element->texture = NULL;
+            }
+
+            curr_element->dst_rect.w = new_surface->w;
+            curr_element->dst_rect.h = new_surface->h;
             curr_element->dst_rect.x = curr_element->dest_x;
             curr_element->dst_rect.y = curr_element->dest_y;
-            curr_element->texture = SDL_CreateTextureFromSurface(renderer, this_data.image);
-        }
-        this_data.updated = 0;
-    }
+            curr_element->texture = SDL_CreateTextureFromSurface(renderer, new_surface);
 
-    /* Set up destination rectangles */
-    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
-    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
+            // Clean up
+            SDL_FreeSurface(new_surface);
+         }
+      }
 
-    /* Apply stereo offset if not fixed */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+      // Mark as consumed
+      map_data.updated = 0;
+   }
 
-    /* Render the map */
-    this_texture = curr_element->texture;
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
-        } else {
-            renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   pthread_mutex_unlock(&map_data.mutex);
+
+   /* Set up destination rectangles */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
+
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
+
+   /* Render the map */
+   this_texture = curr_element->texture;
+   if (this_texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
 }
 
 void render_pitch_element(element *curr_element) {
