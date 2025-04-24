@@ -19,9 +19,10 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include <pthread.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <curl/curl.h>
 
@@ -32,99 +33,127 @@
 #include "logging.h"
 #include "mirage.h"
 
-/* CURL write function to save downloads to memory. */
-static size_t write_data(void *data, size_t size, size_t nmemb, void *userp)
-{
+/**
+ * Callback function for curl to write received data
+ *
+ * @param contents Pointer to received data
+ * @param size Size of each data element
+ * @param nmemb Number of data elements
+ * @param userp User pointer (struct curl_data*)
+ * @return Number of bytes processed
+ */
+static size_t write_data(void *contents, size_t size, size_t nmemb, void *userp) {
    size_t realsize = size * nmemb;
    struct curl_data *mem = (struct curl_data *)userp;
+   char *ptr;
 
-   char *ptr = realloc(mem->data, mem->size + realsize + 1);
-   if (ptr == NULL) {
-      LOG_ERROR("Error allocating memory in curl callback.");
+   /* No need for mutex here as this is called by curl_easy_perform
+    * which is already protected by mutex in the calling function */
+
+   ptr = realloc(mem->data, mem->size + realsize + 1);
+   if (!ptr) {
+      LOG_ERROR("Not enough memory for download (realloc returned NULL)");
       return 0;
    }
-   //printf("Downloading %lu bytes of data.\n", realsize);
 
    mem->data = ptr;
-   memcpy(&(mem->data[mem->size]), data, realsize);
+   memcpy(&(mem->data[mem->size]), contents, realsize);
    mem->size += realsize;
-   mem->data[mem->size] = '\0';
+   mem->data[mem->size] = 0;
 
    return realsize;
 }
 
-/* This will re-download an image from a given URL at a defined interval if the URL has changed.
- * Currently used for map downloading.
+/**
+ * Thread function for downloading map images at regular intervals
+ *
+ * This function runs in a separate thread and periodically downloads
+ * map images from the URL specified in the curl_data struct. It stores
+ * the raw data and sets the 'updated' flag when new data is available.
+ *
+ * @param arg Pointer to a struct curl_data with URL and other parameters
+ * @return NULL when thread exits
  */
-void *image_download_thread(void *arg)
-{
+void *image_download_thread(void *arg) {
    struct curl_data *this_data = (struct curl_data *)arg;
-   CURL *curl = NULL;
-   CURLcode ret = 0;
+   CURL *curl_handle;
+   CURLcode res;
+   time_t last_update = 0;
+   time_t current_time;
 
-   SDL_RWops *rwops = NULL;
-
-   char *last_url = NULL;
+   /* Initialize curl */
+   curl_handle = curl_easy_init();
+   if (!curl_handle) {
+      LOG_ERROR("Failed to initialize curl handle");
+      return NULL;
+   }
 
    while (!checkShutdown()) {
-      if ((last_url == NULL) || (strcmp(this_data->url, last_url) != 0)) {
-         // In general we don't want to display this since it has our API key.
-         // Left for debug.
-         //printf("Downloading image from %s\n", this_data->url);
-         curl = curl_easy_init();
-         if (curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, this_data->url);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, this_data);
+      time(&current_time);
 
-            ret = curl_easy_perform(curl);
-            if (ret != CURLE_OK) {
-               LOG_ERROR("curl_easy_perform() failed: %s, url: \"%s\"", curl_easy_strerror(ret), this_data->url);
-            }
+      /* Check if it's time for an update */
+      if (difftime(current_time, last_update) >= this_data->update_interval_sec) {
+         /* Lock the mutex before modifying shared data */
+         pthread_mutex_lock(&this_data->mutex);
 
-            curl_easy_cleanup(curl);
-         }
-
-         if (this_data->image != NULL) {
-            SDL_FreeSurface(this_data->image);
-            this_data->image = NULL;
-         }
-
-         rwops = SDL_RWFromMem(this_data->data, this_data->size);
-         if (rwops != NULL) {
-            this_data->image = IMG_LoadPNG_RW(rwops);
-            if (this_data->image == NULL) {
-               LOG_ERROR("Unable to convert download to image.");
-            } else {
-               this_data->updated = 1;
-            }
-
-            SDL_RWclose(rwops);
-         } else {
-            LOG_ERROR("Unable to create SDL_RWFromMem().");
-         }
-
-         free(this_data->data);
-         this_data->data = NULL;
+         /* Reset variables for new download */
          this_data->size = 0;
-
-         if (last_url != NULL) {
-            free(last_url);
+         if (this_data->data) {
+            free(this_data->data);
+            this_data->data = NULL;
          }
 
-         last_url = strdup(this_data->url);
+         pthread_mutex_unlock(&this_data->mutex);
+
+         /* Set up curl options */
+         curl_easy_setopt(curl_handle, CURLOPT_URL, this_data->url);
+         curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
+         curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, this_data);
+         curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
+         curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 30L);
+
+         /* Perform the request */
+         res = curl_easy_perform(curl_handle);
+
+         /* Lock mutex again for post-download updates */
+         pthread_mutex_lock(&this_data->mutex);
+
+         if (res != CURLE_OK) {
+            LOG_ERROR("curl_easy_perform() failed: %s", curl_easy_strerror(res));
+
+            /* Clean up on error */
+            if (this_data->data) {
+               free(this_data->data);
+               this_data->data = NULL;
+            }
+            this_data->size = 0;
+         } else if (this_data->data && this_data->size > 0) {
+            /* Set the flag to indicate new data is available */
+            this_data->updated = 1;
+            time(&last_update);
+            LOG_INFO("Downloaded new map data, %zu bytes", this_data->size);
+         }
+
+         pthread_mutex_unlock(&this_data->mutex);
       }
 
-      if (this_data->updated) {
-         sleep(this_data->update_interval_sec);
-      }
+      /* Sleep a bit to avoid CPU spin */
+      sleep(1);
    }
 
-   if (last_url != NULL) {
-      free(last_url);
+   /* Clean up */
+   curl_easy_cleanup(curl_handle);
+
+   /* Clean up shared resources one last time */
+   pthread_mutex_lock(&this_data->mutex);
+
+   if (this_data->data) {
+      free(this_data->data);
+      this_data->data = NULL;
    }
+   this_data->size = 0;
+   pthread_mutex_unlock(&this_data->mutex);
 
    return NULL;
 }
-
 

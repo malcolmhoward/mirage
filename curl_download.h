@@ -28,12 +28,14 @@
 struct curl_data {
    char url[512];
    int update_interval_sec;
-   int updated;
-   SDL_Surface *image;
+   int updated;         // Flag set when new data is available, cleared when consumed
 
    /* curl download area */
    size_t size;
    char *data;
+
+   /* Thread synchronization */
+   pthread_mutex_t mutex;  // Added mutex to protect struct access
 };
 
 void *image_download_thread(void *arg);
