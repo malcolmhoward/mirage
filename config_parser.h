@@ -169,6 +169,10 @@ typedef struct _element {
 
    armor_warning_t warn_state;
 
+   /* Transition state - used for fade/zoom effects */
+   float transition_alpha;
+   int in_transition;
+
    struct _element *prev;
    struct _element *next;
 } element;

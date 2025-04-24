@@ -263,6 +263,9 @@ element default_element =
 
    .warn_state = WARN_NORMAL,
 
+   .transition_alpha = 0.0f,
+   .in_transition = 0,
+
    .prev = NULL,
    .next = NULL
 };
