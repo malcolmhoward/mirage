@@ -173,7 +173,7 @@ void switch_to_hud(const char *hud_name, transition_t transition_type, int trans
       LOG_WARNING("Invalid transition type %d, using default fade", transition_type);
       transition_type = TRANSITION_FADE;
    }
-   
+
    /* Validate transition duration */
    if (transition_duration_ms <= 0) {
       LOG_WARNING("Invalid transition duration %d, using default 500ms", transition_duration_ms);

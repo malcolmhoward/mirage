@@ -152,7 +152,7 @@ void render_animated_element(element *curr_element) {
    double ratio = 0.0;
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
-    
+
    /* Set up source rectangle from animation frame */
    src_rect.x = curr_element->this_anim.current_frame->source_x;
    src_rect.y = curr_element->this_anim.current_frame->source_y;
@@ -265,6 +265,8 @@ void render_text_element(element *curr_element) {
    int fan_rpm = 0;
    float fan_pct = 0.0;
    unsigned int currTime = SDL_GetTicks();
+   int override_dst_rect = curr_element->in_transition;
+   float alpha_override = curr_element->transition_alpha;
    static unsigned int last_log = 0;
    char (*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
    motion *this_motion = get_motion_dev();
@@ -449,19 +451,32 @@ void render_text_element(element *curr_element) {
          curr_element->dst_rect.w = curr_element->surface->w;
          curr_element->dst_rect.h = curr_element->surface->h;
 
-         /* Apply text alignment */
-         if (strcmp("left", curr_element->halign) == 0) {
-            curr_element->dst_rect.x = curr_element->dest_x;
-            curr_element->dst_rect.y = curr_element->dest_y;
-         } else if (strcmp("center", curr_element->halign) == 0) {
-            curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
-            curr_element->dst_rect.y = curr_element->dest_y;
-         } else if (strcmp("right", curr_element->halign) == 0) {
-            curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
-            curr_element->dst_rect.y = curr_element->dest_y;
+         /* Only recalculate position if not in transition */
+         if (!override_dst_rect) {
+            if (strcmp("left", curr_element->halign) == 0) {
+               curr_element->dst_rect.x = curr_element->dest_x;
+               curr_element->dst_rect.y = curr_element->dest_y;
+            } else if (strcmp("center", curr_element->halign) == 0) {
+               curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
+               curr_element->dst_rect.y = curr_element->dest_y;
+            } else if (strcmp("right", curr_element->halign) == 0) {
+               curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
+               curr_element->dst_rect.y = curr_element->dest_y;
+            }
+         }
+
+         if (curr_element->surface != NULL && alpha_override > 0.0f) {
+            // Apply alpha to the surface color
+            curr_element->font_color.a = (Uint8)(alpha_override * 255);
          }
 
          curr_element->texture = SDL_CreateTextureFromSurface(get_sdl_renderer(), curr_element->surface);
+
+         /* Set alpha on new texture if needed */
+         if (curr_element->texture != NULL && alpha_override > 0.0f) {
+            SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha_override * 255));
+         }
+
          if (curr_element->texture == NULL) {
             LOG_ERROR("SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
          }
@@ -1081,27 +1096,27 @@ void render_detect_element(element *curr_element) {
 
 /* Main element rendering dispatcher */
 void render_element(element *curr_element) {
-    if (!curr_element->enabled) {
-        return;
-    }
+   if (!curr_element->enabled) {
+      return;
+   }
 
-    switch (curr_element->type) {
-        case STATIC:
-            render_static_element(curr_element);
-            break;
-        case ANIMATED:
-            render_animated_element(curr_element);
-            break;
-        case TEXT:
-            render_text_element(curr_element);
-            break;
-        case SPECIAL:
-            render_special_element(curr_element);
-            break;
-        default:
-            LOG_ERROR("Unknown element type: %d", curr_element->type);
-            break;
-    }
+   switch (curr_element->type) {
+      case STATIC:
+         render_static_element(curr_element);
+         break;
+      case ANIMATED:
+         render_animated_element(curr_element);
+         break;
+      case TEXT:
+         render_text_element(curr_element);
+         break;
+      case SPECIAL:
+         render_special_element(curr_element);
+         break;
+      default:
+         LOG_ERROR("Unknown element type: %d", curr_element->type);
+         break;
+   }
 }
 
 /* The rest of the helper functions remain similar */
@@ -1110,15 +1125,19 @@ void render_element_with_alpha(element *curr_element, float alpha) {
         return;
     }
 
+    /* Set transition state */
+    curr_element->transition_alpha = alpha;
+    curr_element->in_transition = 1;
+
     /* Save original alpha values */
     Uint8 original_alpha_main = 255;
-    SDL_GetTextureAlphaMod(curr_element->texture, &original_alpha_main);
+    if (curr_element->texture != NULL)
+      SDL_GetTextureAlphaMod(curr_element->texture, &original_alpha_main);
     
     /* Set new alpha value */
-    SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
-    
-    /* Render the element */
-    render_element(curr_element);
+    if (curr_element->texture != NULL)
+       SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
+          render_element(curr_element);
     
     /* Restore original alpha */
     SDL_SetTextureAlphaMod(curr_element->texture, original_alpha_main);
@@ -1126,28 +1145,32 @@ void render_element_with_alpha(element *curr_element, float alpha) {
 
 /* Apply a slide offset to an element during rendering */
 void render_element_with_slide(element *curr_element, int offset_x, int offset_y) {
-    if (!curr_element->enabled) {
-        return;
-    }
+   if (!curr_element->enabled) {
+      return;
+   }
 
-    /* Save original position */
-    int original_x = curr_element->dst_rect.x;
-    int original_y = curr_element->dst_rect.y;
+   /* Set transition state */
+   curr_element->in_transition = 1;
+   curr_element->transition_alpha = 0.0f; // Not using alpha
 
-    /* Apply offset */
-    curr_element->dst_rect.x += offset_x;
-    curr_element->dst_rect.y += offset_y;
+   /* Save original position */
+   int original_x = curr_element->dst_rect.x;
+   int original_y = curr_element->dst_rect.y;
 
-    /* Get display settings for bounds checking */
-    hud_display_settings *this_hds = get_hud_display_settings();
+   /* Apply offset */
+   curr_element->dst_rect.x += offset_x;
+   curr_element->dst_rect.y += offset_y;
 
-    /* Check if element is entirely off-screen in both eyes - don't render if so */
-    if ((curr_element->dst_rect.x + curr_element->dst_rect.w < 0 &&
-         curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
-        (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
-        (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
-        (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
-        /* Element is entirely off-screen, don't render */
+   /* Get display settings for bounds checking */
+   hud_display_settings *this_hds = get_hud_display_settings();
+
+   /* Check if element is entirely off-screen in both eyes - don't render if so */
+   if ((curr_element->dst_rect.x + curr_element->dst_rect.w < 0 &&
+      curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
+      (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
+      (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
+      (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
+      /* Element is entirely off-screen, don't render */
         curr_element->dst_rect.x = original_x;
         curr_element->dst_rect.y = original_y;
         return;
@@ -1163,9 +1186,13 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
 
 /* Apply scaling to an element during rendering */
 void render_element_with_scale(element *curr_element, float scale, float alpha) {
-    if (!curr_element->enabled) {
-        return;
-    }
+   if (!curr_element->enabled) {
+      return;
+   }
+
+   /* Set transition state */
+   curr_element->in_transition = 1;
+   curr_element->transition_alpha = alpha;
 
     /* Save original dimensions and position */
     SDL_Rect original_rect = curr_element->dst_rect;
@@ -1182,6 +1209,9 @@ void render_element_with_scale(element *curr_element, float scale, float alpha) 
 
     /* Render the scaled element with alpha */
     render_element_with_alpha(curr_element, alpha);
+
+    /* Clear transition state */
+    curr_element->in_transition = 0;
 
     /* Restore original dimensions and position */
     curr_element->dst_rect = original_rect;
@@ -1372,6 +1402,14 @@ void render_hud_elements(void) {
             while (curr_element != NULL) {
                 reset_texture_alpha(curr_element);
                 curr_element = curr_element->next;
+            }
+
+            /* Reset transition states in all elements */
+            curr_element = first_element;
+            while (curr_element != NULL) {
+               curr_element->in_transition = 0;
+               curr_element->transition_alpha = 0.0f;
+               curr_element = curr_element->next;
             }
         }
     } else {
