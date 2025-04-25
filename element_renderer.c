@@ -40,6 +40,7 @@
 #include "defines.h"
 #include "devices.h"
 #include "element_renderer.h"
+#include "environmental_element.h"
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
@@ -1112,6 +1113,9 @@ void render_element(element *curr_element) {
          break;
       case SPECIAL:
          render_special_element(curr_element);
+         break;
+      case ENVIRONMENTAL_PANEL:
+         render_environmental_panel_element(curr_element);
          break;
       default:
          LOG_ERROR("Unknown element type: %d", curr_element->type);

@@ -603,6 +603,9 @@ void dump_element_list(void)
                 curr_element->dest_x, curr_element->dest_y,
                 curr_element->angle, curr_element->layer);
          break;
+      case ENVIRONMENTAL_PANEL:
+         LOG_INFO("Not implemented.");
+         break;
       case ANIMATED_DYNAMIC:
          LOG_INFO("Not implemented.");
          break;
