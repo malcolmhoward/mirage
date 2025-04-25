@@ -108,6 +108,7 @@
 #include "curl_download.h"
 #include "devices.h"
 #include "element_renderer.h"
+#include "environmental_element.h"
 #include "frame_rate_tracker.h"
 #include "hud_manager.h"
 #include "image_utils.h"
@@ -1657,6 +1658,7 @@ void display_help(int argc, char *argv[]) {
    printf("  -d, --device DEVICE    Specify the device for USB/serial connection.\n");
    printf("  -c, --camera TYPE      Specify the camera type, csi or usb.\n");
    printf("  -n, --camcount [1/2]   Specify the number of cameras for display, 1 or 2.\n");
+   printf("  -b, --black-background  Disable cameras and use black background (for UI design/transparency).\n");
    printf("\n");
 }
 
@@ -1740,6 +1742,8 @@ int main(int argc, char **argv)
 
    off_t last_size = -1;
    off_t last_last_size = -1;
+
+   int no_camera_mode = 0;  /* Flag to enable no camera mode */
    /* End Variable Inits */
 
    sdl_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -1758,6 +1762,7 @@ int main(int argc, char **argv)
     * u: - USB/serial with port
     */
    static struct option long_options[] = {
+      {"black-background", no_argument, NULL, 'b'},
       {"camera", required_argument, NULL, 'c'},
       {"device", required_argument, NULL, 'd'},
       {"fullscreen", no_argument, NULL, 'f'},
@@ -1790,13 +1795,17 @@ int main(int argc, char **argv)
    }
 
    while (1) {
-      opt = getopt_long(argc, argv, "c:d:fhl:n:p:rstu", long_options, &option_index);
+      opt = getopt_long(argc, argv, "bc:d:fhl:n:p:rstu", long_options, &option_index);
 
       if (opt == -1) {
          break;
       }
 
       switch (opt) {
+      case 'b':
+         no_camera_mode = 1;
+         LOG_INFO("No camera mode enabled - cameras disabled");
+         break;
       case 'c':
          if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {
             fprintf(stderr, "Camera type must be \"usb\" or \"csi\".\n");
@@ -2165,9 +2174,13 @@ int main(int argc, char **argv)
       }
    }
 
-   if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
-      LOG_ERROR("Error creating video processing thread.");
-      return EXIT_FAILURE;
+   if (!no_camera_mode) {
+      if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
+         LOG_ERROR("Error creating video processing thread.");
+         return EXIT_FAILURE;
+      } else {
+         LOG_INFO("Running in no camera mode, video processing thread not started");
+      }
    }
 
    lastPTime = SDL_GetPerformanceCounter();
@@ -2346,6 +2359,7 @@ while (screen != NULL) {
 #endif
 
       /* Video Processing */
+      if (!no_camera_mode) {
       pthread_mutex_lock(&v_mutex);
       if (video_posted) {
          if (detect_enabled) {
@@ -2438,6 +2452,12 @@ while (screen != NULL) {
 #endif
       }
       pthread_mutex_unlock(&v_mutex);
+      } else {
+         /* When in black background mode, simply render black rectangles as backgrounds */
+         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+         SDL_RenderFillRect(renderer, &v_dst_rectL);
+         SDL_RenderFillRect(renderer, &v_dst_rectR);
+      }
 
       /* Element Processing */
       if (intro_element.enabled && !intro_finished) {
@@ -2621,11 +2641,14 @@ while (screen != NULL) {
       free(this_font);
       this_font = next_font;
    }
-
-   cleanup_hud_manager();
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
+#endif
 
+   cleanup_environmental_panel();
+   cleanup_hud_manager();
+
+#ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting on MQTT disconnect.");
 #endif
    mosquitto_disconnect(mosq);
@@ -2637,13 +2660,17 @@ while (screen != NULL) {
    mosquitto_loop_stop(mosq, false);
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
+#endif
 
-   LOG_INFO("Wainting on video processing to stop.");
-#endif
-   pthread_join(video_proc_thread, NULL);
+   if (!no_camera_mode) {
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+      LOG_INFO("Wainting on video processing to stop.");
 #endif
+      pthread_join(video_proc_thread, NULL);
+#ifdef DEBUG_SHUTDOWN
+      LOG_INFO("Done.");
+#endif
+   }
    if (vid_out_thread != 0) {
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Waiting on final video thread to stop.");
