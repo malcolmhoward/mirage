@@ -69,6 +69,7 @@ set(SOURCE_FILES
     detect.cpp
     devices.c
     element_renderer.c
+    environmental_element.c
     frame_rate_tracker.c
     hud_manager.c
     image_utils.c
@@ -106,6 +107,12 @@ pkg_check_modules(JSONC REQUIRED json-c)
 include_directories(${JSONC_INCLUDE_DIRS})
 pkg_check_modules(SDL2 REQUIRED sdl2)
 include_directories(${SDL2_INCLUDE_DIRS})
+pkg_check_modules(SDL2_GFX REQUIRED SDL2_gfx)
+include_directories(${SDL2_GFX_INCLUDE_DIRS})
+pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+include_directories(${SDL2_TTF_INCLUDE_DIRS})
+pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
 find_package(CURL REQUIRED)
 include_directories(${CURL_INCLUDE_DIRS})
 
@@ -140,8 +147,9 @@ set(LIBRARIES
   ${JSONC_LIBRARIES}
   ${SDL2_LIBRARIES}
   ${CURL_LIBRARIES}
-  SDL2_image
-  SDL2_ttf
+  ${SDL2_GFX_LIBRARIES}
+  ${SDL2_TTF_LIBRARIES}
+  ${SDL2_IMAGE_LIBRARIES}
 
   # Graphics and Video
   ${GSTREAMER_LIBRARIES}
