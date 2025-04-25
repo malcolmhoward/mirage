@@ -197,9 +197,11 @@ int parse_json_command(char *command_string, char *topic)
          //printf("Motion: heading: %f, pitch, %f, roll: %f\n",
          //       this_motion->heading, this_motion->pitch, this_motion->roll);
       } else if (strcmp("Enviro", tmpstr) == 0) {
-         /* Enviro */
+         /* Enviro - Basic data */
          json_object_object_get_ex(parsed_json, "temp", &tmpobj);
-         this_enviro->temp = json_object_get_double(tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->temp = json_object_get_double(tmpobj);
+         }
 
          json_object_object_get_ex(parsed_json, "humidity", &tmpobj);
          if (tmpobj != NULL) {
@@ -208,13 +210,66 @@ int parse_json_command(char *command_string, char *topic)
             this_enviro->humidity = 0.0;
          }
 
-         // Need to add for new environmental screen: tvoc_ppb, eco2_ppm, co2_ppm, co2_quality, co2_eco2_diff,
-         //                                           co2_source_analysis, air_quality, air_quality_description, dew_point
-         // Example: {"device":"Enviro","temp":22.41512,"humidity":34.46708,"tvoc_ppb":67,"eco2_ppm":491,
-         //           "co2_ppm":530,"co2_quality":"Excellent","co2_eco2_diff":39,"co2_source_analysis":"Mixed sources",
-         //           "air_quality":80,"air_quality_description":"Good","dew_point":5.969073}
+         /* Air Quality */
+         json_object_object_get_ex(parsed_json, "air_quality", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->air_quality = json_object_get_double(tmpobj);
+         }
 
-         //printf("Enviro: temp: %f, humidity: %f\n", this_enviro->temp, this_enviro->humidity);
+         json_object_object_get_ex(parsed_json, "air_quality_description", &tmpobj);
+         if (tmpobj != NULL) {
+            strncpy(this_enviro->air_quality_description, json_object_get_string(tmpobj), 14);
+            this_enviro->air_quality_description[14] = '\0'; /* Ensure null termination */
+         }
+
+         /* VOC and CO2 Data */
+         json_object_object_get_ex(parsed_json, "tvoc_ppb", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->tvoc_ppb = json_object_get_double(tmpobj);
+         }
+
+         json_object_object_get_ex(parsed_json, "eco2_ppm", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->eco2_ppm = json_object_get_double(tmpobj);
+         }
+
+         json_object_object_get_ex(parsed_json, "co2_ppm", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->co2_ppm = json_object_get_double(tmpobj);
+         }
+
+         json_object_object_get_ex(parsed_json, "co2_quality", &tmpobj);
+         if (tmpobj != NULL) {
+            strncpy(this_enviro->co2_quality_description, json_object_get_string(tmpobj), 14);
+            this_enviro->co2_quality_description[14] = '\0'; /* Ensure null termination */
+         }
+
+         json_object_object_get_ex(parsed_json, "co2_eco2_diff", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->co2_eco2_diff = json_object_get_int(tmpobj);
+         }
+
+         json_object_object_get_ex(parsed_json, "co2_source_analysis", &tmpobj);
+         if (tmpobj != NULL) {
+            strncpy(this_enviro->co2_source_analysis, json_object_get_string(tmpobj), 29);
+            this_enviro->co2_source_analysis[29] = '\0'; /* Ensure null termination */
+         }
+
+         /* Calculated Indices */
+         json_object_object_get_ex(parsed_json, "heat_index_c", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->heat_index_c = json_object_get_double(tmpobj);
+         }
+
+         json_object_object_get_ex(parsed_json, "dew_point", &tmpobj);
+         if (tmpobj != NULL) {
+            this_enviro->dew_point = json_object_get_double(tmpobj);
+         }
+         //printf("Enviro: temp: %f, humidity: %f, air_quality: %f, desc: %s, tvoc_ppb: %f, eco2_ppm: %f, co2_ppm: %f, co2_quality: %s, co2_eco2_diff: %d, co2_source: %s, heat_index_c: %f, dew_point: %f\n",
+         //       this_enviro->temp, this_enviro->humidity, this_enviro->air_quality,
+         //       this_enviro->air_quality_description, this_enviro->tvoc_ppb, this_enviro->eco2_ppm,
+         //       this_enviro->co2_ppm, this_enviro->co2_quality_description, this_enviro->co2_eco2_diff,
+         //       this_enviro->co2_source_analysis, this_enviro->heat_index_c, this_enviro->dew_point);
       } else if (strcmp("GPS", tmpstr) == 0) {
          /* GPS */
          json_object_object_get_ex(parsed_json, "time", &tmpobj);
