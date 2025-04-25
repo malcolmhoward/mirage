@@ -260,6 +260,101 @@ void insert_element_by_layer(element * this_element)
    return;
 }
 
+/* Parse common properties shared by all element types */
+static int parse_common_element_properties(struct json_object *element_obj, element *curr_element) {
+   struct json_object *tmpobj = NULL;
+   const char *tmpstr_ptr = NULL;
+
+   /* Parse name if present */
+   json_object_object_get_ex(element_obj, "name", &tmpobj);
+   if (tmpobj != NULL) {
+      strncpy(curr_element->name, json_object_get_string(tmpobj), MAX_TEXT_LENGTH - 1);
+      curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
+   }
+
+   /* Parse position */
+   json_object_object_get_ex(element_obj, "dest_x", &tmpobj);
+   if (tmpobj != NULL) {
+      curr_element->dest_x = json_object_get_int(tmpobj);
+   }
+
+   json_object_object_get_ex(element_obj, "dest_y", &tmpobj);
+   if (tmpobj != NULL) {
+      curr_element->dest_y = json_object_get_int(tmpobj);
+   }
+
+   /* Parse angle */
+   json_object_object_get_ex(element_obj, "angle", &tmpobj);
+   if (tmpobj != NULL) {
+      if (json_object_get_type(tmpobj) == json_type_string) {
+         const char *angle_str = json_object_get_string(tmpobj);
+         if (strcmp(angle_str, "roll") == 0) {
+            curr_element->angle = ANGLE_ROLL;
+         } else if (strcmp(angle_str, "opposite roll") == 0) {
+            curr_element->angle = ANGLE_OPPOSITE_ROLL;
+         } else {
+            LOG_WARNING("Error processing angle string: %s", angle_str);
+         }
+      } else {
+         curr_element->angle = json_object_get_double(tmpobj);
+      }
+   }
+
+   /* Parse fixed property if present */
+   if (json_object_object_get_ex(element_obj, "fixed", &tmpobj)) {
+      curr_element->fixed = json_object_get_int(tmpobj);
+   } else {
+      curr_element->fixed = FIXED_DEFAULT;
+   }
+
+   /* Parse layer */
+   json_object_object_get_ex(element_obj, "layer", &tmpobj);
+   if (tmpobj != NULL) {
+      curr_element->layer = json_object_get_int(tmpobj);
+   }
+
+   /* Parse enabled flag if present */
+   if (json_object_object_get_ex(element_obj, "enabled", &tmpobj)) {
+      curr_element->enabled = json_object_get_int(tmpobj);
+   }
+
+   /* Parse hotkey if present */
+   if (json_object_object_get_ex(element_obj, "hotkey", &tmpobj)) {
+      tmpstr_ptr = json_object_get_string(tmpobj);
+      if (tmpstr_ptr != NULL) {
+         strncpy(curr_element->hotkey, tmpstr_ptr, 2);
+      }
+   }
+
+   /* Parse HUD associations */
+   json_object_object_get_ex(element_obj, "huds", &tmpobj);
+   if (tmpobj != NULL && json_object_get_type(tmpobj) == json_type_array) {
+      /* Clear HUD flags first */
+      memset(curr_element->hud_flags, 0, MAX_HUDS);
+
+      int hud_count = json_object_array_length(tmpobj);
+      for (int h = 0; h < hud_count; h++) {
+         struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj, h);
+         const char *hud_name = json_object_get_string(hud_name_obj);
+
+         hud_screen *screen = find_hud_by_name(hud_name);
+         if (screen != NULL) {
+            curr_element->hud_flags[screen->hud_id] = 1;
+         } else {
+            LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+         }
+      }
+   } else {
+      /* If no HUDs specified, add to the default (first) HUD */
+      hud_screen *default_hud = get_hud_manager()->screens;
+      if (default_hud != NULL) {
+         curr_element->hud_flags[default_hud->hud_id] = 1;
+      }
+   }
+
+   return SUCCESS;
+}
+
 /* Parse the primary json config file to configure the UI. */
 int parse_json_config(char *filename)
 {
@@ -275,7 +370,6 @@ int parse_json_config(char *filename)
    double ratio = 0.0;
 
    char tmpstr[1024];
-   const char *tmpstr_ptr = NULL;
 
    char *config_string = NULL;
    int string_size = 0;
@@ -314,8 +408,6 @@ int parse_json_config(char *filename)
 
    fclose(config_file);
 
-   //printf("Config String (%d): \"%s\"\n", string_size, config_string);
-
    parsed_json = json_tokener_parse(config_string);
    if (parsed_json != NULL) {
       /* Main Loop */
@@ -331,107 +423,78 @@ int parse_json_config(char *filename)
             while (!json_object_iter_equal(&itSub, &itSubEnd)) {
                if (strcmp(json_object_iter_peek_name(&itSub), "Height") == 0) {
                   this_hds->eye_output_height = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("OUTPUT_HEIGHT: %d\n", this_hds->eye_output_height);
                   if (this_ss->stream_height == -1) {
                      this_ss->stream_height = this_hds->eye_output_height;
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Width") == 0) {
                   this_hds->eye_output_width = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("OUTPUT_WIDTH: %d\n", this_hds->eye_output_width);
                   if (this_ss->stream_width == -1) {
                      this_ss->stream_width = this_hds->eye_output_width * 2;
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Camera Height") == 0) {
                   this_hds->cam_input_height = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Camera Height: %d\n", this_hds->cam_input_height);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Camera Width") == 0) {
                   this_hds->cam_input_width = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Camera Width: %d\n", this_hds->cam_input_width);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Camera FPS") == 0) {
                   this_hds->cam_input_fps = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Camera FPS: %d\n", this_hds->cam_input_fps);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Camera Crop X") == 0) {
                   this_hds->cam_crop_x = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Camera Crop X: %d\n", this_hds->cam_crop_x);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Camera Crop Width") == 0) {
                   this_hds->cam_crop_width = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Camera Crop Width: %d\n", this_hds->cam_crop_width);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Stereo Offset") == 0) {
                   this_hds->stereo_offset = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("STEREO OFFSET: %d\n", this_hds->stereo_offset);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Pitch Offset") == 0) {
                   this_hds->pitch_offset = json_object_get_double(json_object_iter_peek_value(&itSub));
-                  //printf("PITCH OFFSET: %f\n", this_hds->pitch_offset);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Image Path") == 0) {
                   if(set_image_path(json_object_get_string(json_object_iter_peek_value(&itSub)),
                            MAX_FILENAME_LENGTH - 1) == NULL)
                   {
                      LOG_ERROR("Error setting image path!");
                   }
-                  //printf("IMAGE PATH: %s\n", get_image_path);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Font Path") == 0) {
                   if (set_font_path(json_object_get_string(json_object_iter_peek_value(&itSub)),
                            MAX_FILENAME_LENGTH - 1) == NULL)
                   {
                      LOG_ERROR("Error setting font path!");
                   }
-                  //printf("FONT PATH: %s\n", get_font_path());
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Sound Path") == 0) {
                   if (set_sound_path(json_object_get_string(json_object_iter_peek_value(&itSub)), MAX_FILENAME_LENGTH - 1) == NULL)
                   {
                      LOG_ERROR("Error setting sound path!");
                   }
-                  //printf("SOUND PATH: %s\n", get_sound_path());
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Wifi") == 0) {
                   if (set_wifi_dev_name(json_object_get_string(json_object_iter_peek_value(&itSub)),
                                         MAX_WIFI_DEV_LENGTH - 1) == NULL)
                   {
                      LOG_ERROR("Error settings Wifi device name!");
                   }
-                  //printf("Wifi: %s\n", get_wifi_dev_name());
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Invert Compass") == 0) {
                   set_inv_compass(json_object_get_boolean(json_object_iter_peek_value(&itSub)));
-                  //printf("Invert Compass: %d\n", get_inv_compass());
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Stream Width") == 0) {
                   this_ss->stream_width = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Stream Width: %d\n", stream_width);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Stream Height") == 0) {
                   this_ss->stream_height = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Stream Width: %d\n", stream_height);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Stream Dest IP") == 0) {
                   strncpy(this_ss->stream_dest_ip, json_object_get_string(json_object_iter_peek_value(&itSub)),
                           16);
-                  //printf("Stream Dest IP: %s\n", this_ss->stream_dest_ip);
-
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_x") == 0) {
                   this_as->armor_dest.x = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor dest_x: %d\n", this_as->armor_dest.x);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_y") == 0) {
                   this_as->armor_dest.y = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor dest_y: %d\n", this_as->armor_dest.y);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_w") == 0) {
                   this_as->armor_dest.w = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor dest_w: %d\n", this_as->armor_dest.w);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_h") == 0) {
                   this_as->armor_dest.h = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor dest_h: %d\n", this_as->armor_dest.h);
-
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_x") == 0) {
                   this_as->armor_notice_dest.x = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor notice dest_x: %d\n", this_as->armor_notice_dest.x);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_y") == 0) {
                   this_as->armor_notice_dest.y = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor notice dest_y: %d\n", this_as->armor_notice_dest.y);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_w") == 0) {
                   this_as->armor_notice_dest.w = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor notice dest_w: %d\n", this_as->armor_notice_dest.w);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_h") == 0) {
                   this_as->armor_notice_dest.h = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor notice dest_h: %d\n", this_as->armor_notice_dest.h);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice timeout") == 0) {
                   this_as->armor_notice_timeout = json_object_get_int(json_object_iter_peek_value(&itSub));
-                  //printf("Armor notice timeout: %d\n", this_as->armor_notice_timeout);
-
                } else {
                   printf("%s\n", json_object_iter_peek_name(&itSub));
                }
@@ -483,26 +546,23 @@ int parse_json_config(char *filename)
                for (i = 0; i < array_length; i++) {
                   tmpobj2 = json_object_array_get_idx(tmpobj, i);
                   json_object_object_get_ex(tmpobj2, "type", &tmpobj3);
-                  /* Special case for special types. */
+
+                  /* Special case for intro type. */
                   if ((tmpobj3 != NULL) && (strcmp("intro", json_object_get_string(tmpobj3)) == 0)) {
                      memcpy(intro_element, default_element, sizeof(element));
                      intro_element->enabled = 1;
 
                      json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                     //printf("file: %s\n", json_object_get_string(tmpobj3));
                      snprintf(intro_element->filename, MAX_FILENAME_LENGTH * 2,
                               "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                      json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                     //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
                      intro_element->dest_x = json_object_get_int(tmpobj3);
 
                      json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                     //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
                      intro_element->dest_y = json_object_get_int(tmpobj3);
 
                      json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                     //printf("angle: %s\n", json_object_get_string(tmpobj3));
                      if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
                         intro_element->angle = ANGLE_ROLL;
                      } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
@@ -513,7 +573,8 @@ int parse_json_config(char *filename)
 
                      parse_animated_json(intro_element);
                   } else if (tmpobj3 != NULL) {
-                     //printf("Element[%d]: Type: %s\n", i, json_object_get_string(tmpobj3));
+                     const char *element_type = json_object_get_string(tmpobj3);
+
                      curr_element = malloc(sizeof(element));
                      if (curr_element == NULL) {
                         LOG_ERROR("Cannot malloc new element!");
@@ -523,653 +584,248 @@ int parse_json_config(char *filename)
                      curr_element->enabled = 1;
 
                      /* STATIC */
-                     if (strcmp("static", json_object_get_string(tmpobj3)) == 0) {
+                     if (strcmp("static", element_type) == 0) {
                         curr_element->type = STATIC;
 
-                        json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           //printf("name: %s\n", json_object_get_string(tmpobj3));
-                           strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
-                           curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
-                        }
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
 
+                        /* Parse static-specific properties */
                         json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                        //printf("file: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
                         json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
-                        //printf("width: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->width = json_object_get_int(tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->width = json_object_get_int(tmpobj3);
+                        }
 
                         json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
-                        //printf("height: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->height = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->height = json_object_get_int(tmpobj3);
                         }
 
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
-                           }
-                        }
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
-
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
-
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
-                        //printf("Loading static element: %s\n", curr_element->filename);
+                        /* Load texture */
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
 
+                        /* Set up destination rectangle */
                         if ((curr_element->width == 0) && (curr_element->height == 0)) {
                            SDL_QueryTexture(curr_element->texture, NULL, NULL,
-                                            &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                                           &curr_element->dst_rect.w, &curr_element->dst_rect.h);
                         } else if ((curr_element->width == 0) && (curr_element->height != 0)) {
                            SDL_QueryTexture(curr_element->texture, NULL, NULL,
-                                            &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                                           &curr_element->dst_rect.w, &curr_element->dst_rect.h);
                            ratio = (double) curr_element->height / (double) curr_element->dst_rect.h;
                            curr_element->dst_rect.w = curr_element->width =
-                                                      curr_element->dst_rect.w * ratio;
+                                                     curr_element->dst_rect.w * ratio;
                         } else if ((curr_element->width != 0) && (curr_element->height == 0)) {
                            SDL_QueryTexture(curr_element->texture, NULL, NULL,
-                                            &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                                           &curr_element->dst_rect.w, &curr_element->dst_rect.h);
                            ratio = (double) curr_element->width / (double) curr_element->dst_rect.w;
                            curr_element->dst_rect.h = curr_element->height =
-                                                      curr_element->dst_rect.h * ratio;
+                                                     curr_element->dst_rect.h * ratio;
                         } else {
                            curr_element->dst_rect.w = curr_element->width;
                            curr_element->dst_rect.h = curr_element->height;
                         }
                         curr_element->dst_rect.x = curr_element->dest_x;
                         curr_element->dst_rect.y = curr_element->dest_y;
-                     } else
                      /* Record Graphic */
-                     if (strcmp("record-ui", json_object_get_string(tmpobj3)) == 0) {
+                     } else if (strcmp("record-ui", element_type) == 0) {
                         curr_element->type = STATIC;
 
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
+
+                        /* Parse record-ui specific properties */
                         json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                        //printf("file: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         json_object_object_get_ex(tmpobj2, "file_r", &tmpobj3);
-                        //printf("file_r: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_r, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         json_object_object_get_ex(tmpobj2, "file_s", &tmpobj3);
-                        //printf("file_s: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_s, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         json_object_object_get_ex(tmpobj2, "file_rs", &tmpobj3);
-                        //printf("file_rs: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_rs, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
-                           }
-                        }
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
-
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
-
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
-                        //printf("Loading static element: %s\n", curr_element->filename);
+                        /* Load textures */
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (r): %s\n", curr_element->filename_r);
+
                         curr_element->texture_r = IMG_LoadTexture(renderer, curr_element->filename_r);
                         if (!curr_element->texture_r) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_r,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (s): %s\n", curr_element->filename_s);
+
                         curr_element->texture_s = IMG_LoadTexture(renderer, curr_element->filename_s);
                         if (!curr_element->texture_s) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_s,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (rs): %s\n", curr_element->filename_rs);
+
                         curr_element->texture_rs = IMG_LoadTexture(renderer, curr_element->filename_rs);
                         if (!curr_element->texture_rs) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_rs,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
 
                         SDL_QueryTexture(curr_element->texture, NULL, NULL,
-                                         &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                                       &curr_element->dst_rect.w, &curr_element->dst_rect.h);
                         curr_element->dst_rect.x = curr_element->dest_x;
                         curr_element->dst_rect.y = curr_element->dest_y;
-                     } else
                      /* AI Status Graphic */
-                     if (strcmp("ai-ui", json_object_get_string(tmpobj3)) == 0) {
+                     } else if (strcmp("ai-ui", element_type) == 0) {
                         curr_element->type = STATIC;
 
-                        /* No AI detected. */
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
+
+                        /* Parse ai-ui specific properties */
                         json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                        //printf("file: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         /* AI Listening */
                         json_object_object_get_ex(tmpobj2, "file_l", &tmpobj3);
-                        //printf("file_l: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_l, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         /* AI Heard Wakeword */
                         json_object_object_get_ex(tmpobj2, "file_w", &tmpobj3);
-                        //printf("file_w: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_w, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         /* AI Processing */
                         json_object_object_get_ex(tmpobj2, "file_p", &tmpobj3);
-                        //printf("file_p: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename_p, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
-                           }
-                        }
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
-
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
-
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
-                        //printf("Loading static element: %s\n", curr_element->filename);
+                        /* Load textures */
                         curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (r): %s\n", curr_element->filename_l);
+
                         curr_element->texture_l = IMG_LoadTexture(renderer, curr_element->filename_l);
                         if (!curr_element->texture_l) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_l,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (s): %s\n", curr_element->filename_w);
+
                         curr_element->texture_w = IMG_LoadTexture(renderer, curr_element->filename_w);
                         if (!curr_element->texture_w) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_w,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                        //printf("Loading static element (rs): %s\n", curr_element->filename_p);
+
                         curr_element->texture_p = IMG_LoadTexture(renderer, curr_element->filename_p);
                         if (!curr_element->texture_p) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_p,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
 
                         SDL_QueryTexture(curr_element->texture, NULL, NULL,
-                                         &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                                       &curr_element->dst_rect.w, &curr_element->dst_rect.h);
                         curr_element->dst_rect.x = curr_element->dest_x;
                         curr_element->dst_rect.y = curr_element->dest_y;
-                     } else
                      /* ANIMATED */
-                     if (strcmp("animated", json_object_get_string(tmpobj3)) == 0) {
+                     } else if (strcmp("animated", element_type) == 0) {
                         curr_element->type = ANIMATED;
 
-                        json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           //printf("name: %s\n", json_object_get_string(tmpobj3));
-                           strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
-                           curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
-                        }
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
 
+                        /* Parse animated-specific properties */
                         json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                        //printf("file: %s\n", json_object_get_string(tmpobj3));
                         snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
                         json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
-                        //printf("width: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->width = json_object_get_int(tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->width = json_object_get_int(tmpobj3);
+                        }
 
                         json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
-                        //printf("height: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->height = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->height = json_object_get_int(tmpobj3);
                         }
 
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
-                           }
-                        }
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
-
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
-
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
-
+                        /* Parse animation data */
                         parse_animated_json(curr_element);
 
-                        //printf("Loading animation source: %s\n", curr_element->this_anim.image);
-                        curr_element->texture =
-                            IMG_LoadTexture(renderer, curr_element->this_anim.image);
+                        /* Load texture */
+                        curr_element->texture = IMG_LoadTexture(renderer, curr_element->this_anim.image);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image,
                                    SDL_GetError());
+                           json_object_put(parsed_json);
+                           free(config_string);
                            return FAILURE;
                         }
-                     } else
                      /* TEXT */
-                     if (strcmp("text", json_object_get_string(tmpobj3)) == 0) {
+                     } else if (strcmp("text", element_type) == 0) {
                         curr_element->type = TEXT;
 
-                        json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           //printf("name: %s\n", json_object_get_string(tmpobj3));
-                           strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
-                           curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
-                        }
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
 
+                        /* Parse text-specific properties */
                         json_object_object_get_ex(tmpobj2, "string", &tmpobj3);
-                        //printf("string: %s\n", json_object_get_string(tmpobj3));
-                        strncpy(curr_element->text, json_object_get_string(tmpobj3),
-                                MAX_TEXT_LENGTH);
-
-                        json_object_object_get_ex(tmpobj2, "font", &tmpobj3);
-                        //printf("font: %s\n", json_object_get_string(tmpobj3));
-                        snprintf(curr_element->font, MAX_FILENAME_LENGTH * 2,
-                                 "%s/%s", get_font_path(), json_object_get_string(tmpobj3));
-
-                        json_object_object_get_ex(tmpobj2, "color", &tmpobj3);
-                        //printf("color: %s\n", json_object_get_string(tmpobj3));
-                        strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
-                        parse_color(tmpstr, &curr_element->font_color.r,
-                                    &curr_element->font_color.g, &curr_element->font_color.b,
-                                    &curr_element->font_color.a);
-
-                        json_object_object_get_ex(tmpobj2, "size", &tmpobj3);
-                        //printf("size: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->font_size = json_object_get_int(tmpobj3);
-
-                        if ((strcmp(curr_element->font, "") != 0) && (curr_element->font_size > 0)) {
-                           curr_element->ttf_font =
-                               get_local_font(curr_element->font, curr_element->font_size);
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "halign", &tmpobj3);
-                        //printf("halign: %s\n", json_object_get_string(tmpobj3));
-                        strncpy(curr_element->halign, json_object_get_string(tmpobj3), 7);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
-                           }
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
-
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
-
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
-
-                     } else
-                        /* SPECIAL */
-                     if (strcmp("special", json_object_get_string(tmpobj3)) == 0) {
-                        curr_element->type = SPECIAL;
-
-                        json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
-                        //printf("name: %s\n", json_object_get_string(tmpobj3));
-                        strncpy(curr_element->special_name, json_object_get_string(tmpobj3),
-                                MAX_TEXT_LENGTH - 1);
-                        curr_element->special_name[MAX_TEXT_LENGTH - 1] = '\0';
-                        strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
-                        curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
-
-                        if (strncmp(curr_element->special_name, "detect", 6) == 0) {
-                           set_detect_enabled(1);
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
-                        //printf("file: %s\n", json_object_get_string(tmpobj3));
-                        snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
-                                 "%s/%s", image_path, json_object_get_string(tmpobj3));
-
-                        json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
-                        //printf("width: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->width = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
-                        //printf("height: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->height = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_x", &tmpobj3);
-                        //printf("dest_x: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_x = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "dest_y", &tmpobj3);
-                        //printf("dest_y: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->dest_y = json_object_get_int(tmpobj3);
-
-                        json_object_object_get_ex(tmpobj2, "angle", &tmpobj3);
-                        //printf("angle: %s\n", json_object_get_string(tmpobj3));
-                        if (strcmp(json_object_get_string(tmpobj3), "roll") == 0) {
-                           curr_element->angle = ANGLE_ROLL;
-                        } else if (strcmp(json_object_get_string(tmpobj3), "opposite roll") == 0) {
-                           curr_element->angle = ANGLE_OPPOSITE_ROLL;
-                        } else {
-                           curr_element->angle = json_object_get_double(tmpobj3);
-                        }
-
-                        if (json_object_object_get_ex(tmpobj2, "fixed", &tmpobj3)) {
-                           //printf("fixed: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->fixed = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->fixed = FIXED_DEFAULT;
+                        if (tmpobj3 != NULL) {
+                           strncpy(curr_element->text, json_object_get_string(tmpobj3),
+                                   MAX_TEXT_LENGTH);
                         }
 
                         json_object_object_get_ex(tmpobj2, "font", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("font: %s\n", json_object_get_string(tmpobj3));
                            snprintf(curr_element->font, MAX_FILENAME_LENGTH * 2,
                                     "%s/%s", get_font_path(), json_object_get_string(tmpobj3));
                         }
 
                         json_object_object_get_ex(tmpobj2, "color", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("color: %s\n", json_object_get_string(tmpobj3));
                            strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
                            parse_color(tmpstr, &curr_element->font_color.r,
                                        &curr_element->font_color.g, &curr_element->font_color.b,
@@ -1178,7 +834,6 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
 
                         json_object_object_get_ex(tmpobj2, "size", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("size: %d\n", json_object_get_int(tmpobj3));
                            curr_element->font_size = json_object_get_int(tmpobj3);
                         }
 
@@ -1187,102 +842,118 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                                get_local_font(curr_element->font, curr_element->font_size);
                         }
 
-                        json_object_object_get_ex(tmpobj2, "layer", &tmpobj3);
-                        //printf("layer: %d\n", json_object_get_int(tmpobj3));
-                        curr_element->layer = json_object_get_int(tmpobj3);
-
-                        if (json_object_object_get_ex(tmpobj2, "enabled", &tmpobj3)) {
-                           //printf("enabled: %d\n", json_object_get_int(tmpobj3));
-                           curr_element->enabled = json_object_get_int(tmpobj3);
+                        json_object_object_get_ex(tmpobj2, "halign", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           strncpy(curr_element->halign, json_object_get_string(tmpobj3), 7);
                         }
+                     /* SPECIAL */
+                     } else if (strcmp("special", element_type) == 0) {
+                        curr_element->type = SPECIAL;
 
-                        if (json_object_object_get_ex(tmpobj2, "hotkey", &tmpobj3)) {
-                           tmpstr_ptr = json_object_get_string(tmpobj3);
-                           if (tmpstr_ptr != NULL) {
-                              //printf("hotkey: %s\n", tmpstr_ptr);
-                              strcpy(tmpstr, json_object_get_string(tmpobj3));
-                              strncpy(curr_element->hotkey, tmpstr_ptr, 2);
+                        /* Parse common properties */
+                        parse_common_element_properties(tmpobj2, curr_element);
+
+                        /* Parse special-specific properties */
+                        json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           strncpy(curr_element->special_name, json_object_get_string(tmpobj3),
+                                   MAX_TEXT_LENGTH - 1);
+                           curr_element->special_name[MAX_TEXT_LENGTH - 1] = '\0';
+                           strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
+                           curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
+
+                           if (strncmp(curr_element->special_name, "detect", 6) == 0) {
+                              set_detect_enabled(1);
                            }
                         }
 
-                        json_object_object_get_ex(tmpobj2, "huds", &tmpobj3);
-if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
-   /* Clear HUD flags first */
-   memset(curr_element->hud_flags, 0, MAX_HUDS);
+                        json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+                        }
 
-   int hud_count = json_object_array_length(tmpobj3);
-   for (int h = 0; h < hud_count; h++) {
-      struct json_object *hud_name_obj = json_object_array_get_idx(tmpobj3, h);
-      const char *hud_name = json_object_get_string(hud_name_obj);
+                        json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->width = json_object_get_int(tmpobj3);
+                        }
 
-      hud_screen *screen = find_hud_by_name(hud_name);
-      if (screen != NULL) {
-         curr_element->hud_flags[screen->hud_id] = 1;
-      } else {
-         LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
-      }
-   }
-} else {
-   /* If no HUDs specified, add to the default (first) HUD */
-   hud_screen *default_hud = get_hud_manager()->screens;
-   if (default_hud != NULL) {
-      curr_element->hud_flags[default_hud->hud_id] = 1;
-   }
-}
+                        json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->height = json_object_get_int(tmpobj3);
+                        }
 
+                        /* Font properties for special elements that need text rendering */
+                        json_object_object_get_ex(tmpobj2, "font", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           snprintf(curr_element->font, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", get_font_path(), json_object_get_string(tmpobj3));
+                        }
+
+                        json_object_object_get_ex(tmpobj2, "color", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
+                           parse_color(tmpstr, &curr_element->font_color.r,
+                                       &curr_element->font_color.g, &curr_element->font_color.b,
+                                       &curr_element->font_color.a);
+                        }
+
+                        json_object_object_get_ex(tmpobj2, "size", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->font_size = json_object_get_int(tmpobj3);
+                        }
+
+                        if ((strcmp(curr_element->font, "") != 0) && (curr_element->font_size > 0)) {
+                           curr_element->ttf_font =
+                               get_local_font(curr_element->font, curr_element->font_size);
+                        }
+
+                        /* Special offset properties */
                         json_object_object_get_ex(tmpobj2, "center_x_offset", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("center_x_offset: %d\n", json_object_get_int(tmpobj3));
                            curr_element->center_x_offset = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->center_x_offset = 0;
                         }
 
                         json_object_object_get_ex(tmpobj2, "center_y_offset", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("center_y_offset: %d\n", json_object_get_int(tmpobj3));
                            curr_element->center_y_offset = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->center_y_offset = 0;
                         }
 
                         json_object_object_get_ex(tmpobj2, "text_x_offset", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("text_x_offset: %d\n", json_object_get_int(tmpobj3));
                            curr_element->text_x_offset = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->text_x_offset = 0;
                         }
 
                         json_object_object_get_ex(tmpobj2, "text_y_offset", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           //printf("text_y_offset: %d\n", json_object_get_int(tmpobj3));
                            curr_element->text_y_offset = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->text_y_offset = 0;
                         }
 
-                        /* HEADING or PITCH or ALTITUDE or WIFI */
+                        /* Handle animations for special elements like heading, pitch, etc. */
                         if ((strcmp("heading", curr_element->special_name) == 0) ||
                             (strcmp("pitch", curr_element->special_name) == 0) ||
                             (strcmp("altitude", curr_element->special_name) == 0) ||
                             (strcmp("wifi", curr_element->special_name) == 0) ||
                             (strcmp("detect", curr_element->special_name) == 0)) {
+
                            parse_animated_json(curr_element);
 
                            if (strcmp("detect", curr_element->special_name) != 0) {
-                              //printf("Loading special source: %s\n", curr_element->this_anim.image);
                               curr_element->texture = IMG_LoadTexture(renderer,
-                                                                      curr_element->this_anim.
-                                                                      image);
+                                                                    curr_element->this_anim.
+                                                                    image);
                               if (!curr_element->texture) {
                                  SDL_Log("Couldn't load %s: %s\n",
                                          curr_element->filename, SDL_GetError());
-                                 return 1;
+                                 json_object_put(parsed_json);
+                                 free(config_string);
+                                 return FAILURE;
                               }
                            }
                         }
                      }
+
+                     /* Add the element to the element list */
                      insert_element_by_layer(curr_element);
                   }
                }
@@ -1315,43 +986,35 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                   tmpobj2 = json_object_array_get_idx(tmpobj, i);
 
                   json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
-                  //printf("name: %s\n", json_object_get_string(tmpobj3));
                   strncpy(curr_element->name, json_object_get_string(tmpobj3),
                           MAX_TEXT_LENGTH);
 
                   json_object_object_get_ex(tmpobj2, "device", &tmpobj3);
-                  //printf("device: %s\n", json_object_get_string(tmpobj3));
                   strncpy(curr_element->mqtt_device, json_object_get_string(tmpobj3),
                           MAX_TEXT_LENGTH);
 
 
                   json_object_object_get_ex(tmpobj2, "base file", &tmpobj3);
-                  //printf("base file: %s\n", json_object_get_string(tmpobj3));
                   snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
                            "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                   json_object_object_get_ex(tmpobj2, "online file", &tmpobj3);
-                  //printf("online file: %s\n", json_object_get_string(tmpobj3));
                   snprintf(curr_element->filename_online, MAX_FILENAME_LENGTH * 2,
                            "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                   json_object_object_get_ex(tmpobj2, "warning file", &tmpobj3);
-                  //printf("warning file: %s\n", json_object_get_string(tmpobj3));
                   snprintf(curr_element->filename_warning, MAX_FILENAME_LENGTH * 2,
                            "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                   json_object_object_get_ex(tmpobj2, "offline file", &tmpobj3);
-                  //printf("offline file: %s\n", json_object_get_string(tmpobj3));
                   snprintf(curr_element->filename_offline, MAX_FILENAME_LENGTH * 2,
                            "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                   if (json_object_object_get_ex(tmpobj2, "warning temp", &tmpobj3)) {
-                     //printf("warning temp: %0.2f\n", json_object_get_double(tmpobj3));
                      curr_element->warning_temp = json_object_get_double(tmpobj3);
                   }
 
                   if (json_object_object_get_ex(tmpobj2, "warning voltage", &tmpobj3)) {
-                     //printf("warning voltage: %0.2f\n", json_object_get_double(tmpobj3));
                      curr_element->warning_voltage = json_object_get_double(tmpobj3);
                   }
 
@@ -1359,6 +1022,8 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                   if (!curr_element->texture_base) {
                      SDL_Log("Couldn't load %s: %s\n",
                              curr_element->filename, SDL_GetError());
+                     json_object_put(parsed_json);
+                     free(config_string);
                      return FAILURE;
                   }
 
@@ -1366,6 +1031,8 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                   if (!curr_element->texture_online) {
                      SDL_Log("Couldn't load %s: %s\n",
                              curr_element->filename_online, SDL_GetError());
+                     json_object_put(parsed_json);
+                     free(config_string);
                      return FAILURE;
                   }
 
@@ -1373,6 +1040,8 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                   if (!curr_element->texture_warning) {
                      SDL_Log("Couldn't load %s: %s\n",
                              curr_element->filename_warning, SDL_GetError());
+                     json_object_put(parsed_json);
+                     free(config_string);
                      return FAILURE;
                   }
 
@@ -1380,6 +1049,8 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
                   if (!curr_element->texture_offline) {
                      SDL_Log("Couldn't load %s: %s\n",
                              curr_element->filename_offline, SDL_GetError());
+                     json_object_put(parsed_json);
+                     free(config_string);
                      return FAILURE;
                   }
 
@@ -1387,8 +1058,6 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
 
                   SDL_QueryTexture(curr_element->texture, NULL, NULL,
                                    &curr_element->dst_rect.w, &curr_element->dst_rect.h);
-                  //printf("Armor Element \"%s\" Size %dx%d\n", curr_element->filename,
-                  //       curr_element->dst_rect.w, curr_element->dst_rect.h);
 
                   curr_element->dst_rect.x = curr_element->dest_x = 0;
                   curr_element->dst_rect.y = curr_element->dest_y = 0;
@@ -1425,10 +1094,8 @@ if (tmpobj3 != NULL && json_object_get_type(tmpobj3) == json_type_array) {
    }
 
    json_object_put(parsed_json);
-
-   //dump_element_list();
+   free(config_string);
 
    return SUCCESS;
 }
-
 
