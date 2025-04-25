@@ -35,6 +35,22 @@ typedef struct _motion {
 typedef struct _enviro {
    double temp;
    double humidity;
+
+   /* Air Quality Measurements */
+   double air_quality;                 /* 0-100 scale */
+   char air_quality_description[15];   /* Text description: Excellent/Good/Average/Poor/Very Poor */
+
+   /* VOC and CO2 Data */
+   double tvoc_ppb;                    /* TVOC in ppb */
+   double eco2_ppm;                    /* Equivalent CO2 in ppm */
+   double co2_ppm;                     /* Actual CO2 in ppm */
+   char co2_quality_description[15];   /* Text description of CO2 quality */
+   int co2_eco2_diff;                  /* Difference between CO2 and eCO2 */
+   char co2_source_analysis[30];       /* Analysis of CO2 sources */
+
+   /* Calculated Environmental Indices */
+   double heat_index_c;                /* Heat index in Celsius */
+   double dew_point;                   /* Dew point in Celsius */
 } enviro;
 
 /* GPS Object */

@@ -151,8 +151,30 @@ static char snapshot_filename[PATH_MAX+29];  /* Filename to store the snapshot *
 double averageFrameRate = 0.0;
 
 /* Right now we only support one instance of each. These are their objects. */
-motion this_motion;
-enviro this_enviro;
+motion this_motion = {
+   .format = 0,
+   .heading = 0.0,
+   .pitch = 0.0,
+   .roll = 0.0,
+   .w = 1.0,    /* Identity quaternion values */
+   .x = 0.0,
+   .y = 0.0,
+   .z = 0.0
+};
+enviro this_enviro = {
+   .temp = 0.0,
+   .humidity = 0.0,
+   .air_quality = 0.0,
+   .air_quality_description = "",
+   .tvoc_ppb = 0.0,
+   .eco2_ppm = 0.0,
+   .co2_ppm = 0.0,
+   .co2_quality_description = "",
+   .co2_eco2_diff = 0,
+   .co2_source_analysis = "",
+   .heat_index_c = 0.0,
+   .dew_point = 0.0
+};
 gps this_gps = {
    .time = "00:00:00",
    .date = "2021/01/01",
