@@ -477,6 +477,8 @@ int parse_json_config(char *filename)
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Stream Dest IP") == 0) {
                   strncpy(this_ss->stream_dest_ip, json_object_get_string(json_object_iter_peek_value(&itSub)),
                           16);
+               } else if (strcmp(json_object_iter_peek_name(&itSub), "Snapshot Overlay") == 0) {
+                  this_hds->snapshot_overlay = json_object_get_boolean(json_object_iter_peek_value(&itSub));
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_x") == 0) {
                   this_as->armor_dest.x = json_object_get_int(json_object_iter_peek_value(&itSub));
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_y") == 0) {

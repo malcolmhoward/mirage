@@ -217,3 +217,9 @@ int set_inv_compass(int inv)
 
    return inv;
 }
+
+int get_snapshot_overlay(void)
+{
+   return this_hds.snapshot_overlay;
+}
+
