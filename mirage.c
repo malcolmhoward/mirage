@@ -146,9 +146,6 @@ static struct mosquitto *mosq = NULL;        /* MQTT pointer */
 static int quit = 0;                         /* Global to sync exiting of threads */
 int detect_enabled = 0;                      /* Is object detection enabled? */
 
-static int snapshot = 0;                     /* Take snapshot flag */
-static char snapshot_filename[PATH_MAX+29];  /* Filename to store the snapshot */
-
 double averageFrameRate = 0.0;
 
 /* Right now we only support one instance of each. These are their objects. */
@@ -368,26 +365,148 @@ int checkShutdown(void)
    return quit;
 }
 
+// Declaration
+typedef enum {
+   SCREENSHOT_MANUAL = 0,
+   SCREENSHOT_MQTT
+} screenshot_t;
+
+int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
+                                const SDL_Rect *rect,
+                                Uint32 format,
+                                void *pixels,
+                                int pitch);
+void mqttViewingSnapshot(const char *filename);
+int request_screenshot(int with_overlay, int full_resolution,
+                       const char *output_filename, screenshot_t source);
+
 /**
- * Sets a flag to indicate a snapshot event and saves the triggering datetime.
+ * Takes a screenshot with specified options for overlay and resolution.
  *
- * This function marks a snapshot event by setting a global flag and saves the provided datetime
- * into a global buffer in a filename.
- *
- * @param datetime The datetime string when the snapshot is triggered, expected to be in the format
- *                 "%Y%m%d_%H%M%S".
- *
- * FIXME: Add mutex protections in case of multiple calls. May even need queuing.
- *
- * Globals:
- * - `snapshot`: An integer flag indicating a snapshot event.
- * - `snapshot_filename`: A buffer storing the filename with datetime of the snapshot event.
+ * @param with_overlay If true, captures the screen with UI overlay. If false, captures raw camera feed.
+ * @param full_resolution If true, maintains original resolution. If false, scales to SNAPSHOT_WIDTH/HEIGHT.
+ * @param output_filename Optional custom filename. If NULL, generates a timestamped filename.
+ * @return 0 on success, non-zero on failure
  */
-void trigger_snapshot(const char *datetime)
-{
-   snapshot = 1;
-   snprintf(snapshot_filename, sizeof(snapshot_filename), "%s/snapshot-%s.jpg",
-            record_path, datetime);
+int take_screenshot(int with_overlay, int full_resolution, const char *output_filename) {
+   hud_display_settings *this_hds = get_hud_display_settings();
+   SDL_Renderer *renderer = get_sdl_renderer();
+   time_t r_time;
+   struct tm *l_time = NULL;
+   char datetime[16];
+   char filename[PATH_MAX+31];
+   int result = 0;
+
+   // Generate timestamp for the filename if needed
+   if (output_filename == NULL) {
+      time(&r_time);
+      l_time = localtime(&r_time);
+      strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+
+      // Generate filename with timestamp
+      snprintf(filename, sizeof(filename), "%s/screenshot-%s.jpg", record_path, datetime);
+   } else {
+      strncpy(filename, output_filename, PATH_MAX+31-1);
+      filename[PATH_MAX+31-1] = '\0';
+   }
+
+   LOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d",
+            filename, with_overlay, full_resolution);
+
+   if (with_overlay) {
+      // With overlay - capture what's currently on screen
+      void *screenshot_buffer =
+          malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
+      if (screenshot_buffer == NULL) {
+         LOG_ERROR("Unable to allocate memory for screenshot buffer");
+         return FAILURE;
+      }
+
+      // Use the PBO-based async read instead of synchronized SDL function
+      result = OpenGL_RenderReadPixelsAsync(
+         renderer,
+         NULL,
+         PIXEL_FORMAT_OUT,
+         screenshot_buffer,
+         this_hds->eye_output_width * 2 * RGB_OUT_SIZE
+      );
+      if (result != 0) {
+         LOG_ERROR("Failed to read pixels: %d", result);
+         free(screenshot_buffer);
+         return FAILURE;
+      }
+
+      // Calculate dimensions based on resolution preference
+      int new_width, new_height;
+      if (full_resolution) {
+         new_width = this_hds->eye_output_width;
+         new_height = this_hds->eye_output_height;
+      } else {
+         new_width = SNAPSHOT_WIDTH;
+         new_height = SNAPSHOT_HEIGHT;
+      }
+
+      // Process and save the image
+      ImageProcessParams params = {
+         .rgba_buffer = (unsigned char *)screenshot_buffer,
+         .orig_width = this_hds->eye_output_width * 2,
+         .orig_height = this_hds->eye_output_height,
+         .filename = filename,
+         .left_crop = 0,
+         .top_crop = 0,
+         .right_crop = this_hds->eye_output_width, // Capture just the left eye
+         .bottom_crop = 0,
+         .new_width = new_width,
+         .new_height = new_height,
+         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY // Higher quality for full-res
+      };
+
+      result = process_and_save_image(&params);
+      free(screenshot_buffer);
+
+   } else {
+      // Without overlay - capture raw camera feed
+      // Use a mutex lock before accessing shared buffers
+      pthread_mutex_lock(&v_mutex);
+
+      void *snapshot_pixel = mapL[buffer_num].data;
+
+      // Calculate dimensions based on resolution preference
+      int new_width, new_height;
+      if (full_resolution) {
+         new_width = this_hds->cam_input_width - (2 * this_hds->cam_crop_x);
+         new_height = this_hds->cam_input_height;
+      } else {
+         new_width = SNAPSHOT_WIDTH;
+         new_height = SNAPSHOT_HEIGHT;
+      }
+
+      ImageProcessParams params = {
+         .rgba_buffer = (unsigned char *)snapshot_pixel,
+         .orig_width = this_hds->cam_input_width,
+         .orig_height = this_hds->cam_input_height,
+         .filename = filename,
+         .left_crop = this_hds->cam_crop_x,
+         .top_crop = 0,
+         .right_crop = this_hds->cam_crop_x,
+         .bottom_crop = 0,
+         .new_width = new_width,
+         .new_height = new_height,
+         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY // Higher quality for full-res
+      };
+
+      result = process_and_save_image(&params);
+
+      pthread_mutex_unlock(&v_mutex);
+   }
+
+   if (result != 0) {
+      LOG_ERROR("Image processing failed with error code: %d", result);
+      return 3;
+   } else {
+      LOG_INFO("Screenshot saved to: %s", filename);
+      return 0;
+   }
 }
 
 void process_ai_state(const char *newAIName, const char *newAIState) {
@@ -1448,6 +1567,7 @@ void mqttViewingSnapshot(const char *filename) {
    if (mosq == NULL) {
       LOG_ERROR("MQTT not initialized.");
    } else {
+      LOG_INFO("Sending to \"dawn\" via MQTT: %s", mqtt_command);
       rc = mosquitto_publish(mosq, NULL, "dawn", strlen(mqtt_command), mqtt_command, 0, false);
       if (rc != MOSQ_ERR_SUCCESS) {
          LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
@@ -1531,18 +1651,111 @@ int computeScaledWindowSize(int desktop_width, int desktop_height,
    return 0; // Success
 }
 
-// Two PBOs for double buffering
+/**
+ * @brief Asynchronously reads pixels with optimized buffer fallback
+ *
+ * Uses a buffer index tracking approach instead of copying frames,
+ * allowing zero-copy fallback to the last successfully mapped frame.
+ */
+
+// Global variables for PBO system
 static GLuint g_pboIds[2] = {0, 0};
 static int g_pboIndex = 0;
 static bool g_pboInitialized = false;
 
+// Added tracking for last successful mapping
+static int g_lastSuccessfulPboIndex = -1;
+static bool g_hasValidLastFrame = false;
+
+// Screenshot request handling
+static pthread_mutex_t g_screenshot_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int g_screenshot_requested = 0;
+static char g_screenshot_path[PATH_MAX+29] = "";
+static int g_screenshot_with_overlay = 0;
+
+static screenshot_t  g_screenshot_source = SCREENSHOT_MANUAL;
+
+/**
+ * Initializes the PBO system
+ */
+void init_pbo_system(void) {
+    if (g_pboInitialized) {
+        glDeleteBuffers(2, g_pboIds);
+    }
+
+    glGenBuffers(2, g_pboIds);
+    g_pboInitialized = true;
+    g_lastSuccessfulPboIndex = -1;
+    g_hasValidLastFrame = false;
+
+    LOG_INFO("PBO system initialized with buffer tracking.");
+}
+
+/**
+ * Cleans up the PBO system
+ */
+void cleanup_pbo_system(void) {
+    if (g_pboInitialized) {
+        glDeleteBuffers(2, g_pboIds);
+        g_pboInitialized = false;
+    }
+    g_lastSuccessfulPboIndex = -1;
+    g_hasValidLastFrame = false;
+}
+
+/**
+ * Requests a screenshot to be taken by the main thread
+ * This function is thread-safe and can be called from any thread
+ *
+ * @param with_overlay Whether to include UI overlay
+ * @param full_resolution Whether to maintain full resolution
+ * @param output_filename Path to save the screenshot (or NULL for auto-generated)
+ * @param source The source of the screenshot,  SCREENSHOT_MANUAL, SCREENSHOT_MQTT
+ * @return 0 if request was queued successfully, non-zero otherwise
+ */
+int request_screenshot(int with_overlay, int full_resolution,
+                       const char *output_filename, screenshot_t source) {
+    int result = SUCCESS;
+
+    pthread_mutex_lock(&g_screenshot_mutex);
+
+    g_screenshot_source = source;
+
+    // If there's already a pending request, don't overwrite it
+    if (g_screenshot_requested) {
+        LOG_WARNING("Screenshot already requested, ignoring new request");
+        result = FAILURE;
+    } else {
+        // Set the request flag
+        g_screenshot_requested = 1;
+        g_screenshot_with_overlay = with_overlay;
+
+        // Store the full resolution flag as bit 1 in the request flag
+        if (full_resolution) {
+            g_screenshot_requested |= 2;
+        }
+
+        // Store the filename if provided
+        if (output_filename != NULL) {
+            strncpy(g_screenshot_path, output_filename, sizeof(g_screenshot_path) - 1);
+            g_screenshot_path[sizeof(g_screenshot_path) - 1] = '\0';
+        } else {
+            g_screenshot_path[0] = '\0';  // Empty string indicates auto-generated filename
+        }
+
+        LOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s",
+                with_overlay, full_resolution,
+                output_filename ? output_filename : "auto-generated");
+    }
+
+    pthread_mutex_unlock(&g_screenshot_mutex);
+
+    return result;
+}
+
 /**
  * @brief Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer
- *        using a double-buffered Pixel Buffer Object (PBO) approach.
- *
- * This function is somewhat analogous to SDL_RenderReadPixels(), but uses asynchronous
- * PBO transfers to reduce CPU-GPU stalls. It currently assumes RGBA-8-bit format and uses
- * GL_RGBA / GL_UNSIGNED_BYTE for reading.
+ *        with fallback to the last successfully mapped buffer if the current mapping fails.
  *
  * @param[in] renderer  Pointer to the SDL_Renderer (must be using an OpenGL backend).
  * @param[in] rect      Optional rectangle specifying the area to read. If NULL, the entire
@@ -1587,34 +1800,82 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
 
    // Lazy-init the PBOs if needed
    if (!g_pboInitialized) {
-      glGenBuffers(2, g_pboIds);
-      g_pboInitialized = true;
-      LOG_INFO("Generated two PBOs for double-buffered readback.");
+      init_pbo_system();
    }
 
    // Calculate the data size (assuming RGBA 8-bit).
    const int bytesPerPixel = 4;  // RGBA
    const GLsizeiptr dataSize = (GLsizeiptr)(readW * readH * bytesPerPixel);
 
-   // Bind the “current” PBO for asynchronous readback
+   // Bind the "current" PBO for asynchronous readback
    glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_pboIndex]);
    glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
 
    // Kick off the async read from the current framebuffer
    glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
-   // Now bind the “previous” PBO and try to map it to system memory
+   // Now bind the "previous" PBO and try to map it to system memory
    int prevIndex = (g_pboIndex + 1) % 2;
    glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[prevIndex]);
 
-   GLubyte* mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                                      0,
-                                                      dataSize,
-                                                      GL_MAP_READ_BIT);
+   // Add retry logic for buffer mapping
+   GLubyte* mappedBuffer = NULL;
+   int retryCount = 0;
+   const int MAX_RETRIES = 3;
+   bool usedFallbackBuffer = false;
+
+   while (retryCount < MAX_RETRIES) {
+      // Try to map the buffer
+      mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
+                                                0,
+                                                dataSize,
+                                                GL_MAP_READ_BIT);
+
+      if (mappedBuffer) {
+         // Success! Break out of the retry loop
+         break;
+      } else {
+         // Mapping failed - log and retry after a brief delay
+         if (retryCount < MAX_RETRIES - 1) {
+            LOG_WARNING("Buffer mapping failed, retrying (%d/%d)...",
+                        retryCount + 1, MAX_RETRIES);
+
+            // Introduce a small delay to allow GPU to finish
+            SDL_Delay(5);  // 5ms delay should be brief enough not to impact interactivity
+         } else {
+            LOG_WARNING("Buffer mapping failed after %d retries.", MAX_RETRIES);
+         }
+         retryCount++;
+      }
+   }
+
+   // If mapping still failed after retries, check if we have a last known good buffer
+   if (!mappedBuffer) {
+      if (g_hasValidLastFrame && g_lastSuccessfulPboIndex >= 0) {
+         // We have a previously mapped buffer - switch to it
+         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);  // Unmap current buffer
+         glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_lastSuccessfulPboIndex]);
+
+         // Try to map the last known good buffer
+         mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
+                                                  0,
+                                                  dataSize,
+                                                  GL_MAP_READ_BIT);
+
+         if (mappedBuffer) {
+            LOG_INFO("Using last successful buffer from index %d", g_lastSuccessfulPboIndex);
+            usedFallbackBuffer = true;
+         } else {
+            LOG_WARNING("Failed to map last known good buffer. Screenshot may be incomplete.");
+         }
+      } else {
+         // No usable previously mapped buffer
+         LOG_WARNING("No previous good buffer available. Screenshot may be incomplete.");
+      }
+   }
 
    if (mappedBuffer) {
       // Copy the pixel data into the user-provided buffer
-      // For simplicity, we assume pitch == width * 4. Adjust if needed.
       for (int y = 0; y < readH; ++y) {
          int flippedY = (readH - 1) - y; // Invert the row index
          GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
@@ -1622,10 +1883,15 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
          memcpy(dstRow, srcRow, readW * bytesPerPixel);
       }
 
-      // Unmap after copying
+      // Unmap buffer
       glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-   } else {
-      LOG_WARNING("Mapped buffer was NULL. Possible missed frame or GPU is still busy?");
+
+      // If this was a successful current frame mapping (not a fallback),
+      // update our tracking of last successful buffer
+      if (!usedFallbackBuffer) {
+         g_lastSuccessfulPboIndex = prevIndex;
+         g_hasValidLastFrame = true;
+      }
    }
 
    // Unbind the PBO
@@ -1634,7 +1900,110 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
    // Flip the index so next call reads the other buffer
    g_pboIndex = prevIndex;
 
-   return 0;
+   // Return success if we got data
+   return (mappedBuffer != NULL) ? 0 : 1;
+}
+
+/**
+ * Takes a snapshot for AI processing and saves it to disk.
+ * This function queues the request to be processed by the main thread.
+ *
+ * @param datetime String containing the datetime for the snapshot filename (optional)
+ *                 If NULL, a current timestamp will be generated
+ */
+void trigger_snapshot(const char *datetime) {
+    hud_display_settings *this_hds = get_hud_display_settings();
+    char snapshot_path[PATH_MAX+29];
+
+    // Generate fresh timestamp if none was provided
+    char fresh_datetime[16];
+    if (datetime == NULL || datetime[0] == '\0') {
+        time_t r_time;
+        struct tm *l_time = NULL;
+
+        time(&r_time);
+        l_time = localtime(&r_time);
+        strftime(fresh_datetime, sizeof(fresh_datetime), "%Y%m%d_%H%M%S", l_time);
+        datetime = fresh_datetime;
+    }
+
+    // Format the filename with the timestamp
+    snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot-%s.jpg",
+            record_path, datetime);
+
+    // Queue the screenshot request based on configuration
+    request_screenshot(this_hds->snapshot_overlay, 0, snapshot_path, SCREENSHOT_MQTT);
+}
+
+/* Modify process_screenshot_requests() to ensure uniqueness */
+void process_screenshot_requests(void) {
+    pthread_mutex_lock(&g_screenshot_mutex);
+
+    if (g_screenshot_requested) {
+        int with_overlay = g_screenshot_with_overlay;
+        int full_resolution = (g_screenshot_requested & 2) ? 1 : 0;
+        screenshot_t source = g_screenshot_source;
+        char output_path[PATH_MAX+31];
+
+        // Copy the path to a local variable
+        if (g_screenshot_path[0] != '\0') {
+            strncpy(output_path, g_screenshot_path, sizeof(output_path) - 1);
+            output_path[sizeof(output_path) - 1] = '\0';
+
+            // For MQTT requests, ensure the timestamp is current by updating
+            // the filename if it starts with "snapshot-"
+            if (source == SCREENSHOT_MQTT && strstr(output_path, "/snapshot-") != NULL) {
+                char *base_path = strdup(output_path);
+                char *timestamp_part = strstr(base_path, "/snapshot-");
+                if (timestamp_part) {
+                    *timestamp_part = '\0'; // Truncate at /snapshot-
+
+                    // Generate a fresh timestamp
+                    time_t r_time;
+                    struct tm *l_time = NULL;
+                    char datetime[16];
+
+                    time(&r_time);
+                    l_time = localtime(&r_time);
+                    strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+
+                    // Recreate filename with fresh timestamp
+                    snprintf(output_path, sizeof(output_path), "%s/snapshot-%s.jpg",
+                            base_path, datetime);
+                }
+                free(base_path);
+            }
+        } else {
+            // Generate a filename with timestamp
+            time_t r_time;
+            struct tm *l_time = NULL;
+            char datetime[16];
+
+            time(&r_time);
+            l_time = localtime(&r_time);
+            strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+
+            snprintf(output_path, sizeof(output_path), "%s/screenshot-%s.jpg",
+                    record_path, datetime);
+        }
+
+        // Clear the request flag before taking the screenshot
+        g_screenshot_requested = 0;
+        g_screenshot_path[0] = '\0';
+        g_screenshot_source = SCREENSHOT_MANUAL;
+
+        pthread_mutex_unlock(&g_screenshot_mutex);
+
+        // Now take the screenshot from the main thread where OpenGL context is valid
+        int result = take_screenshot(with_overlay, full_resolution, output_path);
+
+        // Send notification if it was an MQTT request
+        if (source == SCREENSHOT_MQTT && result == 0) {
+            mqttViewingSnapshot(output_path);
+        }
+    } else {
+        pthread_mutex_unlock(&g_screenshot_mutex);
+    }
 }
 
 void display_help(int argc, char *argv[]) {
@@ -2034,6 +2403,8 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
    }
 
+   init_pbo_system();
+
 #ifdef REFRESH_SYNC
    if ((renderer =
         SDL_CreateRenderer(window, -1,
@@ -2231,18 +2602,18 @@ int main(int argc, char **argv)
             }
 
             /* Handle hotkeys for HUD switching */
-hud_screen *screen = get_hud_manager()->screens;
-while (screen != NULL) {
-   if (screen->hotkey[0] != '\0') {
-      if (event.key.keysym.sym == SDL_GetKeyFromName(screen->hotkey)) {
-         /* Use default transition settings when using hotkeys */
-         switch_to_hud(screen->name, get_hud_manager()->transition_type,
-                      get_hud_manager()->transition_duration_ms);
-         break;
-      }
-   }
-   screen = screen->next;
-}
+            hud_screen *screen = get_hud_manager()->screens;
+            while (screen != NULL) {
+               if (screen->hotkey[0] != '\0') {
+                  if (event.key.keysym.sym == SDL_GetKeyFromName(screen->hotkey)) {
+                     /* Use default transition settings when using hotkeys */
+                     switch_to_hud(screen->name, get_hud_manager()->transition_type,
+                                  get_hud_manager()->transition_duration_ms);
+                     break;
+                  }
+               }
+               screen = screen->next;
+            }
 
             /* Process special keys. */
             switch (event.key.keysym.sym) {
@@ -2262,6 +2633,17 @@ while (screen != NULL) {
                   fullscreen = !fullscreen;
                }
                break;
+
+            case SDLK_p: // 'P' for photo/screenshot
+               LOG_INFO("Requesting full-resolution screenshot with overlay...");
+               request_screenshot(1, 1, NULL, SCREENSHOT_MANUAL); // With overlay, full resolution
+               break;
+
+            case SDLK_o: // 'O' for raw screenshot (without overlay)
+               LOG_INFO("Requesting full-resolution raw camera screenshot...");
+               request_screenshot(0, 1, NULL, SCREENSHOT_MANUAL); // Without overlay, full resolution
+               break;
+
             case SDLK_r:
                if (!this_vod.output) {
                   this_vod.output = RECORD;
@@ -2273,6 +2655,7 @@ while (screen != NULL) {
                   LOG_INFO("Stopping recording.");
                }
                break;
+
             case SDLK_s:
                if (!this_vod.output) {
                   this_vod.output = STREAM;
@@ -2284,6 +2667,7 @@ while (screen != NULL) {
                   LOG_INFO("Stopping streaming.");
                }
                break;
+
             case SDLK_t:
                if (!this_vod.output) {
                   this_vod.output = RECORD_STREAM;
@@ -2295,18 +2679,22 @@ while (screen != NULL) {
                   LOG_INFO("Stopping recording and streaming.");
                }
                break;
+
             case SDLK_LEFT:
                this_hds->stereo_offset -= 10;
                LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
                break;
+
             case SDLK_RIGHT:
                this_hds->stereo_offset += 10;
                LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
                break;
+
             case SDLK_ESCAPE:
             case SDLK_q:
                quit = 1;
                break;
+
             default:
                break;
             }
@@ -2414,39 +2802,6 @@ while (screen != NULL) {
             SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
          }
 
-#ifdef SNAPSHOT_NOOVERLAY
-         if (snapshot) {
-            void *snapshot_pixel = mapL[buffer_num].data;
-
-            ImageProcessParams params = {
-               .rgba_buffer = (unsigned char *) snapshot_pixel,
-               .orig_width = this_hds->cam_input_width,
-               .orig_height = this_hds->cam_input_height,
-               .filename = snapshot_filename,
-               .left_crop = this_hds->cam_crop_x,
-               .top_crop = 0,
-               .right_crop = this_hds->cam_crop_x,
-               .bottom_crop = 0,
-               .new_width = SNAPSHOT_WIDTH,
-               .new_height = SNAPSHOT_HEIGHT,
-               .format_params.quality = SNAPSHOT_QUALITY
-            };
-
-            /* FIXME: See how fast this happens. Do I need to spawn off a thread? */
-            int result = process_and_save_image(&params);
-            if (result != 0) {
-               LOG_ERROR("Image processing failed with error code: %d", result);
-               LOG_ERROR("\tfilename: %s, orig_width: %d, orig_height: %d",
-                       params.filename, params.orig_width, params.orig_height);
-            } else {
-               LOG_INFO("Successfully created snapshot!");
-               mqttViewingSnapshot(snapshot_filename);
-            }
-
-            snapshot = 0;
-         }
-#endif
-
 #ifdef DISPLAY_TIMING
          last_ts_cap = (unsigned long) ts_cap[buffer_num].tv_sec * 1000000000 + ts_cap[buffer_num].tv_nsec;
 #endif
@@ -2475,47 +2830,6 @@ while (screen != NULL) {
          LOG_INFO("Display latency: %lu ms, avg: %lu ms", (present_time - last_ts_cap) / 1000000,
                                                     ts_total / (unsigned long) ts_count);
          LOG_INFO("ts_total: %lu ms, ts_count: %u", ts_total, ts_count);
-#endif
-
-#ifndef SNAPSHOT_NOOVERLAY
-         if (snapshot) {
-            void *snapshot_pixel =
-                malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
-            if (snapshot_pixel == NULL) {
-               LOG_ERROR("Unable to malloc rgb frame 0.");
-               return (2);
-            }
-
-            if (SDL_RenderReadPixels(renderer, NULL, PIXEL_FORMAT_OUT, snapshot_pixel,
-                                     this_hds->eye_output_width * 2 * RGB_OUT_SIZE) != 0 ) {
-               LOG_ERROR("SDL_RenderReadPixels() failed: %s", SDL_GetError());
-            } else {
-               ImageProcessParams params = {
-                  .rgba_buffer = (unsigned char *) snapshot_pixel,
-                  .orig_width = this_hds->eye_output_width * 2,
-                  .orig_height = this_hds->eye_output_height,
-                  .filename = snapshot_filename,
-                  .left_crop = 0,
-                  .top_crop = 0,
-                  .right_crop = 1440,
-                  .bottom_crop = 0,
-                  .new_width = 512,
-                  .new_height = 512,
-                  .format_params.quality = 90
-               };
-
-               int result = process_and_save_image(&params);
-               if (result != 0) {
-                  LOG_ERROR("Image processing failed with error code: %d", result);
-               } else {
-                  LOG_INFO("Successfully created snapshot!");
-                  mqttViewingSnapshot(snapshot_filename);
-               }
-            }
-
-            free(snapshot_pixel);
-            snapshot = 0;
-         }
 #endif
 
          if (this_vod.output) {
@@ -2593,6 +2907,9 @@ while (screen != NULL) {
                active_alerts &= ~ALERT_RECORDING;
             }
          }
+
+         // Process any pending screenshot requests
+         process_screenshot_requests();
 
          SDL_RenderPresent(renderer);
       }
@@ -2696,7 +3013,7 @@ while (screen != NULL) {
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Delete GL buffers.");
 #endif
-   glDeleteBuffers(2, g_pboIds);
+   cleanup_pbo_system();
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Delete the GL context.");

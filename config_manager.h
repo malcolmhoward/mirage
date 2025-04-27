@@ -42,6 +42,7 @@ typedef struct _hud_display_settings {
                                * This offsets to the left or right accordingly on each eye. */
    double pitch_offset;       /* Often the helmet sensor isn't in line with the level of the
                                * helmet. This adjusts that. */
+   int snapshot_overlay;      /* Whether to include UI overlay in AI snapshots */
 } hud_display_settings;
 
 hud_display_settings *get_hud_display_settings(void);
@@ -83,5 +84,6 @@ const char *set_wifi_dev_name(const char *name, int length);
 int get_inv_compass(void);
 int set_inv_compass(int inv);
 
+int get_snapshot_overlay(void);
 
 #endif // CONFIG_MANAGER_H

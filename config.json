@@ -12,6 +12,7 @@
       "Stream Width": 800,
       "Stream Height": 400,
       "Stream Dest IP": "192.168.10.170",
+      "Snapshot Overlay": false,
       "Armor dest_x": 70,
       "Armor dest_y": 900,
       "Armor dest_w": 450,
@@ -31,7 +32,7 @@
       {
          "name": "environmental",
          "hotkey": "2",
-         "transition": "slide_left"
+         "transition": "zoom"
       }
    ],
    "Transitions": {
@@ -146,7 +147,7 @@
          "angle": 0,
          "layer": 1,
          "enabled": 1,
-         "huds": ["default", "environmental"]
+         "huds": ["default"]
       },
       {
          "name": "map",
@@ -376,6 +377,18 @@
          "angle": 0,
          "layer": 2,
          "huds": ["default", "environmental"]
+      },
+      {
+         "type": "environmental_panel",
+         "font": "devgothic.ttf",
+         "color": "0x75, 0xCE, 0xFA, 0xFF",
+         "dest_x": 165,
+         "dest_y": 300,
+         "width": 600,
+         "height": 400,
+         "angle": 0,
+         "layer": 2,
+         "huds": ["environmental"]
       }
    ],
    "Components": [
