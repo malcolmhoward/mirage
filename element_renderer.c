@@ -19,6 +19,7 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,6 +67,64 @@ extern alert_t active_alerts;
 extern const struct Alert alert_messages[];
 
 extern double averageFrameRate;
+
+/* Fan monitoring functions */
+static FILE *fan_file = NULL;
+static int fan_file_error = 0;
+
+/**
+ * Initializes the fan monitoring system
+ * @return 0 on success, non-zero on failure
+ */
+int init_fan_monitoring(void) {
+    if (fan_file != NULL) {
+        return 0;  // Already initialized
+    }
+
+    fan_file = fopen(FAN_RPM_FILE, "r");
+    if (fan_file == NULL) {
+        LOG_ERROR("Unable to open fan file %s: %s", FAN_RPM_FILE, strerror(errno));
+        fan_file_error = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * Gets the current fan speed as a percentage of maximum
+ * @return Fan speed percentage (0-100), or -1 on error
+ */
+int get_fan_percentage(void) {
+    char fanstr[6] = "";
+    int fan_rpm = 0;
+    float fan_pct = 0.0;
+
+    if (fan_file_error || fan_file == NULL) {
+        return -1;
+    }
+
+    rewind(fan_file);
+    if (fread(fanstr, 1, 5, fan_file) > 0) {
+        fan_rpm = atoi(fanstr);
+        fan_pct = ((float)fan_rpm / FAN_MAX_RPM) * 100.0;
+        return (int)fan_pct;
+    } else {
+        LOG_WARNING("Failed to read fan data");
+        return -1;
+    }
+}
+
+/**
+ * Cleans up fan monitoring resources
+ */
+void cleanup_fan_monitoring(void) {
+    if (fan_file != NULL) {
+        fclose(fan_file);
+        fan_file = NULL;
+    }
+    fan_file_error = 0;
+}
 
 /* Reset alpha values for all textures of an element */
 static void reset_texture_alpha(element *curr_element) {
@@ -262,9 +321,6 @@ void render_text_element(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
    char render_text[MAX_TEXT_LENGTH] = "";
    static FILE *fan_file = NULL;
-   char fanstr[6] = "";
-   int fan_rpm = 0;
-   float fan_pct = 0.0;
    unsigned int currTime = SDL_GetTicks();
    int override_dst_rect = curr_element->in_transition;
    float alpha_override = curr_element->transition_alpha;
@@ -278,7 +334,7 @@ void render_text_element(element *curr_element) {
    if (last_log == 0) {
       last_log = currTime;
    }
-    
+
    /* Process dynamic text content */
    if (strcmp("*FPS*", curr_element->text) == 0) {
       /* FPS display */
@@ -319,29 +375,14 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->humidity);
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
-      if (fan_file == NULL) {
-         fan_file = fopen(FAN_RPM_FILE, "r");
+      // Initialize fan monitoring if not already done
+      if (fan_file == NULL && !fan_file_error) {
+         init_fan_monitoring();
       }
-      if (fan_file == NULL) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
-         LOG_ERROR("Unable to open fan file.");
-      } else {
-         rewind(fan_file);
-         if (fread(fanstr, 1, 5, fan_file) > 0) {
-            fan_rpm = atoi(fanstr);
-            fan_pct = ((float)fan_rpm / FAN_MAX_RPM) * 100.0;
-            if (fan_pct > 100) {
-               fan_pct = 100;
-            }
-            snprintf(render_text, MAX_TEXT_LENGTH, "%03d", (int)fan_pct);
-         } else {
-            LOG_WARNING("Opened but nothing read.");
-            snprintf(render_text, MAX_TEXT_LENGTH, "%03d", 0);
-         }
-      }
-      // TODO: Close this file somewhere.
-      //fclose(fan_file);
-      //  fan_file = NULL;
+
+      // Get fan percentage and format text
+      int fan_percent = get_fan_percentage();
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03d", fan_percent);
    } else if (strcmp("*LATLON*", curr_element->text) == 0) {
       if (this_gps->latitudeDegrees != 0.0) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f",
@@ -447,7 +488,7 @@ void render_text_element(element *curr_element) {
 
       curr_element->surface = TTF_RenderText_Blended(
          curr_element->ttf_font, render_text, curr_element->font_color);
-            
+
       if (curr_element->surface != NULL) {
          curr_element->dst_rect.w = curr_element->surface->w;
          curr_element->dst_rect.h = curr_element->surface->h;
@@ -483,19 +524,19 @@ void render_text_element(element *curr_element) {
          }
       }
    }
-    
+
    /* Set up render coordinates */
    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
    dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
    dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
-    
+
    /* Apply fixed/stereo offset */
    if (!curr_element->fixed) {
       dst_rect_l.x -= this_hds->stereo_offset;
       dst_rect_r.x += this_hds->stereo_offset;
    }
-    
+
    /* Render the text */
    if (curr_element->texture != NULL) {
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
@@ -1137,12 +1178,12 @@ void render_element_with_alpha(element *curr_element, float alpha) {
     Uint8 original_alpha_main = 255;
     if (curr_element->texture != NULL)
       SDL_GetTextureAlphaMod(curr_element->texture, &original_alpha_main);
-    
+
     /* Set new alpha value */
     if (curr_element->texture != NULL)
        SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
           render_element(curr_element);
-    
+
     /* Restore original alpha */
     SDL_SetTextureAlphaMod(curr_element->texture, original_alpha_main);
 }
