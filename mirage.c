@@ -2964,6 +2964,7 @@ int main(int argc, char **argv)
 
    cleanup_environmental_panel();
    cleanup_hud_manager();
+   cleanup_fan_monitoring();
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting on MQTT disconnect.");

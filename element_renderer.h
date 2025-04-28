@@ -49,8 +49,7 @@ void render_element_with_scale(element *curr_element, float scale, float alpha);
 /* Main HUD rendering function */
 void render_hud_elements(void);
 
-/* Initialize and cleanup rendering system */
-void init_element_renderer(SDL_Renderer *renderer);
-void cleanup_element_renderer(void);
+/* Extra Cleanups */
+void cleanup_fan_monitoring(void);
 
 #endif /* ELEMENT_RENDERER_H */
