@@ -115,6 +115,8 @@
 #include "logging.h"
 #include "mirage.h"
 #include "mosquitto_comms.h"
+#include "recording.h"
+#include "screenshot.h"
 #include "secrets.h"
 #include "utils.h"
 #include "version.h"
@@ -127,16 +129,10 @@ struct timespec ts_cap[2];          /* Store the display latency. */
 int video_posted = 0;               /* Notify that the new video frames are ready. */
 int buffer_num = 0;                 /* Video is double buffered. This swaps between them. */
 
-static char record_path[PATH_MAX];  /* Where do we store recordings? */
-
 static int window_width = 0;
 static int window_height = 0;
 static pthread_mutex_t windowSizeMutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Video Buffers */
-video_out_data this_vod;
-
-pthread_t vid_out_thread = 0;                /* Video output thread ID */
 pthread_t od_L_thread = 0, od_R_thread = 0;  /* Object detection thread IDs */
 static int single_cam = 0;                   /* Single Camera Mode Enable */
 static int cam1_id = -1, cam2_id = -1;       /* Camera IDs for CSI or USB */
@@ -365,180 +361,11 @@ int checkShutdown(void)
    return quit;
 }
 
-// Declaration
-typedef enum {
-   SCREENSHOT_MANUAL = 0,
-   SCREENSHOT_MQTT
-} screenshot_t;
-
-int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
-                                const SDL_Rect *rect,
-                                Uint32 format,
-                                void *pixels,
-                                int pitch);
 void mqttViewingSnapshot(const char *filename);
-int request_screenshot(int with_overlay, int full_resolution,
-                       const char *output_filename, screenshot_t source);
-
-/**
- * Takes a screenshot with specified options for overlay and resolution.
- *
- * @param with_overlay If true, captures the screen with UI overlay. If false, captures raw camera feed.
- * @param full_resolution If true, maintains original resolution. If false, scales to SNAPSHOT_WIDTH/HEIGHT.
- * @param output_filename Optional custom filename. If NULL, generates a timestamped filename.
- * @return 0 on success, non-zero on failure
- */
-int take_screenshot(int with_overlay, int full_resolution, const char *output_filename) {
-   hud_display_settings *this_hds = get_hud_display_settings();
-   SDL_Renderer *renderer = get_sdl_renderer();
-   time_t r_time;
-   struct tm *l_time = NULL;
-   char datetime[16];
-   char filename[PATH_MAX+31];
-   int result = 0;
-
-   // Generate timestamp for the filename if needed
-   if (output_filename == NULL) {
-      time(&r_time);
-      l_time = localtime(&r_time);
-      strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
-
-      // Generate filename with timestamp
-      snprintf(filename, sizeof(filename), "%s/screenshot-%s.jpg", record_path, datetime);
-   } else {
-      strncpy(filename, output_filename, PATH_MAX+31-1);
-      filename[PATH_MAX+31-1] = '\0';
-   }
-
-   LOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d",
-            filename, with_overlay, full_resolution);
-
-   if (with_overlay) {
-      // With overlay - capture what's currently on screen
-      void *screenshot_buffer =
-          malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
-      if (screenshot_buffer == NULL) {
-         LOG_ERROR("Unable to allocate memory for screenshot buffer");
-         return FAILURE;
-      }
-
-      // Use the PBO-based async read instead of synchronized SDL function
-      result = OpenGL_RenderReadPixelsAsync(
-         renderer,
-         NULL,
-         PIXEL_FORMAT_OUT,
-         screenshot_buffer,
-         this_hds->eye_output_width * 2 * RGB_OUT_SIZE
-      );
-      if (result != 0) {
-         LOG_ERROR("Failed to read pixels: %d", result);
-         free(screenshot_buffer);
-         return FAILURE;
-      }
-
-      // Calculate dimensions based on resolution preference
-      int new_width, new_height;
-      if (full_resolution) {
-         new_width = this_hds->eye_output_width;
-         new_height = this_hds->eye_output_height;
-      } else {
-         new_width = SNAPSHOT_WIDTH;
-         new_height = SNAPSHOT_HEIGHT;
-      }
-
-      // Process and save the image
-      ImageProcessParams params = {
-         .rgba_buffer = (unsigned char *)screenshot_buffer,
-         .orig_width = this_hds->eye_output_width * 2,
-         .orig_height = this_hds->eye_output_height,
-         .filename = filename,
-         .left_crop = 0,
-         .top_crop = 0,
-         .right_crop = this_hds->eye_output_width, // Capture just the left eye
-         .bottom_crop = 0,
-         .new_width = new_width,
-         .new_height = new_height,
-         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY // Higher quality for full-res
-      };
-
-      result = process_and_save_image(&params);
-      free(screenshot_buffer);
-
-   } else {
-      // Without overlay - capture raw camera feed
-      // Use a mutex lock before accessing shared buffers
-      pthread_mutex_lock(&v_mutex);
-
-      void *snapshot_pixel = mapL[buffer_num].data;
-
-      // Calculate dimensions based on resolution preference
-      int new_width, new_height;
-      if (full_resolution) {
-         new_width = this_hds->cam_input_width - (2 * this_hds->cam_crop_x);
-         new_height = this_hds->cam_input_height;
-      } else {
-         new_width = SNAPSHOT_WIDTH;
-         new_height = SNAPSHOT_HEIGHT;
-      }
-
-      ImageProcessParams params = {
-         .rgba_buffer = (unsigned char *)snapshot_pixel,
-         .orig_width = this_hds->cam_input_width,
-         .orig_height = this_hds->cam_input_height,
-         .filename = filename,
-         .left_crop = this_hds->cam_crop_x,
-         .top_crop = 0,
-         .right_crop = this_hds->cam_crop_x,
-         .bottom_crop = 0,
-         .new_width = new_width,
-         .new_height = new_height,
-         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY // Higher quality for full-res
-      };
-
-      result = process_and_save_image(&params);
-
-      pthread_mutex_unlock(&v_mutex);
-   }
-
-   if (result != 0) {
-      LOG_ERROR("Image processing failed with error code: %d", result);
-      return 3;
-   } else {
-      LOG_INFO("Screenshot saved to: %s", filename);
-      return 0;
-   }
-}
 
 void process_ai_state(const char *newAIName, const char *newAIState) {
    snprintf(aiName, AI_NAME_MAX_LENGTH, "%s", newAIName);
    snprintf(aiState, AI_STATE_MAX_LENGTH, "%s", newAIState);
-}
-
-void set_recording_state(DestinationType state)
-{
-   char announce[35] = "";
-
-   switch (state) {
-      case DISABLED:
-         snprintf(announce, sizeof(announce), "Stopping recording and streaming.");
-         break;
-      case RECORD:
-         snprintf(announce, sizeof(announce), "Starting recording.");
-         break;
-      case STREAM:
-         snprintf(announce, sizeof(announce), "Starting streaming.");
-         break;
-      case RECORD_STREAM:
-         snprintf(announce, sizeof(announce), "Starting recording and streaming.");
-         break;
-      default:
-         snprintf(announce, sizeof(announce), "Unknown recording state requested.");
-         break;
-   }
-
-   mqttTextToSpeech(announce);
-
-   this_vod.output = state;
 }
 
 /* Free the UI element list. */
@@ -749,6 +576,9 @@ int play_intro(int frames, int clear, int *finished)
    int frame_count = 0;
 
    hud_display_settings *this_hds = get_hud_display_settings();
+   video_out_data *this_vod = get_video_out_data();
+
+   pthread_t vid_out_thread = get_video_out_thread();
 
 #ifdef ENCODE_TIMING
    int cur_time = 0, max_time = 0, min_time = 0, weight = 0;
@@ -798,14 +628,14 @@ int play_intro(int frames, int clear, int *finished)
 
       SDL_RenderPresent(renderer);
 
-      if (this_vod.output) {
+      if (get_recording_state()) {
 #ifdef ENCODE_TIMING
          Uint32 start = 0, stop = 0;
 #endif
 
-         this_vod.rgb_out_pixels[!this_vod.buffer_num] =
+         this_vod->rgb_out_pixels[!this_vod->buffer_num] =
              malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
-         if (this_vod.rgb_out_pixels[!this_vod.buffer_num] == NULL) {
+         if (this_vod->rgb_out_pixels[!this_vod->buffer_num] == NULL) {
             LOG_ERROR("Unable to malloc rgb frame 0.");
             return 2;
          }
@@ -813,7 +643,7 @@ int play_intro(int frames, int clear, int *finished)
          start = SDL_GetTicks();
 #endif
          if (SDL_RenderReadPixels(renderer, NULL, PIXEL_FORMAT_OUT,
-                                  this_vod.rgb_out_pixels[!this_vod.buffer_num],
+                                  this_vod->rgb_out_pixels[!this_vod->buffer_num],
                                   this_hds->eye_output_width * 2 * RGB_OUT_SIZE) != 0) {
             LOG_ERROR("SDL_RenderReadPixels() failed: %s", SDL_GetError());
 #ifdef ENCODE_TIMING
@@ -831,17 +661,17 @@ int play_intro(int frames, int clear, int *finished)
 #endif
          }
 
-         pthread_mutex_lock(&this_vod.p_mutex);
-         if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
-            free(this_vod.rgb_out_pixels[this_vod.buffer_num]);
+         pthread_mutex_lock(&this_vod->p_mutex);
+         if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
+            free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
          }
-         this_vod.buffer_num = !this_vod.buffer_num;
-         pthread_mutex_unlock(&this_vod.p_mutex);
+         this_vod->buffer_num = !this_vod->buffer_num;
+         pthread_mutex_unlock(&this_vod->p_mutex);
 
          if (vid_out_thread == 0) {
             if (pthread_create(&vid_out_thread, NULL, video_next_thread, NULL) != 0) {
                LOG_ERROR("Error creating video output thread.");
-               this_vod.output = 0;
+               set_recording_state(DISABLED);
             }
          }
       }
@@ -1101,207 +931,6 @@ void *video_processing_thread(void *arg)
    return NULL;
 }
 
-static int feed_me = 0;             /* Control the feeding of the encoding thread. */
-
-/* This signal callback triggers when appsrc needs data. Here, we add an idle handler
- * to the mainloop to start pushing data into the appsrc */
-static void start_feed (GstElement *source, guint size, void *data) {
-   feed_me = 1;
-}
-
-/* This callback triggers when appsrc has enough data and we can stop sending.
- * We remove the idle handler from the mainloop */
-static void stop_feed (GstElement *source, void *data) {
-   feed_me = 0;
-}
-
-/* pthread function to control video output handling from pipeline to buffers. */
-void *video_next_thread(void *arg)
-{
-   time_t r_time;
-   struct tm *l_time = NULL;
-   char datetime[16];
-
-   gchar descr[GSTREAMER_PIPELINE_LENGTH];
-   GstElement *pipeline = NULL, *srcEncode = NULL;
-   GError *error = NULL;
-
-   GstFlowReturn ret = -1;
-   GstBuffer *buffer = NULL;
-   GstCaps *caps = NULL;
-
-   /* A couple of the variables below were being optimized out even though they were setting
-    * used parameters. This "volatile" trick to prevent them from being optimized out is a new
-    * one for me but it works. */
-   GstClock *pipeline_clock = NULL;
-   volatile GstClockTime running_time;
-   volatile GstClockTime base_time;
-   volatile guint64 count = 0;
-   volatile GstClockTime current_time;
-
-   struct timespec start_time, end_time;
-   long processing_time_us = 0L, delay_time_us = 0L;
-
-   int local_window_width = 0, local_window_height = 0;
-
-   GstBus *bus = NULL;
-
-   stream_settings *this_ss = get_stream_settings();
-
-   pthread_mutex_lock(&windowSizeMutex);
-   local_window_width = window_width;
-   local_window_height = window_height;
-   pthread_mutex_unlock(&windowSizeMutex);
-
-   /* We date code our recordings. */
-   time(&r_time);
-   l_time = localtime(&r_time);
-   strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
-
-#ifdef MKV_OUT
-   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mkv", record_path, datetime);
-#else
-   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mp4", record_path, datetime);
-#endif
-
-   if (this_vod.output == RECORD_STREAM) {
-      LOG_INFO("New recording: %s", this_vod.filename);
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE, local_window_width, local_window_height,
-                 TARGET_RECORDING_FPS, this_vod.filename,
-                 this_ss->stream_width, this_ss->stream_height, this_ss->stream_dest_ip);
-   } else if (this_vod.output == RECORD) {
-      LOG_INFO("New recording: %s", this_vod.filename);
-#ifdef RECORD_AUDIO
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, local_window_width, local_window_height,
-                 TARGET_RECORDING_FPS, RECORD_PULSE_AUDIO_DEVICE, this_vod.filename);
-#else
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, local_window_width, local_window_height,
-                 TARGET_RECORDING_FPS, this_vod.filename);
-#endif
-      LOG_INFO("desc: %s", descr);
-   } else if (this_vod.output == STREAM) {
-#ifdef RECORD_AUDIO
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
-                 local_window_width, local_window_height, TARGET_RECORDING_FPS,
-                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE,
-                 YOUTUBE_STREAM_KEY);
-#else
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
-                 local_window_width, local_window_height, TARGET_RECORDING_FPS,
-                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 YOUTUBE_STREAM_KEY);
-#endif
-   } else {
-      LOG_ERROR("Invalid destination passed.");
-      return NULL;
-   }
-
-   pipeline = gst_parse_launch(descr, &error);
-   if (error != NULL) {
-      SDL_Log("could not construct pipeline \"%s\": %s\n", descr, error->message);
-      g_error_free(error);
-      this_vod.output = 0;
-      return NULL;
-   }
-
-   bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
-
-   /* get sink */
-   srcEncode = gst_bin_get_by_name(GST_BIN(pipeline), "srcEncode");
-
-   g_signal_connect (srcEncode, "need-data", G_CALLBACK (start_feed), NULL);
-   g_signal_connect (srcEncode, "enough-data", G_CALLBACK (stop_feed), NULL);
-
-   /* set the caps on the source */
-   caps = gst_caps_new_simple ("video/x-raw",
-      "bpp", G_TYPE_INT, 32,
-      "depth", G_TYPE_INT, 32,
-      "width", G_TYPE_INT, local_window_width,
-      "height", G_TYPE_INT, local_window_height,
-      NULL);
-   gst_app_src_set_caps(GST_APP_SRC(srcEncode), caps);
-   gst_caps_unref(caps);
-
-   g_object_set(G_OBJECT(srcEncode),
-             "is-live", TRUE,
-             NULL);
-
-   gst_element_set_state(pipeline, GST_STATE_PLAYING);
-   this_vod.started = 1;
-
-   pipeline_clock = gst_element_get_clock(pipeline);
-   if (pipeline_clock == NULL) {
-      SDL_Log("Error getting pipeline clock. This output cannot be recorded.\n");
-      this_vod.output = 0;
-   }
-
-   base_time = gst_element_get_base_time(pipeline);
-
-   while (this_vod.output) {
-      if (feed_me) {
-         pthread_mutex_lock(&this_vod.p_mutex);
-
-         clock_gettime(CLOCK_MONOTONIC, &start_time);
-
-         if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
-            buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.buffer_num],
-                                            local_window_width * RGB_OUT_SIZE * local_window_height);
-            if (buffer == NULL) {
-               LOG_ERROR("Failure to allocate new buffer for encoding.");
-               break;
-            }
-            current_time = gst_clock_get_time(pipeline_clock);
-            running_time = current_time - base_time;
-
-            GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND, 30);
-            GST_BUFFER_OFFSET(buffer)   = count++;
-            GST_BUFFER_PTS(buffer)      = running_time;
-            GST_BUFFER_DTS(buffer)      = GST_CLOCK_TIME_NONE;
-
-            /* get the preroll buffer from appsink */
-            ret = gst_app_src_push_buffer(GST_APP_SRC(srcEncode), buffer);
-
-            this_vod.rgb_out_pixels[this_vod.buffer_num] = NULL;
-
-            if (ret != GST_FLOW_OK) {
-               LOG_ERROR("GST_FLOW error while pushing buffer: %d", ret);
-               break;
-            }
-         }
-         clock_gettime(CLOCK_MONOTONIC, &end_time);
-
-         pthread_mutex_unlock(&this_vod.p_mutex);
-      }
-      // Calculate processing time in microseconds
-      processing_time_us = (end_time.tv_sec - start_time.tv_sec) * 1000000L + (end_time.tv_nsec - start_time.tv_nsec) / 1000L;
-
-      // Calculate how long to delay to maintain the target frame rate
-      delay_time_us = TARGET_RECORDING_FRAME_DURATION_US - processing_time_us;
-
-      // Apply the calculated delay, if positive
-      if (delay_time_us > 0) {
-         usleep(delay_time_us);
-      }
-   }
-   if (pipeline_clock != NULL) {
-      gst_object_unref(pipeline_clock);
-   }
-
-   /* Video */
-   this_vod.started = 0;
-   g_signal_emit_by_name(srcEncode, "end-of-stream", &ret);
-   gst_element_set_state((GstElement *) pipeline, GST_STATE_NULL);
-
-   //gst_bus_poll(bus, GST_MESSAGE_EOS, GST_CLOCK_TIME_NONE);
-   gst_object_unref (bus);
-   gst_object_unref(pipeline);
-
-   vid_out_thread = 0;
-
-   return NULL;
-}
-
 /* Search the font list to see if this font has already been created.
  * If so, return it.
  * If not, create it and return it.
@@ -1541,41 +1170,6 @@ void mqttTextToSpeech(const char *text) {
 }
 
 /**
- * Notifies the "dawn" process that a "viewing" command has completed, providing a snapshot
- * filename for processing.
- *
- * Constructs and publishes a JSON-formatted message to the MQTT topic "dawn". This message
- * indicates that a viewing command has been executed and includes the filename of the snapshot
- * generated as a result. The function checks for an initialized MQTT client (`mosq`) before
- * attempting to publish and reports errors if publishing fails.
- *
- * @param filename The filename of the snapshot generated by the viewing command.
- *
- * Note:
- * - Ensure that the MQTT client (`mosq`) is initialized and connected before calling this function.
- * - Failure to publish the message will result in an error printed to stderr with the failure reason.
- */
-void mqttViewingSnapshot(const char *filename) {
-   char mqtt_command[1024] = "";
-   int rc = 0;
-
-   // Construct the MQTT command with the snapshot filename
-   snprintf(mqtt_command, sizeof(mqtt_command),
-      "{ \"device\": \"viewing\", \"action\": \"completed\", \"value\": \"%s\" }",
-      filename);
-
-   if (mosq == NULL) {
-      LOG_ERROR("MQTT not initialized.");
-   } else {
-      LOG_INFO("Sending to \"dawn\" via MQTT: %s", mqtt_command);
-      rc = mosquitto_publish(mosq, NULL, "dawn", strlen(mqtt_command), mqtt_command, 0, false);
-      if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
-      }
-   }
-}
-
-/**
  * @brief Computes the scaled window size while maintaining the original aspect ratio.
  *
  * This function calculates the appropriate window width and height based on the current desktop
@@ -1651,361 +1245,6 @@ int computeScaledWindowSize(int desktop_width, int desktop_height,
    return 0; // Success
 }
 
-/**
- * @brief Asynchronously reads pixels with optimized buffer fallback
- *
- * Uses a buffer index tracking approach instead of copying frames,
- * allowing zero-copy fallback to the last successfully mapped frame.
- */
-
-// Global variables for PBO system
-static GLuint g_pboIds[2] = {0, 0};
-static int g_pboIndex = 0;
-static bool g_pboInitialized = false;
-
-// Added tracking for last successful mapping
-static int g_lastSuccessfulPboIndex = -1;
-static bool g_hasValidLastFrame = false;
-
-// Screenshot request handling
-static pthread_mutex_t g_screenshot_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int g_screenshot_requested = 0;
-static char g_screenshot_path[PATH_MAX+29] = "";
-static int g_screenshot_with_overlay = 0;
-
-static screenshot_t  g_screenshot_source = SCREENSHOT_MANUAL;
-
-/**
- * Initializes the PBO system
- */
-void init_pbo_system(void) {
-    if (g_pboInitialized) {
-        glDeleteBuffers(2, g_pboIds);
-    }
-
-    glGenBuffers(2, g_pboIds);
-    g_pboInitialized = true;
-    g_lastSuccessfulPboIndex = -1;
-    g_hasValidLastFrame = false;
-
-    LOG_INFO("PBO system initialized with buffer tracking.");
-}
-
-/**
- * Cleans up the PBO system
- */
-void cleanup_pbo_system(void) {
-    if (g_pboInitialized) {
-        glDeleteBuffers(2, g_pboIds);
-        g_pboInitialized = false;
-    }
-    g_lastSuccessfulPboIndex = -1;
-    g_hasValidLastFrame = false;
-}
-
-/**
- * Requests a screenshot to be taken by the main thread
- * This function is thread-safe and can be called from any thread
- *
- * @param with_overlay Whether to include UI overlay
- * @param full_resolution Whether to maintain full resolution
- * @param output_filename Path to save the screenshot (or NULL for auto-generated)
- * @param source The source of the screenshot,  SCREENSHOT_MANUAL, SCREENSHOT_MQTT
- * @return 0 if request was queued successfully, non-zero otherwise
- */
-int request_screenshot(int with_overlay, int full_resolution,
-                       const char *output_filename, screenshot_t source) {
-    int result = SUCCESS;
-
-    pthread_mutex_lock(&g_screenshot_mutex);
-
-    g_screenshot_source = source;
-
-    // If there's already a pending request, don't overwrite it
-    if (g_screenshot_requested) {
-        LOG_WARNING("Screenshot already requested, ignoring new request");
-        result = FAILURE;
-    } else {
-        // Set the request flag
-        g_screenshot_requested = 1;
-        g_screenshot_with_overlay = with_overlay;
-
-        // Store the full resolution flag as bit 1 in the request flag
-        if (full_resolution) {
-            g_screenshot_requested |= 2;
-        }
-
-        // Store the filename if provided
-        if (output_filename != NULL) {
-            strncpy(g_screenshot_path, output_filename, sizeof(g_screenshot_path) - 1);
-            g_screenshot_path[sizeof(g_screenshot_path) - 1] = '\0';
-        } else {
-            g_screenshot_path[0] = '\0';  // Empty string indicates auto-generated filename
-        }
-
-        LOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s",
-                with_overlay, full_resolution,
-                output_filename ? output_filename : "auto-generated");
-    }
-
-    pthread_mutex_unlock(&g_screenshot_mutex);
-
-    return result;
-}
-
-/**
- * @brief Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer
- *        with fallback to the last successfully mapped buffer if the current mapping fails.
- *
- * @param[in] renderer  Pointer to the SDL_Renderer (must be using an OpenGL backend).
- * @param[in] rect      Optional rectangle specifying the area to read. If NULL, the entire
- *                      render output is read.
- * @param[in] format    SDL pixel format (currently not deeply used; assumes RGBA).
- * @param[out] pixels   Pointer to the user-allocated buffer where pixels will be copied.
- * @param[in] pitch     Byte pitch (row stride) of the user buffer, typically (width * 4).
- *
- * @return int  Returns 0 on success, 1 on failure.
- */
-int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
-                                const SDL_Rect *rect,
-                                Uint32 format,
-                                void *pixels,
-                                int pitch)
-{
-   // Basic parameter checks
-   if (!renderer || !pixels) {
-      LOG_ERROR("Invalid arguments: renderer=%p, pixels=%p",
-                (void*)renderer, (void*)pixels);
-      return 1;
-   }
-
-   // Grab current GL context from SDL (assumes we've made it current).
-   SDL_GLContext currentContext = SDL_GL_GetCurrentContext();
-   if (!currentContext) {
-      LOG_ERROR("No current GL context found.");
-      return 1;
-   }
-
-   // Determine the rectangle to read
-   int readX = 0, readY = 0, readW = 0, readH = 0;
-   if (rect) {
-      readX = rect->x;
-      readY = rect->y;
-      readW = rect->w;
-      readH = rect->h;
-   } else {
-      // If rect is NULL, read the entire render target
-      SDL_GetRendererOutputSize(renderer, &readW, &readH);
-   }
-
-   // Lazy-init the PBOs if needed
-   if (!g_pboInitialized) {
-      init_pbo_system();
-   }
-
-   // Calculate the data size (assuming RGBA 8-bit).
-   const int bytesPerPixel = 4;  // RGBA
-   const GLsizeiptr dataSize = (GLsizeiptr)(readW * readH * bytesPerPixel);
-
-   // Bind the "current" PBO for asynchronous readback
-   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_pboIndex]);
-   glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
-
-   // Kick off the async read from the current framebuffer
-   glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-
-   // Now bind the "previous" PBO and try to map it to system memory
-   int prevIndex = (g_pboIndex + 1) % 2;
-   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[prevIndex]);
-
-   // Add retry logic for buffer mapping
-   GLubyte* mappedBuffer = NULL;
-   int retryCount = 0;
-   const int MAX_RETRIES = 3;
-   bool usedFallbackBuffer = false;
-
-   while (retryCount < MAX_RETRIES) {
-      // Try to map the buffer
-      mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                                0,
-                                                dataSize,
-                                                GL_MAP_READ_BIT);
-
-      if (mappedBuffer) {
-         // Success! Break out of the retry loop
-         break;
-      } else {
-         // Mapping failed - log and retry after a brief delay
-         if (retryCount < MAX_RETRIES - 1) {
-            LOG_WARNING("Buffer mapping failed, retrying (%d/%d)...",
-                        retryCount + 1, MAX_RETRIES);
-
-            // Introduce a small delay to allow GPU to finish
-            SDL_Delay(5);  // 5ms delay should be brief enough not to impact interactivity
-         } else {
-            LOG_WARNING("Buffer mapping failed after %d retries.", MAX_RETRIES);
-         }
-         retryCount++;
-      }
-   }
-
-   // If mapping still failed after retries, check if we have a last known good buffer
-   if (!mappedBuffer) {
-      if (g_hasValidLastFrame && g_lastSuccessfulPboIndex >= 0) {
-         // We have a previously mapped buffer - switch to it
-         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);  // Unmap current buffer
-         glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_lastSuccessfulPboIndex]);
-
-         // Try to map the last known good buffer
-         mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                                  0,
-                                                  dataSize,
-                                                  GL_MAP_READ_BIT);
-
-         if (mappedBuffer) {
-            LOG_INFO("Using last successful buffer from index %d", g_lastSuccessfulPboIndex);
-            usedFallbackBuffer = true;
-         } else {
-            LOG_WARNING("Failed to map last known good buffer. Screenshot may be incomplete.");
-         }
-      } else {
-         // No usable previously mapped buffer
-         LOG_WARNING("No previous good buffer available. Screenshot may be incomplete.");
-      }
-   }
-
-   if (mappedBuffer) {
-      // Copy the pixel data into the user-provided buffer
-      for (int y = 0; y < readH; ++y) {
-         int flippedY = (readH - 1) - y; // Invert the row index
-         GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
-         GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
-         memcpy(dstRow, srcRow, readW * bytesPerPixel);
-      }
-
-      // Unmap buffer
-      glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-
-      // If this was a successful current frame mapping (not a fallback),
-      // update our tracking of last successful buffer
-      if (!usedFallbackBuffer) {
-         g_lastSuccessfulPboIndex = prevIndex;
-         g_hasValidLastFrame = true;
-      }
-   }
-
-   // Unbind the PBO
-   glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
-   // Flip the index so next call reads the other buffer
-   g_pboIndex = prevIndex;
-
-   // Return success if we got data
-   return (mappedBuffer != NULL) ? 0 : 1;
-}
-
-/**
- * Takes a snapshot for AI processing and saves it to disk.
- * This function queues the request to be processed by the main thread.
- *
- * @param datetime String containing the datetime for the snapshot filename (optional)
- *                 If NULL, a current timestamp will be generated
- */
-void trigger_snapshot(const char *datetime) {
-    hud_display_settings *this_hds = get_hud_display_settings();
-    char snapshot_path[PATH_MAX+29];
-
-    // Generate fresh timestamp if none was provided
-    char fresh_datetime[16];
-    if (datetime == NULL || datetime[0] == '\0') {
-        time_t r_time;
-        struct tm *l_time = NULL;
-
-        time(&r_time);
-        l_time = localtime(&r_time);
-        strftime(fresh_datetime, sizeof(fresh_datetime), "%Y%m%d_%H%M%S", l_time);
-        datetime = fresh_datetime;
-    }
-
-    // Format the filename with the timestamp
-    snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot-%s.jpg",
-            record_path, datetime);
-
-    // Queue the screenshot request based on configuration
-    request_screenshot(this_hds->snapshot_overlay, 0, snapshot_path, SCREENSHOT_MQTT);
-}
-
-/* Modify process_screenshot_requests() to ensure uniqueness */
-void process_screenshot_requests(void) {
-    pthread_mutex_lock(&g_screenshot_mutex);
-
-    if (g_screenshot_requested) {
-        int with_overlay = g_screenshot_with_overlay;
-        int full_resolution = (g_screenshot_requested & 2) ? 1 : 0;
-        screenshot_t source = g_screenshot_source;
-        char output_path[PATH_MAX+31];
-
-        // Copy the path to a local variable
-        if (g_screenshot_path[0] != '\0') {
-            strncpy(output_path, g_screenshot_path, sizeof(output_path) - 1);
-            output_path[sizeof(output_path) - 1] = '\0';
-
-            // For MQTT requests, ensure the timestamp is current by updating
-            // the filename if it starts with "snapshot-"
-            if (source == SCREENSHOT_MQTT && strstr(output_path, "/snapshot-") != NULL) {
-                char *base_path = strdup(output_path);
-                char *timestamp_part = strstr(base_path, "/snapshot-");
-                if (timestamp_part) {
-                    *timestamp_part = '\0'; // Truncate at /snapshot-
-
-                    // Generate a fresh timestamp
-                    time_t r_time;
-                    struct tm *l_time = NULL;
-                    char datetime[16];
-
-                    time(&r_time);
-                    l_time = localtime(&r_time);
-                    strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
-
-                    // Recreate filename with fresh timestamp
-                    snprintf(output_path, sizeof(output_path), "%s/snapshot-%s.jpg",
-                            base_path, datetime);
-                }
-                free(base_path);
-            }
-        } else {
-            // Generate a filename with timestamp
-            time_t r_time;
-            struct tm *l_time = NULL;
-            char datetime[16];
-
-            time(&r_time);
-            l_time = localtime(&r_time);
-            strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
-
-            snprintf(output_path, sizeof(output_path), "%s/screenshot-%s.jpg",
-                    record_path, datetime);
-        }
-
-        // Clear the request flag before taking the screenshot
-        g_screenshot_requested = 0;
-        g_screenshot_path[0] = '\0';
-        g_screenshot_source = SCREENSHOT_MANUAL;
-
-        pthread_mutex_unlock(&g_screenshot_mutex);
-
-        // Now take the screenshot from the main thread where OpenGL context is valid
-        int result = take_screenshot(with_overlay, full_resolution, output_path);
-
-        // Send notification if it was an MQTT request
-        if (source == SCREENSHOT_MQTT && result == 0) {
-            mqttViewingSnapshot(output_path);
-        }
-    } else {
-        pthread_mutex_unlock(&g_screenshot_mutex);
-    }
-}
-
 void display_help(int argc, char *argv[]) {
    if (argc > 0) {
       printf("Usage: %s [options]\n", argv[0]);
@@ -2055,6 +1294,7 @@ int main(int argc, char **argv)
    /* getopt */
    int opt = 0;
    int fullscreen = 0;
+   char record_path[PATH_MAX];  /* Where do we store recordings? */
 
    /* Threads */
    pthread_t thread_handles[NUM_AUDIO_THREADS];
@@ -2078,15 +1318,7 @@ int main(int argc, char **argv)
    struct timespec display_time = { .tv_sec = 0, .tv_nsec = 0};
 #endif
 
-   this_vod.outfile = NULL;
-   this_vod.rgb_out_pixels[0] = NULL;
-   this_vod.rgb_out_pixels[1] = NULL;
-   pthread_mutex_init(&this_vod.p_mutex, NULL);
-   this_vod.buffer_num = 0;
-   this_vod.output = 0;
-   this_vod.filename[0] = '\0';
-   this_vod.started = 0;
-   vid_out_thread = 0;
+   init_video_out_data();
 
    local_font *this_font = NULL;
 
@@ -2256,18 +1488,18 @@ int main(int argc, char **argv)
          snprintf(record_path, 256, "%s", optarg);
          break;
       case 'r':
-         if (!this_vod.output) {
-            this_vod.output = RECORD;
+         if (get_recording_state() == DISABLED) {
+            set_recording_state(RECORD);
          }
          break;
       case 's':
-         if (!this_vod.output) {
-            this_vod.output = STREAM;
+         if (get_recording_state() == DISABLED) {
+            set_recording_state(STREAM);
          }
          break;
       case 't':
-         if (!this_vod.output) {
-            this_vod.output = RECORD_STREAM;
+         if (get_recording_state() == DISABLED) {
+            set_recording_state(RECORD_STREAM);
          }
          break;
       case 'u':
@@ -2404,6 +1636,9 @@ int main(int argc, char **argv)
    }
 
    init_pbo_system();
+   set_screenshot_recording_path(record_path);
+   set_video_recording_path(record_path);
+   init_video_out_data();
 
 #ifdef REFRESH_SYNC
    if ((renderer =
@@ -2618,7 +1853,7 @@ int main(int argc, char **argv)
             /* Process special keys. */
             switch (event.key.keysym.sym) {
             case SDLK_f:
-               if (this_vod.output) {
+               if (get_recording_state() != DISABLED) {
                   LOG_WARNING("Unable to change window size while recording.");
                } else {
                   if (fullscreen) {
@@ -2645,36 +1880,36 @@ int main(int argc, char **argv)
                break;
 
             case SDLK_r:
-               if (!this_vod.output) {
-                  this_vod.output = RECORD;
+               if (get_recording_state() == DISABLED) {
+                  set_recording_state(RECORD);
                   last_file_check = currTime;
                   LOG_INFO("Starting recording.");
                } else {
-                  this_vod.output = 0;
+                  set_recording_state(DISABLED);
                   last_size = last_last_size = -1;
                   LOG_INFO("Stopping recording.");
                }
                break;
 
             case SDLK_s:
-               if (!this_vod.output) {
-                  this_vod.output = STREAM;
+               if (get_recording_state() == DISABLED) {
+                  set_recording_state(STREAM);
                   last_file_check = currTime;
                   LOG_INFO("Starting streaming.");
                } else {
-                  this_vod.output = 0;
+                  set_recording_state(DISABLED);
                   last_size = last_last_size = -1;
                   LOG_INFO("Stopping streaming.");
                }
                break;
 
             case SDLK_t:
-               if (!this_vod.output) {
-                  this_vod.output = RECORD_STREAM;
+               if (get_recording_state() == DISABLED) {
+                  set_recording_state(RECORD_STREAM);
                   last_file_check = currTime;
                   LOG_INFO("Starting recording and streaming.");
                } else {
-                  this_vod.output = 0;
+                  set_recording_state(DISABLED);
                   last_size = last_last_size = -1;
                   LOG_INFO("Stopping recording and streaming.");
                }
@@ -2832,7 +2067,7 @@ int main(int argc, char **argv)
          LOG_INFO("ts_total: %lu ms, ts_count: %u", ts_total, ts_count);
 #endif
 
-         if (this_vod.output) {
+         if (get_recording_state() != DISABLED) {
 #ifdef ENCODE_TIMING
             Uint32 start = 0, stop = 0;
 #endif
@@ -2842,13 +2077,14 @@ int main(int argc, char **argv)
             pthread_mutex_unlock(&windowSizeMutex);
 
             /* Is recording working? */
-            if (((this_vod.output == RECORD) || (this_vod.output == RECORD_STREAM)) && 
-                this_vod.started && ((currTime - last_file_check) > 5000)) {
+            video_out_data *this_vod = get_video_out_data();
+            if (((get_recording_state() == RECORD) || (get_recording_state() == RECORD_STREAM)) && 
+               this_vod->started && ((currTime - last_file_check) > 5000)) {
                last_last_size = last_size;
-               if (has_file_grown(this_vod.filename, &last_last_size)) {
+               if (has_file_grown(this_vod->filename, &last_last_size)) {
                   if (!(active_alerts & ALERT_RECORDING)) {
                      LOG_ERROR("ERROR: %s: File size is not increasing. %ld ? %ld",
-                            this_vod.filename, last_last_size, last_size);
+                            this_vod->filename, last_last_size, last_size);
                      active_alerts |= ALERT_RECORDING;
                      mqttTextToSpeech("There is potentially and error with recording.");
                   }
@@ -2859,9 +2095,9 @@ int main(int argc, char **argv)
                last_file_check = currTime;
             }
 
-            this_vod.rgb_out_pixels[!this_vod.buffer_num] =
+            this_vod->rgb_out_pixels[!this_vod->buffer_num] =
                 malloc(local_window_width * RGB_OUT_SIZE * local_window_height);
-            if (this_vod.rgb_out_pixels[!this_vod.buffer_num] == NULL) {
+            if (this_vod->rgb_out_pixels[!this_vod->buffer_num] == NULL) {
                LOG_ERROR("Unable to malloc rgb frame 0.");
                return (2);
             }
@@ -2871,7 +2107,7 @@ int main(int argc, char **argv)
 #endif
 
             if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
-                                     this_vod.rgb_out_pixels[!this_vod.buffer_num],
+                                     this_vod->rgb_out_pixels[!this_vod->buffer_num],
                                      local_window_width * RGB_OUT_SIZE) != 0 ) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed: %s", SDL_GetError());
 #ifdef ENCODE_TIMING
@@ -2889,17 +2125,20 @@ int main(int argc, char **argv)
 #endif
             }
 
-            pthread_mutex_lock(&this_vod.p_mutex);
-            if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
-               free(this_vod.rgb_out_pixels[this_vod.buffer_num]);
+            pthread_mutex_lock(&this_vod->p_mutex);
+            if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
+               free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
             }
-            this_vod.buffer_num = !this_vod.buffer_num;
-            pthread_mutex_unlock(&this_vod.p_mutex);
+            this_vod->buffer_num = !this_vod->buffer_num;
+            pthread_mutex_unlock(&this_vod->p_mutex);
 
-            if (vid_out_thread == 0) {
-               if (pthread_create(&vid_out_thread, NULL, video_next_thread, NULL) != 0) {
-                  LOG_ERROR("Error creating video encoding thread.");
-                  this_vod.output = 0;
+            if (get_video_out_thread() == 0) {
+               pthread_t thread_id;
+               if (pthread_create(&thread_id, NULL, video_next_thread, NULL) != 0) {
+                  LOG_ERROR("Error creating video output thread.");
+                  set_recording_state(DISABLED);
+               } else {
+                  set_video_out_thread(thread_id);
                }
             }
          } else {
@@ -2917,9 +2156,8 @@ int main(int argc, char **argv)
 
    mqttTextToSpeech("Your hud is shutting down.");
 
-   this_vod.output = 0;
-   this_vod.buffer_num = 0;
-   pthread_mutex_destroy(&this_vod.p_mutex);
+   set_recording_state(DISABLED);
+   cleanup_video_out_data();
    pthread_mutex_destroy(&v_mutex);
    pthread_mutex_destroy(&windowSizeMutex);
 
@@ -2989,15 +2227,20 @@ int main(int argc, char **argv)
       LOG_INFO("Done.");
 #endif
    }
+
+   pthread_t vid_out_thread = get_video_out_thread();
    if (vid_out_thread != 0) {
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Waiting on final video thread to stop.");
 #endif
       pthread_join(vid_out_thread, NULL);
+      reset_video_out_thread();
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Done.");
 #endif
    }
+
+   cleanup_video_out_data();
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Destroy primary textures.");

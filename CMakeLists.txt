@@ -76,6 +76,8 @@ set(SOURCE_FILES
     logging.c
     mirage.c
     mosquitto_comms.c
+    recording.c
+    screenshot.c
     utils.c)
 
 # Set C compiler and flags

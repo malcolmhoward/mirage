@@ -62,7 +62,7 @@ typedef struct _video_out_data {
    void *rgb_out_pixels[2];
 
    char filename[PATH_MAX+64];
-   int started;
+   int started;   /* Flag indicating whether the video output pipeline is active and ready. */
    FILE *outfile;
 } video_out_data;
 

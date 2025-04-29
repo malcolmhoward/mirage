@@ -45,6 +45,7 @@
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
+#include "recording.h"
 #include "secrets.h"
 
 /* Globals and external references */
@@ -53,7 +54,6 @@ extern char aiName[];
 extern char aiState[];
 
 // video elements
-extern video_out_data this_vod;
 extern od_data oddataL, oddataR;
 extern pthread_t od_L_thread, od_R_thread;
 
@@ -172,11 +172,11 @@ void render_static_element(element *curr_element) {
    }
 
    /* Select appropriate texture based on state */
-   if (this_vod.started && (this_vod.output == RECORD_STREAM) && curr_element->texture_rs) {
+   if (get_recording_started() && (get_recording_state() == RECORD_STREAM) && curr_element->texture_rs) {
       this_texture = curr_element->texture_rs;
-   } else if (this_vod.started && (this_vod.output == RECORD) && curr_element->texture_r) {
+   } else if (get_recording_started() && (get_recording_state() == RECORD) && curr_element->texture_r) {
       this_texture = curr_element->texture_r;
-   } else if (this_vod.started && (this_vod.output == STREAM) && curr_element->texture_s) {
+   } else if (get_recording_started() && (get_recording_state() == STREAM) && curr_element->texture_s) {
       this_texture = curr_element->texture_s;
    } else if (curr_element->texture_l && strcmp("SILENCE", aiState) == 0) {
       this_texture = curr_element->texture_l;
