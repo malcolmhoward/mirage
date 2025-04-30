@@ -19,14 +19,15 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
+#include <json-c/json.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <json-c/json.h>
 
 /* Serial Port */
 #include <sys/ioctl.h>
@@ -41,8 +42,7 @@
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
-
-#include <arpa/inet.h>
+#include "screenshot.h"
 
 #define SERVER_TIMEOUT 10
 

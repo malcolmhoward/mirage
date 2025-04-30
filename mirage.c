@@ -304,39 +304,61 @@ detect this_detect[2][MAX_DETECT];
 detect this_detect_sorted[2][MAX_DETECT];
 
 static SDL_Renderer *renderer = NULL;               /* Global SDL Renderer */
+static SDL_threadID main_thread_id = 0;
 
 od_data oddataL, oddataR;
 
-/* Function Prototypes */
-void *video_next_thread(void *arg);
-
+/**
+ * Returns a pointer to the global motion data structure.
+ */
 motion *get_motion_dev(void)
 {
    return &this_motion;
 }
 
+/**
+ * Returns a pointer to the global environmental data structure.
+ */
 enviro *get_enviro_dev(void)
 {
    return &this_enviro;
 }
 
+/**
+ * Returns a pointer to the global GPS data structure.
+ */
 gps *get_gps_dev(void)
 {
    return &this_gps;
 }
 
-element *get_intro_element(void) {
+/**
+ * Returns a pointer to the global intro element.
+ */
+element *get_intro_element(void)
+{
    return &intro_element;
 }
 
-element *get_default_element(void) {
+/**
+ * Returns a pointer to the default element template.
+ */
+element *get_default_element(void)
+{
    return &default_element;
 }
 
-element *get_first_element(void) {
+/**
+ * Returns a pointer to the first element in the UI element linked list.
+ */
+element *get_first_element(void)
+{
    return first_element;
 }
 
+/**
+ * Sets the first element in the UI element linked list.
+ */
 element *set_first_element(element *this_element)
 {
    first_element = this_element;
@@ -344,11 +366,29 @@ element *set_first_element(element *this_element)
    return first_element;
 }
 
+/**
+ * Returns a pointer to the global SDL renderer.
+ */
 SDL_Renderer *get_sdl_renderer(void)
 {
+   // Check if main thread ID has been initialized
+   if (main_thread_id == 0) {
+      LOG_ERROR("Main thread ID not initialized!");
+      return NULL;
+   }
+
+   // Check if current thread is the main thread
+   if (SDL_ThreadID() != main_thread_id) {
+      LOG_ERROR("get_sdl_renderer() called from non-main thread!");
+      return NULL;
+   }
+
    return renderer;
 }
 
+/**
+ * Enables or disables object detection.
+ */
 int set_detect_enabled(int enable)
 {
    detect_enabled = enable;
@@ -356,13 +396,30 @@ int set_detect_enabled(int enable)
    return detect_enabled;
 }
 
+/**
+ * Checks if the application is in the process of shutting down.
+ */
 int checkShutdown(void)
 {
    return quit;
 }
 
+/**
+ * Gets the current window dimensions.
+ */
+int get_window_size(int *width, int *height)
+{
+   *width = window_width;
+   *height = window_height;
+
+   return SUCCESS;
+}
+
 void mqttViewingSnapshot(const char *filename);
 
+/*
+ * Updates the AI assistant name and state.
+ */
 void process_ai_state(const char *newAIName, const char *newAIState) {
    snprintf(aiName, AI_NAME_MAX_LENGTH, "%s", newAIName);
    snprintf(aiState, AI_STATE_MAX_LENGTH, "%s", newAIState);
@@ -931,9 +988,8 @@ void *video_processing_thread(void *arg)
    return NULL;
 }
 
-/* Search the font list to see if this font has already been created.
- * If so, return it.
- * If not, create it and return it.
+/*
+ * Retrieves a font from the font cache or loads it if not present.
  */
 TTF_Font *get_local_font(char *font_name, int font_size)
 {
@@ -982,7 +1038,9 @@ TTF_Font *get_local_font(char *font_name, int font_size)
    return this_font->ttf_font;
 }
 
-/* Render a single eye overlay onto both eyes. */
+/*
+ * Renders a texture to both eyes in a stereo display.
+ */
 void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
                   SDL_Rect *dest2, double angle)
 {
@@ -1137,18 +1195,8 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    }
 }
 
-/**
- * Sends a text-to-speech command via MQTT, instructing a device to vocalize the provided text.
- *
- * Constructs a JSON-formatted MQTT command specifying the text to be converted to speech.
- * This command is published to the MQTT topic "dawn". It checks for an initialized MQTT
- * client (`mosq`) before publishing and reports any errors encountered during the process.
- *
- * @param text The text string to be vocalized by the text-to-speech device.
- *
- * Note:
- * - The MQTT client (`mosq`) must be initialized and connected prior to calling this function.
- * - Errors during publishing are reported with a descriptive message.
+/*
+ * Sends a text message to be spoken via text-to-speech over MQTT.
  */
 void mqttTextToSpeech(const char *text) {
    char mqtt_command[1024] = "";
@@ -1182,8 +1230,8 @@ void mqttTextToSpeech(const char *text) {
  * @param desktop_height The height of the desktop display in pixels.
  * @param native_width   The native width of the application window in pixels.
  * @param native_height  The native height of the application window in pixels.
- * @param window_width   Pointer to an integer where the computed window width will be stored.
- * @param window_height  Pointer to an integer where the computed window height will be stored.
+ * @param l_window_width  Pointer to an integer where the computed window width will be stored.
+ * @param l_window_height Pointer to an integer where the computed window height will be stored.
  *
  * @return
  * - `0` on successful computation.
@@ -1195,7 +1243,7 @@ void mqttTextToSpeech(const char *text) {
  * - It ensures that the resulting window size does not exceed the desktop resolution.
  *
  * @warning
- * - Both `window_width` and `window_height` must be valid, non-null pointers.
+ * - Both `l_window_width` and `l_window_height` must be valid, non-null pointers.
  * - Ensure that `native_width` and `native_height` are greater than zero to avoid division by zero.
  *
  * @example
@@ -1215,10 +1263,10 @@ void mqttTextToSpeech(const char *text) {
  */
 int computeScaledWindowSize(int desktop_width, int desktop_height,
                             int native_width, int native_height,
-                            int* window_width, int* window_height) {
+                            int* l_window_width, int* l_window_height) {
    // Validate pointer parameters
-   if (window_width == NULL || window_height == NULL) {
-      fprintf(stderr, "Error: window_width and window_height pointers must not be NULL.\n");
+   if (l_window_width == NULL || l_window_height == NULL) {
+      fprintf(stderr, "Error: l_window_width and l_window_height pointers must not be NULL.\n");
       return 1;
    }
 
@@ -1234,12 +1282,12 @@ int computeScaledWindowSize(int desktop_width, int desktop_height,
 
    if (desktop_aspect > native_aspect) {
       // Desktop is wider than native aspect ratio
-      *window_height = desktop_height;
-      *window_width = (int)(desktop_height * native_aspect);
+      *l_window_height = desktop_height;
+      *l_window_width = (int)(desktop_height * native_aspect);
    } else {
       // Desktop is taller or equal to native aspect ratio
-      *window_width = desktop_width;
-      *window_height = (int)(desktop_width / native_aspect);
+      *l_window_width = desktop_width;
+      *l_window_height = (int)(desktop_width / native_aspect);
    }
 
    return 0; // Success
@@ -1385,12 +1433,15 @@ int main(int argc, char **argv)
    printf("%s Version %s: %s\n", APP_NAME, VERSION_NUMBER, GIT_SHA);
 
    if (SDL_Init(SDL_INIT_VIDEO) == -1) {
-      SDL_Log("SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
+      fprintf(stderr, "SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
 
+   main_thread_id = SDL_ThreadID();
+   printf("Main thread ID set to: %lu", (unsigned long)main_thread_id);
+
    if (getcwd(record_path, sizeof(record_path)) == NULL) {
-      LOG_ERROR("getcwd() error!");
+      fprintf(stderr, "getcwd() error!");
 
       return EXIT_FAILURE;
    }
@@ -1405,7 +1456,7 @@ int main(int argc, char **argv)
       switch (opt) {
       case 'b':
          no_camera_mode = 1;
-         LOG_INFO("No camera mode enabled - cameras disabled");
+         printf("No camera mode enabled - cameras disabled");
          break;
       case 'c':
          if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {
@@ -1784,10 +1835,11 @@ int main(int argc, char **argv)
       if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
          LOG_ERROR("Error creating video processing thread.");
          return EXIT_FAILURE;
-      } else {
-         LOG_INFO("Running in no camera mode, video processing thread not started");
       }
+   } else {
+      LOG_INFO("Running in no camera mode, video processing thread not started");
    }
+
 
    lastPTime = SDL_GetPerformanceCounter();
 
@@ -2071,10 +2123,6 @@ int main(int argc, char **argv)
 #ifdef ENCODE_TIMING
             Uint32 start = 0, stop = 0;
 #endif
-            pthread_mutex_lock(&windowSizeMutex);
-            int local_window_width = window_width;
-            int local_window_height = window_height;
-            pthread_mutex_unlock(&windowSizeMutex);
 
             /* Is recording working? */
             video_out_data *this_vod = get_video_out_data();
@@ -2096,7 +2144,7 @@ int main(int argc, char **argv)
             }
 
             this_vod->rgb_out_pixels[!this_vod->buffer_num] =
-                malloc(local_window_width * RGB_OUT_SIZE * local_window_height);
+                malloc(window_width * RGB_OUT_SIZE * window_height);
             if (this_vod->rgb_out_pixels[!this_vod->buffer_num] == NULL) {
                LOG_ERROR("Unable to malloc rgb frame 0.");
                return (2);
@@ -2108,7 +2156,7 @@ int main(int argc, char **argv)
 
             if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
                                      this_vod->rgb_out_pixels[!this_vod->buffer_num],
-                                     local_window_width * RGB_OUT_SIZE) != 0 ) {
+                                     window_width * RGB_OUT_SIZE) != 0 ) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed: %s", SDL_GetError());
 #ifdef ENCODE_TIMING
             } else {
