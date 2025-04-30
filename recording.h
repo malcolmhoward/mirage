@@ -27,7 +27,37 @@
 #include "defines.h"
 #include "mirage.h"
 
-/* Function to set the recording state */
+// Supported recoding and streaming states
+typedef enum {
+   DISABLED=0,
+   RECORD=1,
+   STREAM=2,
+   RECORD_STREAM=4
+} DestinationType;
+
+typedef struct _video_out_data {
+   DestinationType output;
+   pthread_mutex_t p_mutex;
+   int buffer_num;
+
+   void *rgb_out_pixels[2];
+
+   GstElement *pipeline;
+
+   char filename[PATH_MAX+64];
+   int started;   /* Flag indicating whether the video output pipeline is active and ready. */
+   FILE *outfile;
+} video_out_data;
+
+/**
+ * @brief Sets the recording/streaming state of the application.
+ *
+ * This function changes the output mode of the application, controlling whether
+ * it is recording to disk, streaming to a remote destination, both, or neither.
+ * It also sends a text-to-speech notification about the state change.
+ *
+ * @param state The desired output state (DISABLED, RECORD, STREAM, or RECORD_STREAM).
+ */
 void set_recording_state(DestinationType state);
 
 /* Function to get the recording state */
