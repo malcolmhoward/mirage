@@ -294,13 +294,8 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
 
 /**
  * Takes a screenshot with specified options for overlay and resolution.
- *
- * @param with_overlay If true, captures with UI overlay. If false, captures raw camera feed.
- * @param full_resolution If true, maintains original resolution.
- * @param output_filename Optional custom filename. If NULL, generates a timestamped filename.
- * @return 0 on success, non-zero on failure
  */
-int take_screenshot(int with_overlay, int full_resolution, const char *output_filename) {
+int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, const char *output_filename) {
    hud_display_settings *this_hds = get_hud_display_settings();
    SDL_Renderer *renderer = get_sdl_renderer();
    video_out_data *this_vod = get_video_out_data();
@@ -383,12 +378,18 @@ int take_screenshot(int with_overlay, int full_resolution, const char *output_fi
       pthread_mutex_lock(&this_vod->p_mutex);
 
       void *snapshot_pixel = NULL;
-      
-      /* If we're using RGB buffers */
+      void *temp_buffer = NULL;
+
+      /* If we're using RGB buffers from recording */
       if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
          snapshot_pixel = this_vod->rgb_out_pixels[this_vod->buffer_num];
-      } 
-      
+      }
+      /* If recording buffer is not available, get directly from camera frame buffer */
+      else if (!no_camera_mode) {
+         /* Use camera frame buffer if available */
+         snapshot_pixel = grab_latest_camera_frame(temp_buffer);
+      }
+
       if (snapshot_pixel == NULL) {
          pthread_mutex_unlock(&this_vod->p_mutex);
          LOG_ERROR("No valid pixel data available for screenshot");
@@ -420,6 +421,11 @@ int take_screenshot(int with_overlay, int full_resolution, const char *output_fi
       };
 
       result = process_and_save_image(&params);
+
+      /* Free the temporary buffer if we allocated one */
+      if (temp_buffer != NULL) {
+         free(temp_buffer);
+      }
 
       pthread_mutex_unlock(&this_vod->p_mutex);
    }
@@ -477,8 +483,9 @@ void mqttViewingSnapshot(const char *filename) {
    snprintf(mqtt_command, sizeof(mqtt_command),
       "{ \"device\": \"viewing\", \"action\": \"completed\", \"value\": \"%s\" }",
       filename);
+   LOG_INFO("Sending: %s", mqtt_command);
 
-   mqttTextToSpeech(mqtt_command);
+   mqttSendMessage("dawn", mqtt_command);
 }
 
 /**
@@ -486,7 +493,7 @@ void mqttViewingSnapshot(const char *filename) {
  * Checks if a screenshot has been requested and if so, takes the screenshot with the
  * requested parameters and clears the request flag.
  */
-void process_screenshot_requests(void) {
+void process_screenshot_requests(int no_camera_mode) {
     pthread_mutex_lock(&g_screenshot_mutex);
 
     if (g_screenshot_requested) {
@@ -545,11 +552,12 @@ void process_screenshot_requests(void) {
         pthread_mutex_unlock(&g_screenshot_mutex);
 
         /* Now take the screenshot from the main thread where OpenGL context is valid */
-        int result = take_screenshot(with_overlay, full_resolution, output_path);
+        int result = take_screenshot(with_overlay, no_camera_mode, full_resolution, output_path);
 
         /* Send notification if it was an MQTT request */
         if (source == SCREENSHOT_MQTT && result == 0) {
-            mqttViewingSnapshot(output_path);
+           LOG_INFO("Screenshot for MQTT. Sending...");
+           mqttViewingSnapshot(output_path);
         }
     } else {
         pthread_mutex_unlock(&g_screenshot_mutex);

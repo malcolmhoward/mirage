@@ -49,10 +49,6 @@
 #include "secrets.h"
 
 /* Globals and external references */
-// AI elements
-extern char aiName[];
-extern char aiState[];
-
 // video elements
 extern od_data oddataL, oddataR;
 extern pthread_t od_L_thread, od_R_thread;
@@ -159,6 +155,7 @@ void render_static_element(element *curr_element) {
    SDL_Texture *this_texture = NULL;
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
+   const char *aiState = get_ai_state();
 
    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
@@ -354,7 +351,7 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d",
               ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
    } else if (strcmp("*AINAME*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", aiName);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
    } else if (strcmp("*CPU*", curr_element->text) == 0) {
       if (cpu_thread_started == 0) {
          if (pthread_create(&cpu_util_thread, NULL, cpu_utilization_thread, NULL) != 0) {

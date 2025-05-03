@@ -69,11 +69,12 @@ int request_screenshot(int with_overlay, int full_resolution,
  * Takes a screenshot with specified options
  *
  * @param with_overlay If true, captures with UI overlay
+ * @param no_camera_mode is no_camera_mode enabled
  * @param full_resolution If true, maintains original resolution
  * @param output_filename Optional custom filename
  * @return 0 on success, non-zero on failure
  */
-int take_screenshot(int with_overlay, int full_resolution, const char *output_filename);
+int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, const char *output_filename);
 
 /**
  * Takes a snapshot for AI processing
@@ -84,8 +85,10 @@ void trigger_snapshot(const char *datetime);
 
 /**
  * Process any pending screenshot requests in the main thread
+ *
+ * @param no_camera_mode is no camera mode set
  */
-void process_screenshot_requests(void);
+void process_screenshot_requests(int no_camera_mode);
 
 /**
  * Sends notification that a viewing snapshot has been completed
