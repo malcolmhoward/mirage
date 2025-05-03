@@ -168,6 +168,25 @@ SDL_Renderer *get_sdl_renderer(void);
 void process_ai_state(const char *newAIName, const char *newAIState);
 
 /**
+ * @brief Returns the AI given name for sending back MQTT messages.
+ *
+ * This function returns a constant pointer to the AI's name, as provided by the AI.
+ * This is necessary for proper MQTT messges back to the AI.
+ *
+ * @return const pointer to AI name
+ */
+const char *get_ai_name(void);
+
+/**
+ * @brief Returns the current AI state that was last send by the AI.
+ *
+ * This function returns a constant pointer to the AI's state, as provided by the AI.
+ *
+ * @return const pointer to AI state
+ */
+const char *get_ai_state(void);
+
+/**
  * @brief Gets the current window dimensions.
  *
  * This function retrieves the current width and height of the application window.
@@ -202,6 +221,18 @@ TTF_Font *get_local_font(char *font_name, int font_size);
 int checkShutdown(void);
 
 /**
+ * @brief Copies the latest camera frame from the left camera into the provided buffer.
+ *
+ * This function copies the latest camera frame, without any overlay, to the provided buffer.
+ * For now this uses a simple memcpy because this isn't currently a frequent operation.
+ * There is a better frame copy available if we're recording/streaming at the time.
+ *
+ * @param temp_buffer pointer to uninitialized memory location. This will be malloced and need to be freed.
+ * @return memory location of allocated frame, should match temp_buffer for easy checking.
+ */
+void *grab_latest_camera_frame(void *temp_buffer);
+
+/**
  * @brief Renders a texture to both eyes in a stereo display.
  *
  * This function handles the complexities of rendering textures for a stereo VR/AR
@@ -226,6 +257,16 @@ void renderStereo(SDL_Texture * tex, SDL_Rect * src, SDL_Rect * dest, SDL_Rect *
  * @param text The text string to be converted to speech.
  */
 void mqttTextToSpeech(const char *text);
+
+/**
+ * @brief Sends a text string (JSON hopefully) over MQTT.
+ *
+ * This function sends the provided string to the provided topic.
+ *
+ * @param topic The topic to send the message to.
+ * @param text The text string to send to the topic. Should already be JSON formatted.
+ */
+void mqttSendMessage(const char *topic, const char *text);
 
 #endif // MIRAGE_H
 

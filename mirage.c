@@ -121,13 +121,13 @@
 #include "utils.h"
 #include "version.h"
 
-pthread_mutex_t v_mutex = PTHREAD_MUTEX_INITIALIZER;  /* Mutex for video buffer access. */
-GstMapInfo mapL[2], mapR[2];        /* Video memory maps. */
+static pthread_mutex_t v_mutex = PTHREAD_MUTEX_INITIALIZER;  /* Mutex for video buffer access. */
+static GstMapInfo mapL[2], mapR[2];        /* Video memory maps. */
 #ifdef DISPLAY_TIMING
 struct timespec ts_cap[2];          /* Store the display latency. */
 #endif
-int video_posted = 0;               /* Notify that the new video frames are ready. */
-int buffer_num = 0;                 /* Video is double buffered. This swaps between them. */
+static int video_posted = 0;               /* Notify that the new video frames are ready. */
+static int buffer_num = 0;                 /* Video is double buffered. This swaps between them. */
 
 static int window_width = 0;
 static int window_height = 0;
@@ -187,8 +187,8 @@ gps this_gps = {
 };
 #define AI_NAME_MAX_LENGTH 32
 #define AI_STATE_MAX_LENGTH 18   /* This is actually defined by the states in DAWN. */
-char aiName[AI_NAME_MAX_LENGTH] = "";
-char aiState[AI_STATE_MAX_LENGTH] = "";
+static char aiName[AI_NAME_MAX_LENGTH] = "";
+static char aiState[AI_STATE_MAX_LENGTH] = "";
 
 /* Audio */
 extern thread_info audio_threads[NUM_AUDIO_THREADS];
@@ -424,6 +424,20 @@ void process_ai_state(const char *newAIName, const char *newAIState) {
    snprintf(aiName, AI_NAME_MAX_LENGTH, "%s", newAIName);
    snprintf(aiState, AI_STATE_MAX_LENGTH, "%s", newAIState);
 }
+
+/*
+ * Returns the AI given name for sending back MQTT messages.
+ */
+const char *get_ai_name(void) {
+   return (const char *) aiName;
+};
+
+/*
+ * Returns the current AI state that was last send by the AI.
+ */
+const char *get_ai_state(void) {
+   return (const char *) aiState;
+};
 
 /* Free the UI element list. */
 void free_elements(element *start_element)
@@ -1039,6 +1053,28 @@ TTF_Font *get_local_font(char *font_name, int font_size)
 }
 
 /*
+ * Copies the latest camera frame from the left camera into the provided buffer.
+ */
+void *grab_latest_camera_frame(void *temp_buffer) {
+   hud_display_settings *this_hds = get_hud_display_settings();
+
+   /* Use camera frame buffer if available */
+   pthread_mutex_lock(&v_mutex); // Lock the video mutex to safely access mapL
+   if (video_posted && mapL[buffer_num].data != NULL) {
+      /* Allocate temporary buffer for the screenshot */
+      temp_buffer = malloc(this_hds->cam_input_width * this_hds->cam_input_height * 4);
+      if (temp_buffer != NULL) {
+         /* Copy camera data */
+         memcpy(temp_buffer, mapL[buffer_num].data,
+               this_hds->cam_input_width * this_hds->cam_input_height * 4);
+      }
+   }
+   pthread_mutex_unlock(&v_mutex);
+
+   return temp_buffer;
+}
+
+/*
  * Renders a texture to both eyes in a stereo display.
  */
 void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
@@ -1217,6 +1253,24 @@ void mqttTextToSpeech(const char *text) {
    }
 }
 
+/*
+ * Sends a text string (JSON hopefully) over MQTT.
+ */
+void mqttSendMessage(const char *topic, const char *text) {
+   int rc = 0;
+
+   if (mosq == NULL) {
+      LOG_ERROR("MQTT not initialized.");
+   } else {
+      rc = mosquitto_publish(mosq, NULL, topic, strlen(text), text, 0, false);
+      if (rc != MOSQ_ERR_SUCCESS) {
+         LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
+      } else {
+         LOG_INFO("Successfully send via MQTT: %s", text);
+      }
+   }
+}
+
 /**
  * @brief Computes the scaled window size while maintaining the original aspect ratio.
  *
@@ -1342,7 +1396,8 @@ int main(int argc, char **argv)
    /* getopt */
    int opt = 0;
    int fullscreen = 0;
-   char record_path[PATH_MAX];  /* Where do we store recordings? */
+   char record_path[PATH_MAX];   /* Where do we store recordings? */
+   int no_camera_mode = 0;       /* Flag to enable no camera mode */
 
    /* Threads */
    pthread_t thread_handles[NUM_AUDIO_THREADS];
@@ -1391,8 +1446,6 @@ int main(int argc, char **argv)
 
    off_t last_size = -1;
    off_t last_last_size = -1;
-
-   int no_camera_mode = 0;  /* Flag to enable no camera mode */
    /* End Variable Inits */
 
    sdl_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -2196,7 +2249,7 @@ int main(int argc, char **argv)
          }
 
          // Process any pending screenshot requests
-         process_screenshot_requests();
+         process_screenshot_requests(no_camera_mode);
 
          SDL_RenderPresent(renderer);
       }
