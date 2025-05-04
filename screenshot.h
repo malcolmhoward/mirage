@@ -38,6 +38,24 @@ void init_pbo_system(void);
 void cleanup_pbo_system(void);
 
 /**
+ * Synchronously reads pixels from the current OpenGL framebuffer into a user buffer.
+ * Unlike the asynchronous version, this ensures the current frame is captured immediately.
+ *
+ * @param renderer  Pointer to the SDL_Renderer (must be using an OpenGL backend).
+ * @param rect      Optional rectangle specifying the area to read.
+ * @param format    SDL pixel format.
+ * @param pixels    Pointer to the user-allocated buffer for storing the pixels.
+ * @param pitch     Byte pitch (row stride) of the user buffer.
+ *
+ * @return 0 on success, 1 on failure.
+ */
+int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
+                                const SDL_Rect *rect,
+                                Uint32 format,
+                                void *pixels,
+                                int pitch);
+
+/**
  * Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer
  *
  * @param renderer Pointer to the SDL_Renderer
