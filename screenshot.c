@@ -68,16 +68,32 @@ void set_screenshot_recording_path(const char *path) {
  * frame capture from OpenGL.
  */
 void init_pbo_system(void) {
-    if (g_pboInitialized) {
-        glDeleteBuffers(2, g_pboIds);
-    }
+   if (g_pboInitialized) {
+      glDeleteBuffers(2, g_pboIds);
+   }
 
-    glGenBuffers(2, g_pboIds);
-    g_pboInitialized = true;
-    g_lastSuccessfulPboIndex = -1;
-    g_hasValidLastFrame = false;
+   glGenBuffers(2, g_pboIds);
 
-    LOG_INFO("PBO system initialized with buffer tracking.");
+   int window_width = 0, window_height = 0;
+
+   /* Get window dimensions */
+   get_window_size(&window_width, &window_height);
+
+   // Prime both buffers with initial data
+   const GLsizeiptr dataSize = (GLsizeiptr)(window_width * window_height * 4);
+
+   for (int i = 0; i < 2; i++) {
+      glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[i]);
+      glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
+      glReadPixels(0, 0, window_width, window_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+   }
+
+   // Finish GPU operations to ensure buffers are initialized
+   glFinish();
+
+   g_pboInitialized = true;
+   g_lastSuccessfulPboIndex = 0;
+   g_hasValidLastFrame = true;
 }
 
 /**
@@ -293,6 +309,60 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
 }
 
 /**
+ * Synchronously reads pixels from the current OpenGL framebuffer into a user buffer.
+ */
+int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
+                               const SDL_Rect *rect,
+                               Uint32 format,
+                               void *pixels,
+                               int pitch) {
+   /* Basic parameter checks */
+   if (!renderer || !pixels) {
+      LOG_ERROR("Invalid arguments for synchronous read");
+      return 1;
+   }
+
+   /* Determine the rectangle to read */
+   int readX = 0, readY = 0, readW = 0, readH = 0;
+   if (rect) {
+      readX = rect->x;
+      readY = rect->y;
+      readW = rect->w;
+      readH = rect->h;
+   } else {
+      /* If rect is NULL, read the entire render target */
+      SDL_GetRendererOutputSize(renderer, &readW, &readH);
+   }
+
+   /* We'll need a temporary buffer to perform the Y-flip */
+   const int bytesPerPixel = 4;  /* RGBA */
+   GLubyte* tempBuffer = (GLubyte*)malloc(readW * readH * bytesPerPixel);
+   if (!tempBuffer) {
+      LOG_ERROR("Failed to allocate temporary buffer for pixel read");
+      return 1;
+   }
+
+   /* Read pixels into our temporary buffer */
+   glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, tempBuffer);
+
+   /* Make sure the operation is complete */
+   glFinish();
+
+   /* Copy with Y-flipping to correct the orientation */
+   for (int y = 0; y < readH; ++y) {
+      int flippedY = (readH - 1) - y; /* Invert the row index */
+      GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
+      GLubyte* srcRow = tempBuffer + (y * readW * bytesPerPixel);
+      memcpy(dstRow, srcRow, readW * bytesPerPixel);
+   }
+
+   /* Clean up */
+   free(tempBuffer);
+
+   return 0;
+}
+
+/**
  * Takes a screenshot with specified options for overlay and resolution.
  */
 int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, const char *output_filename) {
@@ -330,8 +400,8 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
          return FAILURE;
       }
 
-      /* Use the PBO-based async read instead of synchronized SDL function */
-      result = OpenGL_RenderReadPixelsAsync(
+      /* Use the PBO-based sync read */
+      result = OpenGL_RenderReadPixelsSync(
          renderer,
          NULL,
          PIXEL_FORMAT_OUT,
@@ -374,23 +444,33 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
 
    } else {
       /* Without overlay - capture raw camera feed */
+      void *snapshot_pixel = NULL;
+      void *temp_buffer = NULL;
+      int orig_width, orig_height;
+      int is_recording_buffer = 0;
+
       /* Use a mutex lock before accessing shared buffers */
       pthread_mutex_lock(&this_vod->p_mutex);
 
-      void *snapshot_pixel = NULL;
-      void *temp_buffer = NULL;
+      if (!no_camera_mode) {
+         /* Allocate buffer for camera frame - use the more efficient OpenGL method if possible */
+         temp_buffer = malloc(this_hds->cam_input_width * this_hds->cam_input_height * 4);
+         if (temp_buffer == NULL) {
+            pthread_mutex_unlock(&this_vod->p_mutex);
+            LOG_ERROR("Unable to allocate memory for camera frame buffer");
+            return FAILURE;
+         }
 
-      /* If we're using RGB buffers from recording */
-      if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
-         snapshot_pixel = this_vod->rgb_out_pixels[this_vod->buffer_num];
-      }
-      /* If recording buffer is not available, get directly from camera frame buffer */
-      else if (!no_camera_mode) {
-         /* Use camera frame buffer if available */
+         /* Get frame data from camera */
          snapshot_pixel = grab_latest_camera_frame(temp_buffer);
+         orig_width = this_hds->cam_input_width;
+         orig_height = this_hds->cam_input_height;
       }
 
       if (snapshot_pixel == NULL) {
+         if (temp_buffer != NULL) {
+            free(temp_buffer);
+         }
          pthread_mutex_unlock(&this_vod->p_mutex);
          LOG_ERROR("No valid pixel data available for screenshot");
          return FAILURE;
@@ -399,21 +479,38 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
       /* Calculate dimensions based on resolution preference */
       int new_width, new_height;
       if (full_resolution) {
-         new_width = this_hds->cam_input_width - (2 * this_hds->cam_crop_x);
-         new_height = this_hds->cam_input_height;
+         if (is_recording_buffer) {
+            new_width = this_hds->eye_output_width;
+            new_height = this_hds->eye_output_height;
+         } else {
+            new_width = this_hds->cam_input_width - (2 * this_hds->cam_crop_x);
+            new_height = this_hds->cam_input_height;
+         }
       } else {
          new_width = SNAPSHOT_WIDTH;
          new_height = SNAPSHOT_HEIGHT;
       }
 
+      /* Adjust cropping based on buffer type */
+      int left_crop, right_crop;
+      if (is_recording_buffer) {
+         /* For recording buffer (stereo), grab just the left eye */
+         left_crop = 0;
+         right_crop = this_hds->eye_output_width;
+      } else {
+         /* For camera buffer, use standard camera crop */
+         left_crop = this_hds->cam_crop_x;
+         right_crop = this_hds->cam_crop_x;
+      }
+
       ImageProcessParams params = {
          .rgba_buffer = (unsigned char *)snapshot_pixel,
-         .orig_width = this_hds->cam_input_width,
-         .orig_height = this_hds->cam_input_height,
+         .orig_width = orig_width,
+         .orig_height = orig_height,
          .filename = filename,
-         .left_crop = this_hds->cam_crop_x,
+         .left_crop = left_crop,
          .top_crop = 0,
-         .right_crop = this_hds->cam_crop_x,
+         .right_crop = right_crop,
          .bottom_crop = 0,
          .new_width = new_width,
          .new_height = new_height,
