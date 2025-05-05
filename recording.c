@@ -105,7 +105,21 @@ void reset_video_out_thread(void) {
  */
 void cleanup_pipeline(GstElement *pipeline, GstElement *srcEncode, GstBus *bus) {
    video_out_data *vod = get_video_out_data();
+
    if (srcEncode) {
+      // Disconnect signal handlers if they were connected
+      gulong need_data_id = g_signal_handler_find(srcEncode, G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
+                                               G_CALLBACK(start_feed), NULL);
+      if (need_data_id > 0) {
+         g_signal_handler_disconnect(srcEncode, need_data_id);
+      }
+
+      gulong enough_data_id = g_signal_handler_find(srcEncode, G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
+                                                 G_CALLBACK(stop_feed), NULL);
+      if (enough_data_id > 0) {
+         g_signal_handler_disconnect(srcEncode, enough_data_id);
+      }
+
       gst_object_unref(srcEncode);
    }
 
@@ -117,8 +131,6 @@ void cleanup_pipeline(GstElement *pipeline, GstElement *srcEncode, GstBus *bus) 
       gst_object_unref(pipeline);
       vod->pipeline = NULL;
    }
-
-   this_vod.output = DISABLED;
 
    LOG_INFO("Pipeline resources cleaned up");
 }
@@ -137,7 +149,15 @@ void set_recording_state(DestinationType state) {
 
    switch (state) {
       case DISABLED:
-         snprintf(announce, sizeof(announce), "Stopping recording and streaming.");
+         if (this_vod.output == RECORD) {
+            snprintf(announce, sizeof(announce), "Stopping recording.");
+         } else if (this_vod.output == STREAM) {
+            snprintf(announce, sizeof(announce), "Stopping streaming.");
+         } else if (this_vod.output == RECORD_STREAM) {
+            snprintf(announce, sizeof(announce), "Stopping recording and streaming.");
+         } else {
+            snprintf(announce, sizeof(announce), "Disabling from unknown state.");
+         }
          break;
       case RECORD:
          snprintf(announce, sizeof(announce), "Starting recording.");
@@ -215,7 +235,7 @@ static gboolean bus_message_handler(GstBus *bus, GstMessage *message, gpointer d
          g_free(debug_info);
 
          // Signal main thread to stop recording
-         vod->output = 0;
+         vod->output = DISABLED;
          break;
       }
       case GST_MESSAGE_WARNING: {
@@ -418,7 +438,6 @@ void *video_next_thread(void *arg) {
       // Flow control
       "emit-signals", TRUE,             // Emit signals for flow control
       "min-percent", 30,                // Signal "need-data" when buffer < 30%
-      "max-lateness", 33 * GST_MSECOND, // Drop buffers more than 33ms late
 
       // Buffer management
       "max-bytes", 0,                   // No limit on queue size (0 = unlimited)
@@ -541,6 +560,8 @@ void *video_next_thread(void *arg) {
    cleanup_pipeline(pipeline, srcEncode, bus);
 
    LOG_INFO("Pipeline shutdown complete");
+
+   reset_video_out_thread();
 
    return NULL;
 }

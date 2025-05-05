@@ -2233,7 +2233,7 @@ int main(int argc, char **argv)
             this_vod->buffer_num = !this_vod->buffer_num;
             pthread_mutex_unlock(&this_vod->p_mutex);
 
-            if (get_video_out_thread() == 0) {
+            if (get_recording_state() != DISABLED && get_video_out_thread() == 0) {
                pthread_t thread_id;
                if (pthread_create(&thread_id, NULL, video_next_thread, NULL) != 0) {
                   LOG_ERROR("Error creating video output thread.");
