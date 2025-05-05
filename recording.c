@@ -45,6 +45,7 @@
 static int feed_me = 0;             /* Control the feeding of the encoding thread */
 static pthread_t vid_out_thread = 0; /* Thread ID for video output */
 static char record_path[PATH_MAX] = "."; /* Path for saving recordings */
+#define NSEC_PER_SEC 1000000000L
 
 /* Global video output data structure */
 static video_out_data this_vod = {
@@ -247,6 +248,10 @@ static gboolean bus_message_handler(GstBus *bus, GstMessage *message, gpointer d
       case GST_MESSAGE_QOS:
          /* These are very frequent, so only log at debug level or ignore */
          break;
+      case GST_MESSAGE_ASYNC_DONE:
+         /* Pipeline is now ready for data flow */
+         LOG_INFO("Pipeline is ready for data flow");
+         break;
       default:
          /* Log the message type name for debugging */
          LOG_INFO("Unhandled GStreamer message type: %s from %s",
@@ -292,7 +297,7 @@ void *video_next_thread(void *arg) {
    volatile GstClockTime current_time;
 
    struct timespec start_time, end_time;
-   long processing_time_us = 0L, delay_time_us = 0L;
+   long processing_time_ns = 0L, delay_time_ns = 0L;
 
    int window_width = 0, window_height = 0;
 
@@ -369,7 +374,7 @@ void *video_next_thread(void *arg) {
    this_vod.pipeline = pipeline;
 
    bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
-   gst_bus_add_watch(bus, bus_message_handler, &this_vod);
+   guint bus_watch_id = gst_bus_add_watch(bus, bus_message_handler, &this_vod);
    gst_object_unref(bus);
 
    /* Get sink */
@@ -413,6 +418,7 @@ void *video_next_thread(void *arg) {
       // Flow control
       "emit-signals", TRUE,             // Emit signals for flow control
       "min-percent", 30,                // Signal "need-data" when buffer < 30%
+      "max-lateness", 33 * GST_MSECOND, // Drop buffers more than 33ms late
 
       // Buffer management
       "max-bytes", 0,                   // No limit on queue size (0 = unlimited)
@@ -429,8 +435,8 @@ void *video_next_thread(void *arg) {
       GstState state, pending;
       LOG_INFO("Pipeline state change is ASYNC - waiting for completion...");
 
-      // Give the pipeline up to 5 seconds to change state
-      state_ret = gst_element_get_state(pipeline, &state, &pending, 5 * GST_SECOND);
+      // Give the pipeline up to 2 seconds to change state
+      state_ret = gst_element_get_state(pipeline, &state, &pending, 2 * GST_SECOND);
 
       if (state_ret == GST_STATE_CHANGE_FAILURE) {
          LOG_ERROR("Failed to complete state change to PLAYING");
@@ -496,17 +502,22 @@ void *video_next_thread(void *arg) {
 
          pthread_mutex_unlock(&this_vod.p_mutex);
       }
-      
-      /* Calculate processing time in microseconds */
-      processing_time_us = (end_time.tv_sec - start_time.tv_sec) * 1000000L +
-                           (end_time.tv_nsec - start_time.tv_nsec) / 1000L;
+
+      /* Calculate processing time in nanoseconds */
+      struct timespec ts_delay;
+      processing_time_ns = (end_time.tv_sec - start_time.tv_sec) * NSEC_PER_SEC +
+                           (end_time.tv_nsec - start_time.tv_nsec);
 
       /* Calculate how long to delay to maintain the target frame rate */
-      delay_time_us = TARGET_RECORDING_FRAME_DURATION_US - processing_time_us;
+      delay_time_ns = TARGET_RECORDING_FRAME_DURATION_US * 1000L - processing_time_ns;
 
-      /* Apply the calculated delay, if positive */
-      if (delay_time_us > 0) {
-         usleep(delay_time_us);
+      /* Apply the calculated delay, if positive, using high-precision timer */
+      if (delay_time_ns > 0) {
+         ts_delay.tv_sec = delay_time_ns / NSEC_PER_SEC;
+         ts_delay.tv_nsec = delay_time_ns % NSEC_PER_SEC;
+
+         // Use CLOCK_MONOTONIC for consistency with recording timing
+         clock_nanosleep(CLOCK_MONOTONIC, 0, &ts_delay, NULL);
       }
    }
 
@@ -521,6 +532,10 @@ void *video_next_thread(void *arg) {
 
    if (pipeline_clock != NULL) {
       gst_object_unref(pipeline_clock);
+   }
+
+   if (bus_watch_id > 0) {
+      g_source_remove(bus_watch_id);
    }
 
    cleanup_pipeline(pipeline, srcEncode, bus);
