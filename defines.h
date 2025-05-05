@@ -276,11 +276,12 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #define GST_PIPE_PARSE_CONFIG   "h264parse config-interval=1 ! "
 
 /* === AUDIO COMPONENTS === */
-#define GST_PIPE_AUDIO          "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
+#define GST_PIPE_AUDIO         "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
-                               "audioconvert ! voaacenc bitrate=128000 ! queue ! mux."
+                               "audioconvert ! voaacenc bitrate=128000 ! " \
+                               "queue max-size-time=500000000 min-threshold-time=200000000 leaky=2 ! mux."
 
-#define GST_PIPE_AUDIO_YOUTUBE  "pulsesrc device=%s do-timestamp=true ! " \
+#define GST_PIPE_AUDIO_YOUTUBE "pulsesrc device=%s do-timestamp=true ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
                                "audioconvert ! voaacenc bitrate=128000 ! " \
                                "aacparse ! queue leaky=2 ! mux."

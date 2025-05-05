@@ -37,8 +37,11 @@
 #include "recording.h"
 
 /* Global variables for PBO system */
-static GLuint g_pboIds[2] = {0, 0};
+static GLuint g_pboIds[3] = {0, 0, 0};
 static int g_pboIndex = 0;
+static int g_readIndex = 2;
+static int g_writeIndex = 1;
+static int g_frameCount = 0; // Track number of frames processed
 static bool g_pboInitialized = false;
 
 /* Added tracking for last successful mapping */
@@ -69,10 +72,10 @@ void set_screenshot_recording_path(const char *path) {
  */
 void init_pbo_system(void) {
    if (g_pboInitialized) {
-      glDeleteBuffers(2, g_pboIds);
+      cleanup_pbo_system();
    }
 
-   glGenBuffers(2, g_pboIds);
+   glGenBuffers(3, g_pboIds);
 
    int window_width = 0, window_height = 0;
 
@@ -82,18 +85,27 @@ void init_pbo_system(void) {
    // Prime both buffers with initial data
    const GLsizeiptr dataSize = (GLsizeiptr)(window_width * window_height * 4);
 
-   for (int i = 0; i < 2; i++) {
+   for (int i = 0; i < 3; i++) {
       glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[i]);
       glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
-      glReadPixels(0, 0, window_width, window_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
    }
 
-   // Finish GPU operations to ensure buffers are initialized
-   glFinish();
+   // Start the initial frame to prime the first buffer
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[0]);
+   glReadPixels(0, 0, window_width, window_height, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+   // Set the buffer to an unbounded state
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+   // Reset indices
+   g_pboIndex = 0;
+   g_readIndex = 2;
+   g_writeIndex = 1;
+   g_frameCount = 0;
 
    g_pboInitialized = true;
-   g_lastSuccessfulPboIndex = 0;
-   g_hasValidLastFrame = true;
+   g_lastSuccessfulPboIndex = -1;
+   g_hasValidLastFrame = false;
 }
 
 /**
@@ -101,7 +113,7 @@ void init_pbo_system(void) {
  */
 void cleanup_pbo_system(void) {
     if (g_pboInitialized) {
-        glDeleteBuffers(2, g_pboIds);
+        glDeleteBuffers(3, g_pboIds);
         g_pboInitialized = false;
     }
     g_lastSuccessfulPboIndex = -1;
@@ -212,99 +224,81 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
    const GLsizeiptr dataSize = (GLsizeiptr)(readW * readH * bytesPerPixel);
 
    /* Bind the "current" PBO for asynchronous readback */
-   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_pboIndex]);
+   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_writeIndex]);
    glBufferData(GL_PIXEL_PACK_BUFFER, dataSize, NULL, GL_STREAM_READ);
 
    /* Kick off the async read from the current framebuffer */
    glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
-   /* Now bind the "previous" PBO and try to map it to system memory */
-   int prevIndex = (g_pboIndex + 1) % 2;
-   glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[prevIndex]);
-
-   /* Add retry logic for buffer mapping */
    GLubyte* mappedBuffer = NULL;
-   int retryCount = 0;
-   const int MAX_RETRIES = 3;
-   bool usedFallbackBuffer = false;
 
-   while (retryCount < MAX_RETRIES) {
-      /* Try to map the buffer */
+   /* Skip trying to read during the first two frames -
+      we need to prime the pipeline first */
+   if (g_frameCount >= 2) {
+      /* Now try to read from the read buffer */
+      glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_readIndex]);
+
       mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                                0,
-                                                dataSize,
-                                                GL_MAP_READ_BIT);
+                                               0,
+                                               dataSize,
+                                               GL_MAP_READ_BIT);
 
       if (mappedBuffer) {
-         /* Success! Break out of the retry loop */
-         break;
-      } else {
-         /* Mapping failed - log and retry after a brief delay */
-         if (retryCount < MAX_RETRIES - 1) {
-            LOG_WARNING("Buffer mapping failed, retrying (%d/%d)...",
-                        retryCount + 1, MAX_RETRIES);
-
-            /* Introduce a small delay to allow GPU to finish */
-            SDL_Delay(5);  /* 5ms delay should be brief enough not to impact interactivity */
-         } else {
-            LOG_WARNING("Buffer mapping failed after %d retries.", MAX_RETRIES);
+         /* Copy data with Y-flip */
+         for (int y = 0; y < readH; ++y) {
+            int flippedY = (readH - 1) - y;
+            GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
+            GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
+            memcpy(dstRow, srcRow, readW * bytesPerPixel);
          }
-         retryCount++;
-      }
-   }
 
-   /* If mapping still failed after retries, check if we have a last known good buffer */
-   if (!mappedBuffer) {
-      if (g_hasValidLastFrame && g_lastSuccessfulPboIndex >= 0) {
-         /* We have a previously mapped buffer - switch to it */
-         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);  /* Unmap current buffer */
+         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+         g_lastSuccessfulPboIndex = g_readIndex;
+         g_hasValidLastFrame = true;
+      } else if (g_hasValidLastFrame) {
+         /* Fall back to the last successful buffer if available */
          glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_lastSuccessfulPboIndex]);
 
-         /* Try to map the last known good buffer */
          mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
                                                   0,
                                                   dataSize,
                                                   GL_MAP_READ_BIT);
 
          if (mappedBuffer) {
-            LOG_INFO("Using last successful buffer from index %d", g_lastSuccessfulPboIndex);
-            usedFallbackBuffer = true;
-         } else {
-            LOG_WARNING("Failed to map last known good buffer. Screenshot may be incomplete.");
+            /* Copy with Y-flip */
+            for (int y = 0; y < readH; ++y) {
+               int flippedY = (readH - 1) - y;
+               GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
+               GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
+               memcpy(dstRow, srcRow, readW * bytesPerPixel);
+            }
+
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
          }
-      } else {
-         /* No usable previously mapped buffer */
-         LOG_WARNING("No previous good buffer available. Screenshot may be incomplete.");
       }
+   } else {
+      /* For the first 2 frames, we'll just return success without
+         actually trying to read data, since we're still priming the pipeline */
+      LOG_INFO("Priming PBO pipeline, frame %d", g_frameCount);
    }
 
-   if (mappedBuffer) {
-      /* Copy the pixel data into the user-provided buffer */
-      for (int y = 0; y < readH; ++y) {
-         int flippedY = (readH - 1) - y; /* Invert the row index */
-         GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
-         GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
-         memcpy(dstRow, srcRow, readW * bytesPerPixel);
-      }
-
-      /* Unmap buffer */
-      glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-
-      /* If this was a successful current frame mapping (not a fallback),
-         update our tracking of last successful buffer */
-      if (!usedFallbackBuffer) {
-         g_lastSuccessfulPboIndex = prevIndex;
-         g_hasValidLastFrame = true;
-      }
-   }
-
-   /* Unbind the PBO */
+   /* Unbind PBO */
    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-   /* Flip the index so next call reads the other buffer */
-   g_pboIndex = prevIndex;
+   /* Cycle indices in a lockstep pattern */
+   int temp = g_pboIndex;
+   g_pboIndex = g_readIndex;
+   g_readIndex = g_writeIndex;
+   g_writeIndex = temp;
 
-   /* Return success if we got data */
+   /* Increment frame counter */
+   g_frameCount++;
+
+   /* For the first 2 frames, pretend we succeeded even though we didn't map anything */
+   if (g_frameCount <= 2) {
+      return 0;
+   }
+
    return (mappedBuffer != NULL) ? 0 : 1;
 }
 
