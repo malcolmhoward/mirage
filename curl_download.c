@@ -66,13 +66,6 @@ static size_t write_data(void *contents, size_t size, size_t nmemb, void *userp)
 
 /**
  * Thread function for downloading map images at regular intervals
- *
- * This function runs in a separate thread and periodically downloads
- * map images from the URL specified in the curl_data struct. It stores
- * the raw data and sets the 'updated' flag when new data is available.
- *
- * @param arg Pointer to a struct curl_data with URL and other parameters
- * @return NULL when thread exits
  */
 void *image_download_thread(void *arg) {
    struct curl_data *this_data = (struct curl_data *)arg;

@@ -47,12 +47,22 @@ static pthread_t vid_out_thread = 0; /* Thread ID for video output */
 static char record_path[PATH_MAX] = "."; /* Path for saving recordings */
 #define NSEC_PER_SEC 1000000000L
 
+/* Rotate triple buffer indices in a circular pattern */
+void rotate_triple_buffer_indices(video_out_data *vod) {
+   int temp = vod->buffer_num;
+   vod->buffer_num = vod->read_index;
+   vod->read_index = vod->write_index;
+   vod->write_index = temp;
+}
+
 /* Global video output data structure */
 static video_out_data this_vod = {
    .output = DISABLED,
    .buffer_num = 0,
+   .read_index = 2,
+   .write_index = 1,
    .pipeline = NULL,
-   .rgb_out_pixels = {NULL, NULL},
+   .rgb_out_pixels = {NULL, NULL, NULL},
    .filename = "",
    .started = 0,
    .outfile = NULL
@@ -61,10 +71,28 @@ static video_out_data this_vod = {
 /* Initialize the p_mutex in video_out_data at program start */
 void init_video_out_data(void) {
    pthread_mutex_init(&this_vod.p_mutex, NULL);
+
+   /* Initialize triple buffer indices */
+   this_vod.buffer_num = 0;
+   this_vod.read_index = 2;
+   this_vod.write_index = 1;
+
+   /* Initialize buffers to NULL */
+   this_vod.rgb_out_pixels[0] = NULL;
+   this_vod.rgb_out_pixels[1] = NULL;
+   this_vod.rgb_out_pixels[2] = NULL;
 }
 
 /* Cleanup the p_mutex in video_out_data at program exit */
 void cleanup_video_out_data(void) {
+   /* Free all buffers */
+   for (int i = 0; i < 3; i++) {
+      if (this_vod.rgb_out_pixels[i] != NULL) {
+         free(this_vod.rgb_out_pixels[i]);
+         this_vod.rgb_out_pixels[i] = NULL;
+      }
+   }
+
    pthread_mutex_destroy(&this_vod.p_mutex);
 }
 
@@ -490,9 +518,9 @@ void *video_next_thread(void *arg) {
 
          clock_gettime(CLOCK_MONOTONIC, &start_time);
 
-         if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
-            buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.buffer_num],
-                                            window_width * RGB_OUT_SIZE * window_height);
+         if (this_vod.rgb_out_pixels[this_vod.read_index] != NULL) {
+            buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.read_index],
+                                           window_width * RGB_OUT_SIZE * window_height);
             if (buffer == NULL) {
                LOG_ERROR("Failure to allocate new buffer for encoding.");
                pthread_mutex_unlock(&this_vod.p_mutex);
@@ -509,7 +537,9 @@ void *video_next_thread(void *arg) {
 
             /* Get the preroll buffer from appsink */
             ret = gst_app_src_push_buffer(GST_APP_SRC(srcEncode), buffer);
-            this_vod.rgb_out_pixels[this_vod.buffer_num] = NULL;
+
+            /* Mark as processed */
+            this_vod.rgb_out_pixels[this_vod.read_index] = NULL;
 
             if (ret != GST_FLOW_OK) {
                LOG_ERROR("GST_FLOW error while pushing buffer: %d", ret);
@@ -517,8 +547,8 @@ void *video_next_thread(void *arg) {
                break;
             }
          }
-         clock_gettime(CLOCK_MONOTONIC, &end_time);
 
+         clock_gettime(CLOCK_MONOTONIC, &end_time);
          pthread_mutex_unlock(&this_vod.p_mutex);
       }
 

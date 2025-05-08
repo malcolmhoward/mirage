@@ -2196,9 +2196,9 @@ int main(int argc, char **argv)
                last_file_check = currTime;
             }
 
-            this_vod->rgb_out_pixels[!this_vod->buffer_num] =
+            this_vod->rgb_out_pixels[this_vod->write_index] =
                 malloc(window_width * RGB_OUT_SIZE * window_height);
-            if (this_vod->rgb_out_pixels[!this_vod->buffer_num] == NULL) {
+            if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
                LOG_ERROR("Unable to malloc rgb frame 0.");
                return (2);
             }
@@ -2208,9 +2208,12 @@ int main(int argc, char **argv)
 #endif
 
             if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
-                                     this_vod->rgb_out_pixels[!this_vod->buffer_num],
+                                     this_vod->rgb_out_pixels[this_vod->write_index],
                                      window_width * RGB_OUT_SIZE) != 0 ) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed: %s", SDL_GetError());
+               /* Free the buffer on failure */
+               free(this_vod->rgb_out_pixels[this_vod->write_index]);
+               this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
 #ifdef ENCODE_TIMING
             } else {
                stop = SDL_GetTicks();
@@ -2229,8 +2232,12 @@ int main(int argc, char **argv)
             pthread_mutex_lock(&this_vod->p_mutex);
             if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
                free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
+               this_vod->rgb_out_pixels[this_vod->buffer_num] = NULL;
             }
-            this_vod->buffer_num = !this_vod->buffer_num;
+
+            /* Rotate indices */
+            rotate_triple_buffer_indices(this_vod);
+
             pthread_mutex_unlock(&this_vod->p_mutex);
 
             if (get_recording_state() != DISABLED && get_video_out_thread() == 0) {
