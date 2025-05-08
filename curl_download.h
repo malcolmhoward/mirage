@@ -38,6 +38,16 @@ struct curl_data {
    pthread_mutex_t mutex;  // Added mutex to protect struct access
 };
 
+/**
+ * Thread function for downloading map images at regular intervals
+ *
+ * This function runs in a separate thread and periodically downloads
+ * map images from the URL specified in the curl_data struct. It stores
+ * the raw data and sets the 'updated' flag when new data is available.
+ *
+ * @param arg Pointer to a struct curl_data with URL and other parameters
+ * @return NULL when thread exits
+ */
 void *image_download_thread(void *arg);
 
 #endif // CURL_DOWNLOAD_H

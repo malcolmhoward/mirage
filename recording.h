@@ -38,9 +38,13 @@ typedef enum {
 typedef struct _video_out_data {
    DestinationType output;
    pthread_mutex_t p_mutex;
-   int buffer_num;
 
-   void *rgb_out_pixels[2];
+   /* Triple buffer indices */
+   int buffer_num;      /* Index for the buffer currently being used */
+   int read_index;      /* Index for the buffer being read from */
+   int write_index;     /* Index for the buffer being written to */
+
+   void *rgb_out_pixels[3];
 
    GstElement *pipeline;
 
@@ -101,5 +105,6 @@ void init_video_out_data(void);
 /* Cleanup the p_mutex in video_out_data at program exit */
 void cleanup_video_out_data(void);
  
+void rotate_triple_buffer_indices(video_out_data *vod);
 
 #endif /* RECORDING_H */
