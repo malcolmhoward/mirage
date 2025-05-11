@@ -442,40 +442,40 @@ int parse_json_command(char *command_string, char *topic)
       }
 
       if (strcmp(tmpstr, "hud") == 0) {
-   json_object_object_get_ex(parsed_json, "action", &tmpobj2);
-   if (tmpobj2 != NULL) {
-      tmpstr2 = json_object_get_string(tmpobj2);
+         json_object_object_get_ex(parsed_json, "action", &tmpobj2);
+         if (tmpobj2 != NULL) {
+            tmpstr2 = json_object_get_string(tmpobj2);
 
-      if (strcmp(tmpstr2, "switchHUD") == 0) {
-         json_object_object_get_ex(parsed_json, "hudName", &tmpobj);
-         if (tmpobj != NULL) {
-            const char *hudName = json_object_get_string(tmpobj);
+            if (strcmp(tmpstr2, "switchHUD") == 0) {
+               json_object_object_get_ex(parsed_json, "hudName", &tmpobj);
+               if (tmpobj != NULL) {
+                  const char *hudName = json_object_get_string(tmpobj);
 
-            /* Get transition type */
-            int transition_type = get_hud_manager()->transition_type; /* Default */
-            json_object_object_get_ex(parsed_json, "transitionType", &tmpobj);
-            if (tmpobj != NULL) {
-               if (json_object_get_type(tmpobj) == json_type_string) {
-                  const char *transition_name = json_object_get_string(tmpobj);
-                  transition_type = find_transition_by_name(transition_name);
-               } else {
-                  transition_type = json_object_get_int(tmpobj);
+                  /* Get transition type */
+                  int transition_type = get_hud_manager()->transition_type; /* Default */
+                  json_object_object_get_ex(parsed_json, "transitionType", &tmpobj);
+                  if (tmpobj != NULL) {
+                     if (json_object_get_type(tmpobj) == json_type_string) {
+                        const char *transition_name = json_object_get_string(tmpobj);
+                        transition_type = find_transition_by_name(transition_name);
+                     } else {
+                        transition_type = json_object_get_int(tmpobj);
+                     }
+                  }
+
+                  /* Get transition duration */
+                  int transition_duration_ms = get_hud_manager()->transition_duration_ms; /* Default */
+                  json_object_object_get_ex(parsed_json, "transitionDuration", &tmpobj);
+                  if (tmpobj != NULL) {
+                     transition_duration_ms = json_object_get_int(tmpobj);
+                  }
+
+                  /* Switch with the specified parameters */
+                  switch_to_hud(hudName, transition_type, transition_duration_ms);
                }
             }
-
-            /* Get transition duration */
-            int transition_duration_ms = get_hud_manager()->transition_duration_ms; /* Default */
-            json_object_object_get_ex(parsed_json, "transitionDuration", &tmpobj);
-            if (tmpobj != NULL) {
-               transition_duration_ms = json_object_get_int(tmpobj);
-            }
-
-            /* Switch with the specified parameters */
-            switch_to_hud(hudName, transition_type, transition_duration_ms);
          }
       }
-   }
-}
 
       /* Let's see if this device is from armor. */
       while (armor_element != NULL) {

@@ -19,15 +19,15 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-#include "SDL2/SDL.h"
+#include "config_manager.h"
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
-#include "config_manager.h"
 
 /* Global HUD manager instance */
 static hud_manager hud_mgr = {

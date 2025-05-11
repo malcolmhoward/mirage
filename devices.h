@@ -22,8 +22,6 @@
 #ifndef DEVICES_H
 #define DEVICES_H
 
-#include "defines.h"
-
 /* Motion Object */
 typedef struct _motion {
    int format;

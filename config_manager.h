@@ -22,7 +22,6 @@
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 
-#include "SDL2/SDL.h"
 #include "config_parser.h"
 
 /* Variables for display settings */

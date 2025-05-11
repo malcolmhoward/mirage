@@ -22,9 +22,6 @@
 #ifndef ENVIRONMENTAL_ELEMENT_H
 #define ENVIRONMENTAL_ELEMENT_H
 
-#include "SDL2/SDL.h"
-#include "config_parser.h"
-
 /**
  * @brief Renders the environmental panel element
  * 
