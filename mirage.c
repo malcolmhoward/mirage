@@ -1490,8 +1490,8 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
    }
 
+   /* This is a safe guard to protect SDL, since it's not thread safe. */
    main_thread_id = SDL_ThreadID();
-   printf("Main thread ID set to: %lu", (unsigned long)main_thread_id);
 
    if (getcwd(record_path, sizeof(record_path)) == NULL) {
       fprintf(stderr, "getcwd() error!");

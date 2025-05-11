@@ -22,7 +22,6 @@
 #ifndef HUD_MANAGER_H
 #define HUD_MANAGER_H
 
-#include "SDL2/SDL.h"
 #include "config_parser.h"
 
 /* Transition type constants */

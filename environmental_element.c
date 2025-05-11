@@ -25,9 +25,9 @@
  * Optimized with SDL2_gfx
  */
 
-#include "SDL2/SDL.h"
-#include "SDL2/SDL2_gfxPrimitives.h"
 #include <math.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "config_manager.h"
 #include "config_parser.h"

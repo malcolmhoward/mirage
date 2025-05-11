@@ -22,7 +22,6 @@
 #ifndef ELEMENT_RENDERER_H
 #define ELEMENT_RENDERER_H
 
-#include "SDL2/SDL.h"
 #include "config_parser.h"
 #include "hud_manager.h"
 

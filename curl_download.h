@@ -22,8 +22,6 @@
 #ifndef CURL_DOWNLOAD_H
 #define CURL_DOWNLOAD_H
 
-#include "defines.h"
-
 /* Curl Image Download Data */
 struct curl_data {
    char url[512];
