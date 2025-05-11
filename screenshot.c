@@ -165,15 +165,6 @@ int request_screenshot(int with_overlay, int full_resolution,
 
 /**
  * Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer.
- * Uses a double-buffered approach with PBOs for improved performance.
- *
- * @param renderer  Pointer to the SDL_Renderer (must be using an OpenGL backend).
- * @param rect      Optional rectangle specifying the area to read.
- * @param format    SDL pixel format.
- * @param pixels    Pointer to the user-allocated buffer for storing the pixels.
- * @param pitch     Byte pitch (row stride) of the user buffer.
- *
- * @return 0 on success, 1 on failure.
  */
 int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
                                 const SDL_Rect *rect,
