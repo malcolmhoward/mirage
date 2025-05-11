@@ -1521,7 +1521,6 @@ int main(int argc, char **argv)
          break;
       case 'f':
          fullscreen = 1;
-         sdl_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 
          if (SDL_GetDesktopDisplayMode(0, &desktop_mode) != 0) {
             fprintf(stderr, "SDL_GetDesktopDisplayMode failed: %s\n", SDL_GetError());
@@ -1712,7 +1711,8 @@ int main(int argc, char **argv)
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
    if ((window =
         SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                         window_width, window_height, sdl_flags)) == NULL) {
+                         native_width, native_height,
+                         sdl_flags)) == NULL) {
       SDL_Log("SDL_CreateWindow() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
@@ -1739,11 +1739,6 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
    }
 
-   init_pbo_system();
-   set_screenshot_recording_path(record_path);
-   set_video_recording_path(record_path);
-   init_video_out_data();
-
 #ifdef REFRESH_SYNC
    if ((renderer =
         SDL_CreateRenderer(window, -1,
@@ -1754,6 +1749,16 @@ int main(int argc, char **argv)
       SDL_Log("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
+
+   // Set the logical size to your native resolution
+   if (SDL_RenderSetLogicalSize(renderer, native_width, native_height) != 0) {
+      SDL_Log("Could not set logical size: %s", SDL_GetError());
+   }
+
+   init_pbo_system();
+   set_screenshot_recording_path(record_path);
+   set_video_recording_path(record_path);
+   init_video_out_data();
 
    /* Init detect array */
    for (int j = 0; j < MAX_DETECT; j++) {
@@ -1770,18 +1775,9 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
    }
 
-   /* Now that we've parsed the config, set the window size to requested. */
-   window_width = this_hds->eye_output_width * 2;
-   window_height = this_hds->eye_output_height;
-   SDL_SetWindowSize(window, window_width, window_height);
-
-   // Set the logical size to your native resolution
-   if (SDL_RenderSetLogicalSize(renderer, this_hds->eye_output_width * 2, this_hds->eye_output_height) != 0) {
-      SDL_Log("Could not set logical size: %s", SDL_GetError());
-   }
-
    /* Video Setup */
    if (fullscreen) {
+      SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
       SDL_ShowCursor(0);
    }
 
@@ -2050,6 +2046,14 @@ int main(int argc, char **argv)
                 window_height = newHeight;
                 pthread_mutex_unlock(&windowSizeMutex);
 
+                // If not in fullscreen mode, update logical size to maintain aspect ratio
+                if (!fullscreen) {
+                   float aspect = (float)(native_width) / (float)(native_height);
+                   if (SDL_RenderSetLogicalSize(renderer, newWidth, (int)(newWidth / aspect)) != 0) {
+                      LOG_WARNING("Could not update logical size: %s", SDL_GetError());
+                   }
+                }
+
                 LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
             }
             break;
@@ -2210,7 +2214,7 @@ int main(int argc, char **argv)
             if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
                                      this_vod->rgb_out_pixels[this_vod->write_index],
                                      window_width * RGB_OUT_SIZE) != 0 ) {
-               LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed: %s", SDL_GetError());
+               LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
                /* Free the buffer on failure */
                free(this_vod->rgb_out_pixels[this_vod->write_index]);
                this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
