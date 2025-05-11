@@ -86,7 +86,14 @@ typedef struct _element {
    int enabled;
 
    char name[MAX_TEXT_LENGTH];
-   char hud_flags[MAX_HUDS];   /* Bitmap of HUD memberships (1 = belongs to that HUD) */
+   /**
+    * Bitmap of HUD memberships.
+    * Each bit in this array represents membership in a specific HUD.
+    * - A value of 1 indicates that the element belongs to the corresponding HUD.
+    * - A value of 0 indicates that the element does not belong to the corresponding HUD.
+    * The maximum number of HUDs is defined by the MAX_HUDS constant from defines.h.
+    */
+   char hud_flags[MAX_HUDS];
    char hotkey[2];   /* Hotkey to enable/disable element */
 
    /* Static and animated graphics */

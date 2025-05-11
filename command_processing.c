@@ -460,6 +460,10 @@ int parse_json_command(char *command_string, char *topic)
                         transition_type = find_transition_by_name(transition_name);
                      } else {
                         transition_type = json_object_get_int(tmpobj);
+                        if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
+                           LOG_WARNING("Invalid transition type %d in JSON command, using default", transition_type);
+                           transition_type = get_hud_manager()->transition_type; // Fall back to default
+                        }
                      }
                   }
 
