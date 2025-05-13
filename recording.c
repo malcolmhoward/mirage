@@ -421,6 +421,20 @@ void *video_next_thread(void *arg) {
 
    this_vod.pipeline = pipeline;
 
+   // Enable latency adjustment for better AV sync
+   gst_pipeline_set_auto_flush_bus(GST_PIPELINE(pipeline), TRUE);
+   gst_pipeline_set_latency(GST_PIPELINE(pipeline), 100 * GST_MSECOND); // Adjust latency as needed
+
+   // Add clock management for better AV sync
+   GstClock *system_clock = gst_system_clock_obtain();
+   if (system_clock != NULL) {
+      LOG_INFO("Setting pipeline to use system clock");
+      gst_pipeline_use_clock(GST_PIPELINE(pipeline), system_clock);
+      // Don't unref the clock here - pipeline will use it
+   } else {
+      LOG_WARNING("Failed to obtain system clock");
+   }
+
    bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
    guint bus_watch_id = gst_bus_add_watch(bus, bus_message_handler, &this_vod);
    gst_object_unref(bus);
@@ -465,10 +479,7 @@ void *video_next_thread(void *arg) {
 
       // Flow control
       "emit-signals", TRUE,             // Emit signals for flow control
-      "min-percent", 30,                // Signal "need-data" when buffer < 30%
 
-      // Buffer management
-      "max-bytes", 0,                   // No limit on queue size (0 = unlimited)
       NULL);
 
    state_ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
@@ -478,27 +489,7 @@ void *video_next_thread(void *arg) {
       return NULL;
    }
    else if (state_ret == GST_STATE_CHANGE_ASYNC) {
-      // Wait for state change with timeout
-      GstState state, pending;
-      LOG_INFO("Pipeline state change is ASYNC - waiting for completion...");
-
-      // Give the pipeline up to 2 seconds to change state
-      state_ret = gst_element_get_state(pipeline, &state, &pending, 2 * GST_SECOND);
-
-      if (state_ret == GST_STATE_CHANGE_FAILURE) {
-         LOG_ERROR("Failed to complete state change to PLAYING");
-         cleanup_pipeline(pipeline, srcEncode, bus);
-         return NULL;
-      }
-      else if (state_ret == GST_STATE_CHANGE_ASYNC) {
-         LOG_WARNING("Pipeline is still changing state after timeout - proceeding anyway");
-      }
-      else if (state_ret == GST_STATE_CHANGE_NO_PREROLL) {
-         LOG_INFO("Pipeline changed to PLAYING state (no preroll)");
-      }
-      else {
-         LOG_INFO("Pipeline successfully changed to PLAYING state");
-      }
+      LOG_INFO("Pipeline state change is ASYNC - waiting for data...");
    }
 
    pipeline_clock = gst_element_get_clock(pipeline);

@@ -210,7 +210,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #endif
 
 #define GST_PIPE_INPUT      "appsrc name=srcEncode ! " \
-                           "video/x-raw, width=(int)%d, height=(int)%d, format=(string)RGBA, framerate=(fraction)%d/1 ! "
+                           "video/x-raw, width=(int)%d, height=(int)%d, format=(string)RGBA, framerate=(fraction)%d/1 ! queue max-size-buffers=30 ! clocksync ! "
 
 /* === VIDEO PROCESSING COMPONENTS === */
 #ifdef PLATFORM_JETSON
@@ -278,13 +278,11 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 /* === AUDIO COMPONENTS === */
 #define GST_PIPE_AUDIO         "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
-                               "audioconvert ! voaacenc bitrate=128000 ! " \
-                               "queue max-size-time=500000000 min-threshold-time=200000000 leaky=2 ! mux."
+                               "audioconvert ! voaacenc bitrate=128000 ! queue ! mux."
 
-#define GST_PIPE_AUDIO_YOUTUBE "pulsesrc device=%s do-timestamp=true ! " \
+#define GST_PIPE_AUDIO_YOUTUBE "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
-                               "audioconvert ! voaacenc bitrate=128000 ! " \
-                               "aacparse ! queue leaky=2 ! mux."
+                               "audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux."
 
 /* === MUXER COMPONENTS === */
 #ifdef MKV_OUT

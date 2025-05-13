@@ -646,10 +646,7 @@ int play_intro(int frames, int clear, int *finished)
    SDL_Rect dst_rect_l, dst_rect_r;
    int frame_count = 0;
 
-   hud_display_settings *this_hds = get_hud_display_settings();
    video_out_data *this_vod = get_video_out_data();
-
-   pthread_t vid_out_thread = get_video_out_thread();
 
 #ifdef ENCODE_TIMING
    int cur_time = 0, max_time = 0, min_time = 0, weight = 0;
@@ -704,19 +701,21 @@ int play_intro(int frames, int clear, int *finished)
          Uint32 start = 0, stop = 0;
 #endif
 
-         this_vod->rgb_out_pixels[!this_vod->buffer_num] =
-             malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
-         if (this_vod->rgb_out_pixels[!this_vod->buffer_num] == NULL) {
+         this_vod->rgb_out_pixels[this_vod->write_index] =
+             malloc(window_width * RGB_OUT_SIZE * window_height);
+         if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
             LOG_ERROR("Unable to malloc rgb frame 0.");
             return 2;
          }
 #ifdef ENCODE_TIMING
          start = SDL_GetTicks();
 #endif
-         if (SDL_RenderReadPixels(renderer, NULL, PIXEL_FORMAT_OUT,
-                                  this_vod->rgb_out_pixels[!this_vod->buffer_num],
-                                  this_hds->eye_output_width * 2 * RGB_OUT_SIZE) != 0) {
-            LOG_ERROR("SDL_RenderReadPixels() failed: %s", SDL_GetError());
+         if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
+                                  this_vod->rgb_out_pixels[this_vod->write_index],
+                                  window_width * RGB_OUT_SIZE) != 0) {
+            LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
+            free(this_vod->rgb_out_pixels[this_vod->write_index]);
+            this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
 #ifdef ENCODE_TIMING
          } else {
             stop = SDL_GetTicks();
@@ -727,7 +726,7 @@ int play_intro(int frames, int clear, int *finished)
                max_time = cur_time;
             if ((cur_time < min_time) || (min_time == 0))
                min_time = cur_time;
-            LOG_INFO("SDL_RenderReadPixels(): %0.2f ms, min: %d, max: %d. weight: %d",
+            LOG_INFO("OpenGL_RenderReadPixelsAsync(): %0.2f ms, min: %d, max: %d. weight: %d",
                    avg_time, min_time, max_time, weight);
 #endif
          }
@@ -735,14 +734,18 @@ int play_intro(int frames, int clear, int *finished)
          pthread_mutex_lock(&this_vod->p_mutex);
          if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
             free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
+            this_vod->rgb_out_pixels[this_vod->buffer_num] = NULL;
          }
-         this_vod->buffer_num = !this_vod->buffer_num;
+         rotate_triple_buffer_indices(this_vod);
          pthread_mutex_unlock(&this_vod->p_mutex);
 
-         if (vid_out_thread == 0) {
-            if (pthread_create(&vid_out_thread, NULL, video_next_thread, NULL) != 0) {
+         if (get_video_out_thread() == 0) {
+            pthread_t thread_id;
+            if (pthread_create(&thread_id, NULL, video_next_thread, NULL) != 0) {
                LOG_ERROR("Error creating video output thread.");
                set_recording_state(DISABLED);
+            } else {
+               set_video_out_thread(thread_id);
             }
          }
       }
@@ -1244,7 +1247,7 @@ void mqttTextToSpeech(const char *text) {
             text);
 
    if (mosq == NULL) {
-      LOG_ERROR("MQTT not initialized.");
+      LOG_ERROR("MQTT not initialized trying to send: \"%s\"", text);
    } else {
       rc = mosquitto_publish(mosq, NULL, "dawn", strlen(mqtt_command), mqtt_command, 0, false);
       if (rc != MOSQ_ERR_SUCCESS) {
@@ -1269,82 +1272,6 @@ void mqttSendMessage(const char *topic, const char *text) {
          LOG_INFO("Successfully send via MQTT: %s", text);
       }
    }
-}
-
-/**
- * @brief Computes the scaled window size while maintaining the original aspect ratio.
- *
- * This function calculates the appropriate window width and height based on the current desktop
- * resolution and the native resolution of the application. It ensures that the window size fits
- * within the desktop dimensions without distorting the original aspect ratio.
- *
- * This function was created to make sure full screen is actually full screen.
- *
- * @param desktop_width  The width of the desktop display in pixels.
- * @param desktop_height The height of the desktop display in pixels.
- * @param native_width   The native width of the application window in pixels.
- * @param native_height  The native height of the application window in pixels.
- * @param l_window_width  Pointer to an integer where the computed window width will be stored.
- * @param l_window_height Pointer to an integer where the computed window height will be stored.
- *
- * @return
- * - `0` on successful computation.
- * - `1` if an error occurs (e.g., invalid parameters).
- *
- * @note
- * - The function compares the aspect ratios of the desktop and native resolutions to determine
- *   whether to scale based on width or height.
- * - It ensures that the resulting window size does not exceed the desktop resolution.
- *
- * @warning
- * - Both `l_window_width` and `l_window_height` must be valid, non-null pointers.
- * - Ensure that `native_width` and `native_height` are greater than zero to avoid division by zero.
- *
- * @example
- * @code
- * int desktopW = 1920;
- * int desktopH = 1080;
- * int nativeW = 2880;
- * int nativeH = 1440;
- * int scaledW, scaledH;
- *
- * if (computeScaledWindowSize(desktopW, desktopH, nativeW, nativeH, &scaledW, &scaledH) == 0) {
- *     // Proceed with using scaledW and scaledH
- * } else {
- *     // Handle the error
- * }
- * @endcode
- */
-int computeScaledWindowSize(int desktop_width, int desktop_height,
-                            int native_width, int native_height,
-                            int* l_window_width, int* l_window_height) {
-   // Validate pointer parameters
-   if (l_window_width == NULL || l_window_height == NULL) {
-      fprintf(stderr, "Error: l_window_width and l_window_height pointers must not be NULL.\n");
-      return 1;
-   }
-
-   // Validate native dimensions
-   if (desktop_width <= 0 || desktop_height <= 0 || native_width <= 0 || native_height <= 0) {
-      fprintf(stderr, "Error: All passed widths and heights must be greater than zero.\n");
-      return 1;
-   }
-
-   // Calculate aspect ratios
-   float native_aspect = (float)native_width / (float)native_height;
-   float desktop_aspect = (float)desktop_width / (float)desktop_height;
-
-   if (desktop_aspect > native_aspect) {
-      // Desktop is wider than native aspect ratio
-      *l_window_height = desktop_height;
-      *l_window_width = (int)(desktop_height * native_aspect);
-   } else {
-      // Desktop is taller or equal to native aspect ratio
-      *l_window_width = desktop_width;
-      *l_window_height = (int)(desktop_width / native_aspect);
-   }
-
-   return 0; // Success
 }
 
 void display_help(int argc, char *argv[]) {
@@ -1381,8 +1308,6 @@ int main(int argc, char **argv)
 
    /* Graphics */
    SDL_Window *window = NULL;
-   SDL_DisplayMode desktop_mode;
-   int desktop_width = 0, desktop_height = 0;
    window_width = this_hds->eye_output_width * 2;
    window_height = this_hds->eye_output_height;
    int native_width = this_hds->eye_output_width * 2;
@@ -1398,6 +1323,7 @@ int main(int argc, char **argv)
    int fullscreen = 0;
    char record_path[PATH_MAX];   /* Where do we store recordings? */
    int no_camera_mode = 0;       /* Flag to enable no camera mode */
+   DestinationType initial_recording_state = DISABLED;
 
    /* Threads */
    pthread_t thread_handles[NUM_AUDIO_THREADS];
@@ -1522,21 +1448,6 @@ int main(int argc, char **argv)
       case 'f':
          fullscreen = 1;
 
-         if (SDL_GetDesktopDisplayMode(0, &desktop_mode) != 0) {
-            fprintf(stderr, "SDL_GetDesktopDisplayMode failed: %s\n", SDL_GetError());
-            SDL_Quit();
-            return EXIT_FAILURE;
-         }
-
-         desktop_width = desktop_mode.w;
-         desktop_height = desktop_mode.h;
-
-         if (computeScaledWindowSize(desktop_width, desktop_height, native_width, native_height,
-                                     &window_width, &window_height) == 1) {
-            fprintf(stderr, "computeScaledWindowSize() failed!\n");
-            return EXIT_FAILURE;
-         }
-
          break;
       case 'h':
          display_help(argc, argv);
@@ -1591,19 +1502,13 @@ int main(int argc, char **argv)
          snprintf(record_path, 256, "%s", optarg);
          break;
       case 'r':
-         if (get_recording_state() == DISABLED) {
-            set_recording_state(RECORD);
-         }
+         initial_recording_state = RECORD;
          break;
       case 's':
-         if (get_recording_state() == DISABLED) {
-            set_recording_state(STREAM);
-         }
+         initial_recording_state = STREAM;
          break;
       case 't':
-         if (get_recording_state() == DISABLED) {
-            set_recording_state(RECORD_STREAM);
-         }
+         initial_recording_state = RECORD_STREAM;
          break;
       case 'u':
          usb_enable = 1;
@@ -1699,36 +1604,43 @@ int main(int argc, char **argv)
 #endif
 
    if (IMG_Init(IMG_INIT_PNG) < 0) {
-      SDL_Log("Error initializing SDL_image: %s\n", IMG_GetError());
+      LOG_ERROR("Error initializing SDL_image: %s\n", IMG_GetError());
       return EXIT_FAILURE;
    }
 
    if (TTF_Init() < 0) {
-      SDL_Log("Error initializing SDL_ttf: %s\n", TTF_GetError());
+      LOG_ERROR("Error initializing SDL_ttf: %s\n", TTF_GetError());
       return EXIT_FAILURE;
    }
 
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
+   // Create window with native dimensions
    if ((window =
         SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                          native_width, native_height,
                          sdl_flags)) == NULL) {
-      SDL_Log("SDL_CreateWindow() failed: %s\n", SDL_GetError());
+      LOG_ERROR("SDL_CreateWindow() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
+   }
+
+   // Apply fullscreen immediately if requested
+   if (fullscreen) {
+      SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+      SDL_ShowCursor(0);
+      SDL_GetWindowSize(window, &window_width, &window_height);
    }
 
    // Create GL context
    SDL_GLContext glContext = SDL_GL_CreateContext(window);
    if (!glContext) {
       LOG_ERROR("Failed to create GL context: %s", SDL_GetError());
-      // Handle error ...
       return EXIT_FAILURE;
    }
 
    // Make the context current
    if (SDL_GL_MakeCurrent(window, glContext) < 0) {
       LOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
-      // Handle error ...
       return EXIT_FAILURE;
    }
 
@@ -1746,7 +1658,7 @@ int main(int argc, char **argv)
 #else
    if ((renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)) == NULL) {
 #endif
-      SDL_Log("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
+      LOG_ERROR("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
 
@@ -1773,12 +1685,6 @@ int main(int argc, char **argv)
    if (parse_json_config(config_file) == FAILURE) {
       LOG_ERROR("Failed to parse config file. Exiting.");
       return EXIT_FAILURE;
-   }
-
-   /* Video Setup */
-   if (fullscreen) {
-      SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-      SDL_ShowCursor(0);
    }
 
 #ifndef ORIGINAL_RATIO
@@ -1814,7 +1720,6 @@ int main(int argc, char **argv)
    /* Draw a background pattern in case the image has transparency */
    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-   //SDL_RenderClear(renderer);
 
    gst_init(&argc, &argv);
 
@@ -1847,6 +1752,10 @@ int main(int argc, char **argv)
    /* Start processing MQTT events. */
    mosquitto_loop_start(mosq);
    /* End Setup */
+
+   if (initial_recording_state != DISABLED) {
+      set_recording_state(initial_recording_state);
+   }
 
    if (intro_element.enabled) {
       play_intro(15, 1, NULL);
@@ -1966,6 +1875,7 @@ int main(int argc, char **argv)
                      SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
                      SDL_ShowCursor(0);
                   }
+                  SDL_GetWindowSize(window, &window_width, &window_height);
                   fullscreen = !fullscreen;
                }
                break;
@@ -2045,14 +1955,6 @@ int main(int argc, char **argv)
                 window_width = newWidth;
                 window_height = newHeight;
                 pthread_mutex_unlock(&windowSizeMutex);
-
-                // If not in fullscreen mode, update logical size to maintain aspect ratio
-                if (!fullscreen) {
-                   float aspect = (float)(native_width) / (float)(native_height);
-                   if (SDL_RenderSetLogicalSize(renderer, newWidth, (int)(newWidth / aspect)) != 0) {
-                      LOG_WARNING("Could not update logical size: %s", SDL_GetError());
-                   }
-                }
 
                 LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
             }
