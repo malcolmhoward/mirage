@@ -995,10 +995,6 @@ int parse_json_config(char *filename)
                         curr_element->dst_rect.y = curr_element->dest_y;
                         curr_element->dst_rect.w = curr_element->width;
                         curr_element->dst_rect.h = curr_element->height;
-
-                        LOG_INFO("Parsed environmental panel element (%dx%d at %d,%d)",
-                                 curr_element->width, curr_element->height,
-                                 curr_element->dest_x, curr_element->dest_y);
                      }
 
                      /* Add the element to the element list */

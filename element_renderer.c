@@ -42,6 +42,7 @@
 #include "devices.h"
 #include "element_renderer.h"
 #include "environmental_element.h"
+#include "fan_monitoring.h"
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
@@ -63,64 +64,6 @@ extern alert_t active_alerts;
 extern const struct Alert alert_messages[];
 
 extern double averageFrameRate;
-
-/* Fan monitoring functions */
-static FILE *fan_file = NULL;
-static int fan_file_error = 0;
-
-/**
- * Initializes the fan monitoring system
- * @return 0 on success, non-zero on failure
- */
-int init_fan_monitoring(void) {
-    if (fan_file != NULL) {
-        return 0;  // Already initialized
-    }
-
-    fan_file = fopen(FAN_RPM_FILE, "r");
-    if (fan_file == NULL) {
-        LOG_ERROR("Unable to open fan file %s: %s", FAN_RPM_FILE, strerror(errno));
-        fan_file_error = 1;
-        return 1;
-    }
-
-    return 0;
-}
-
-/**
- * Gets the current fan speed as a percentage of maximum
- * @return Fan speed percentage (0-100), or -1 on error
- */
-int get_fan_percentage(void) {
-    char fanstr[6] = "";
-    int fan_rpm = 0;
-    float fan_pct = 0.0;
-
-    if (fan_file_error || fan_file == NULL) {
-        return -1;
-    }
-
-    rewind(fan_file);
-    if (fread(fanstr, 1, 5, fan_file) > 0) {
-        fan_rpm = atoi(fanstr);
-        fan_pct = ((float)fan_rpm / FAN_MAX_RPM) * 100.0;
-        return (int)fan_pct;
-    } else {
-        LOG_WARNING("Failed to read fan data");
-        return -1;
-    }
-}
-
-/**
- * Cleans up fan monitoring resources
- */
-void cleanup_fan_monitoring(void) {
-    if (fan_file != NULL) {
-        fclose(fan_file);
-        fan_file = NULL;
-    }
-    fan_file_error = 0;
-}
 
 /* Reset alpha values for all textures of an element */
 static void reset_texture_alpha(element *curr_element) {
@@ -373,12 +316,12 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->humidity);
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
       // Initialize fan monitoring if not already done
-      if (fan_file == NULL && !fan_file_error) {
+      if (fan_file == NULL) {
          init_fan_monitoring();
       }
 
       // Get fan percentage and format text
-      int fan_percent = get_fan_percentage();
+      int fan_percent = get_fan_load_percent();
       snprintf(render_text, MAX_TEXT_LENGTH, "%03d", fan_percent);
    } else if (strcmp("*LATLON*", curr_element->text) == 0) {
       if (this_gps->latitudeDegrees != 0.0) {
