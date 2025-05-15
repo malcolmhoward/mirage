@@ -76,8 +76,7 @@ typedef enum {
    ANIMATED_DYNAMIC,
    TEXT,
    SPECIAL,
-   ARMOR_COMPONENT,
-   ENVIRONMENTAL_PANEL
+   ARMOR_COMPONENT
 } element_t;
 
 /* Parent data type for all UI elements. Not all fields are used for all types. */

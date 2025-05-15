@@ -81,6 +81,11 @@ static void reset_texture_alpha(element *curr_element) {
       SDL_SetTextureAlphaMod(curr_element->texture_w, 255);
    if (curr_element->texture_p)
       SDL_SetTextureAlphaMod(curr_element->texture_p, 255);
+
+   /* For text elements, also reset the font color alpha */
+   if (curr_element->type == TEXT) {
+      curr_element->font_color.a = 255;
+   }
 }
 
 /**
@@ -309,11 +314,33 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*MEM*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_mem_usage());
    } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f C", this_enviro->temp);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f C", this_enviro->temp);
    } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f F", this_enviro->temp * 9/5 + 32.0);
    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->humidity);
+
+   } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
+   } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->air_quality_description);
+   } else if (strcmp("*TVOC*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->tvoc_ppb);
+   } else if (strcmp("*ECO2*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->eco2_ppm);
+   } else if (strcmp("*CO2*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->co2_ppm);
+   } else if (strcmp("*CO2QUALITY*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_quality_description);
+   } else if (strcmp("*CO2ECO2DIFF*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03d", this_enviro->co2_eco2_diff);
+   } else if (strcmp("*CO2SOURCEANALYSIS*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_source_analysis);
+   } else if (strcmp("*HEATINDEX_C*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
+   } else if (strcmp("*DEWPOINT*", curr_element->text) == 0) {
+      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
+
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
       // Initialize fan monitoring if not already done
       if (fan_file == NULL) {
@@ -1095,9 +1122,6 @@ void render_element(element *curr_element) {
       case SPECIAL:
          render_special_element(curr_element);
          break;
-      case ENVIRONMENTAL_PANEL:
-         render_environmental_panel_element(curr_element);
-         break;
       default:
          LOG_ERROR("Unknown element type: %d", curr_element->type);
          break;
@@ -1272,114 +1296,113 @@ void render_hud_elements(void) {
                     }
                     break;
 
-						case TRANSITION_SLIDE_LEFT: {
-							 int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+               case TRANSITION_SLIDE_LEFT: {
+                  int from_offset = (int)(-(hud_mgr->transition_progress) * this_hds->eye_output_width);
+                  int to_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
 
-							 /* First, render the shared elements that appear in both HUDs normally */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element(curr_element);
-								  }
-								  curr_element = curr_element->next;
-							 }
+                  /* First, render the shared elements that appear in both HUDs normally */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element(curr_element);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-							 /* Then render "from" HUD sliding left (only elements not in new HUD) */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										!curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element_with_slide(curr_element, -slide_offset, 0);
-								  }
-								  curr_element = curr_element->next;
-							 }
+                  /* Then render "from" HUD sliding left (only elements not in new HUD) */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_slide(curr_element, from_offset, 0);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-							 /* Finally render "to" HUD sliding in from right (only elements not in old HUD) */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element_with_slide(curr_element,
-											 this_hds->eye_output_width - slide_offset, 0);
-								  }
-								  curr_element = curr_element->next;
-							 }
-							 break;
-						}
+                  /* Finally render "to" HUD sliding in from right (only elements not in old HUD) */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_slide(curr_element, to_offset, 0);
+                     }
+                     curr_element = curr_element->next;
+                  }
+                  break;
+               }
 
-						case TRANSITION_SLIDE_RIGHT: {
-							 int slide_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+               case TRANSITION_SLIDE_RIGHT: {
+                  int from_offset = (int)((hud_mgr->transition_progress) * this_hds->eye_output_width);
+                  int to_offset = (int)(-(1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
 
-							 /* First, render the shared elements that appear in both HUDs normally */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element(curr_element);
-								  }
-								  curr_element = curr_element->next;
-							 }
+                  /* First, render the shared elements that appear in both HUDs normally */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element(curr_element);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-							 /* Then render "from" HUD sliding right (only elements not in new HUD) */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										!curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element_with_slide(curr_element, slide_offset, 0);
-								  }
-								  curr_element = curr_element->next;
-							 }
+                  /* Then render "from" HUD sliding right (only elements not in new HUD) */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_slide(curr_element, from_offset, 0);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-							 /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
-							 curr_element = first_element;
-							 while (curr_element != NULL) {
-								  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-										curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-										render_element_with_slide(curr_element,
-											 -this_hds->eye_output_width + slide_offset, 0);
-								  }
-								  curr_element = curr_element->next;
-							 }
-							 break;
-						}
+                  /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_slide(curr_element, to_offset, 0);
+                     }
+                     curr_element = curr_element->next;
+                  }
+                  break;
+               }
 
-                case TRANSITION_ZOOM: {
-                    float from_scale = 1.0f + hud_mgr->transition_progress;
-                    float to_scale = 2.0f - hud_mgr->transition_progress;
+               case TRANSITION_ZOOM: {
+                  float from_scale = 1.0f + hud_mgr->transition_progress;
+                  float to_scale = 2.0f - hud_mgr->transition_progress;
 
-                    /* Render elements from previous HUD zooming out */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element_with_scale(curr_element, from_scale, from_alpha);
-                        }
-                        curr_element = curr_element->next;
-                    }
+                  /* Render elements from previous HUD zooming out */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_scale(curr_element, from_scale, from_alpha);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-                    /* Render elements from new HUD zooming in */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element_with_scale(curr_element, to_scale, to_alpha);
-                        }
-                        curr_element = curr_element->next;
-                    }
+                  /* Render elements from new HUD zooming in */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element_with_scale(curr_element, to_scale, to_alpha);
+                     }
+                     curr_element = curr_element->next;
+                  }
 
-                    /* Render elements that are in both HUDs normally */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element(curr_element);
-                        }
-                        curr_element = curr_element->next;
-                    }
-                    break;
-                }
-
+                  /* Render elements that are in both HUDs normally */
+                  curr_element = first_element;
+                  while (curr_element != NULL) {
+                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                        render_element(curr_element);
+                     }
+                     curr_element = curr_element->next;
+                  }
+                  break;
+               }
             }
 
             /* Reset all texture alphas after transition rendering */

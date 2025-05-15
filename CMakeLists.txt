@@ -69,7 +69,6 @@ set(SOURCE_FILES
     detect.cpp
     devices.c
     element_renderer.c
-    environmental_element.c
     fan_monitoring.c
     frame_rate_tracker.c
     hud_manager.c

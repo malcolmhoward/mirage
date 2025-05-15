@@ -157,7 +157,7 @@
          "dest_y": 872,
          "angle": 0,
          "layer": 2,
-         "huds": ["default", "environmental"]
+         "huds": ["default"]
       },
       {
          "name": "map",
@@ -171,7 +171,7 @@
          "halign": "left",
          "angle": 0,
          "layer": 3,
-         "huds": ["default", "environmental"]
+         "huds": ["default"]
       },
       {
          "type": "static",
@@ -379,15 +379,103 @@
          "huds": ["default", "environmental"]
       },
       {
-         "type": "environmental_panel",
-         "font": "devgothic.ttf",
-         "color": "0x75, 0xCE, 0xFA, 0xFF",
-         "dest_x": 165,
-         "dest_y": 300,
-         "width": 600,
-         "height": 400,
+         "type": "static",
+         "file": "IronMan-UI-Enviro-Temp.png",
+         "dest_x": 50,
+         "dest_y": 250,
          "angle": 0,
-         "layer": 2,
+         "layer": 0,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "HUMIDITY",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0x02, 0xDF, 0xF1, 0xFF",
+         "size": 24,
+         "dest_x": 135,
+         "dest_y": 405,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "HEAT INDEX",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0xF2, 0x92, 0x0F, 0xFF",
+         "size": 24,
+         "dest_x": 135,
+         "dest_y": 458,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "DEW POINT",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0x02, 0xDF, 0xF1, 0xFF",
+         "size": 24,
+         "dest_x": 135,
+         "dest_y": 520,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "*HELMTEMP*",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0x02, 0xDF, 0xF1, 0xFF",
+         "size": 56,
+         "dest_x": 135,
+         "dest_y": 305,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "*HELMHUM*",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0xFF, 0xFF, 0xFF, 0xFF",
+         "size": 38,
+         "dest_x": 260,
+         "dest_y": 402,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "*HEATINDEX_C*",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0xFF, 0xFF, 0xFF, 0xFF",
+         "size": 38,
+         "dest_x": 240,
+         "dest_y": 482,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
+         "huds": ["environmental"]
+      },
+      {
+         "type": "text",
+         "string": "*DEWPOINT*",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0xFF, 0xFF, 0xFF, 0xFF",
+         "size": 38,
+         "dest_x": 240,
+         "dest_y": 545,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
          "huds": ["environmental"]
       }
    ],

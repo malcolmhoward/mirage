@@ -953,48 +953,6 @@ int parse_json_config(char *filename)
                               }
                            }
                         }
-                     /* ENVIRONMENTAL */
-                     } else if (strcmp("environmental_panel", element_type) == 0) {
-                        curr_element->type = ENVIRONMENTAL_PANEL;
-
-                        /* Parse common properties */
-                        parse_common_element_properties(tmpobj2, curr_element);
-
-                        /* Font properties for special elements that need text rendering */
-                        json_object_object_get_ex(tmpobj2, "font", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           snprintf(curr_element->font, MAX_FILENAME_LENGTH * 2,
-                                    "%s/%s", get_font_path(), json_object_get_string(tmpobj3));
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "color", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
-                           parse_color(tmpstr, &curr_element->font_color.r,
-                                       &curr_element->font_color.g, &curr_element->font_color.b,
-                                       &curr_element->font_color.a);
-                        }
-
-                        /* Set default dimensions if not specified */
-                        json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           curr_element->width = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->width = 600; /* Default width */
-                        }
-
-                        json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
-                        if (tmpobj3 != NULL) {
-                           curr_element->height = json_object_get_int(tmpobj3);
-                        } else {
-                           curr_element->height = 400; /* Default height */
-                        }
-
-                        /* Setup destination rectangle */
-                        curr_element->dst_rect.x = curr_element->dest_x;
-                        curr_element->dst_rect.y = curr_element->dest_y;
-                        curr_element->dst_rect.w = curr_element->width;
-                        curr_element->dst_rect.h = curr_element->height;
                      }
 
                      /* Add the element to the element list */
