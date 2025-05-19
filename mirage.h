@@ -186,6 +186,13 @@ const char *get_ai_name(void);
  */
 const char *get_ai_state(void);
 
+/*
+ * @brief Returns the current FPS calculation from the main loop.
+ *
+ * @return Current FPS calculated from the main function.
+ */
+int get_curr_fps(void);
+
 /**
  * @brief Gets the current window dimensions.
  *

@@ -108,7 +108,6 @@
 #include "curl_download.h"
 #include "devices.h"
 #include "element_renderer.h"
-#include "environmental_element.h"
 #include "frame_rate_tracker.h"
 #include "hud_manager.h"
 #include "image_utils.h"
@@ -143,6 +142,7 @@ static int quit = 0;                         /* Global to sync exiting of thread
 int detect_enabled = 0;                      /* Is object detection enabled? */
 
 double averageFrameRate = 0.0;
+static int curr_fps = 60;
 
 /* Right now we only support one instance of each. These are their objects. */
 motion this_motion = {
@@ -218,12 +218,6 @@ element default_element =
    .filename_warning = "",
    .filename_offline = "",
 
-   .src_dst_rect = {0, 0, 0, 0},
-   .dst_dst_rect = {0, 0, 0, 0},
-   .anim_dur = 0,
-   .anim_frames_calc = 0,
-   .dyn_anim_frame = 0,
-
    .text = "",
    .font = "",
    //SDL_Color font_color;
@@ -281,6 +275,7 @@ element default_element =
 
    .transition_alpha = 0.0f,
    .in_transition = 0,
+   .scale = 1.0f,
 
    .prev = NULL,
    .next = NULL
@@ -438,6 +433,13 @@ const char *get_ai_name(void) {
 const char *get_ai_state(void) {
    return (const char *) aiState;
 };
+
+/*
+ * Returns the current FPS calculation from the main loop.
+ */
+int get_curr_fps(void) {
+   return curr_fps;
+}
 
 /* Free the UI element list. */
 void free_elements(element *start_element)
@@ -1310,7 +1312,6 @@ int main(int argc, char **argv)
    int native_width = this_hds->eye_output_width * 2;
    int native_height = this_hds->eye_output_height;
    Uint32 sdl_flags = 0;
-   int curr_fps = 0;
    SDL_Event event;
 
    element *curr_element = NULL;

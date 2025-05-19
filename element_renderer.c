@@ -41,7 +41,6 @@
 #include "defines.h"
 #include "devices.h"
 #include "element_renderer.h"
-#include "environmental_element.h"
 #include "fan_monitoring.h"
 #include "hud_manager.h"
 #include "logging.h"
@@ -86,6 +85,21 @@ static void reset_texture_alpha(element *curr_element) {
    if (curr_element->type == TEXT) {
       curr_element->font_color.a = 255;
    }
+}
+
+static void calculate_zoom_rect(SDL_Rect *dst_rect_l, SDL_Rect *dst_rect_r, float scale) {
+   int center_x_l = dst_rect_l->x + (dst_rect_l->w / 2);
+   int center_y_l = dst_rect_l->y + (dst_rect_l->h / 2);
+   int center_x_r = dst_rect_r->x + (dst_rect_r->w / 2);
+   int center_y_r = dst_rect_r->y + (dst_rect_r->h / 2);
+
+   /* Apply scale, currently used for zoom effect */
+   dst_rect_l->w = dst_rect_r->w = (int)round((float)dst_rect_l->w * scale);
+   dst_rect_l->h = dst_rect_r->h = (int)round((float)dst_rect_l->h * scale);
+   dst_rect_l->x = center_x_l - (dst_rect_l->w / 2);
+   dst_rect_l->y = center_y_l - (dst_rect_l->h / 2);
+   dst_rect_r->x = center_x_r - (dst_rect_r->w / 2);
+   dst_rect_r->y = center_y_r - (dst_rect_r->h / 2);
 }
 
 /**
@@ -136,6 +150,9 @@ void render_static_element(element *curr_element) {
    } else {
       this_texture = curr_element->texture;
    }
+
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
    /* Render the element */
    if (this_texture != NULL) {
@@ -219,29 +236,14 @@ void render_animated_element(element *curr_element) {
          curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
    }
 
-   /* Animation frame update logic */
-   Uint32 currTime = SDL_GetTicks();
-   float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
-   int curr_fps = 60; /* You calculate this elsewhere */
-   int framesToUpdate = floor(dT / (1.0f / curr_fps));
-   if (framesToUpdate > 0) {
-      if ((currTime %
-         (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
-         if (curr_element->this_anim.current_frame->next != NULL) {
-             curr_element->this_anim.current_frame =
-                curr_element->this_anim.current_frame->next;
-         } else {
-             curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
-         }
-      }
-      curr_element->this_anim.last_update = currTime;
-   }
-
    /* Apply fixed/stereo offset */
    if (!curr_element->fixed) {
       dst_rect_l.x -= this_hds->stereo_offset;
       dst_rect_r.x += this_hds->stereo_offset;
    }
+
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
    /* Select the appropriate texture */
    this_texture = curr_element->texture; /* For animated, we usually only have one texture option */
@@ -255,6 +257,24 @@ void render_animated_element(element *curr_element) {
       } else {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+   }
+
+   /* Animation frame update logic */
+   Uint32 currTime = SDL_GetTicks();
+   float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
+   int curr_fps = get_curr_fps();
+   int framesToUpdate = floor(dT / (1.0f / curr_fps));
+   if (framesToUpdate > 0) {
+      if ((currTime %
+         (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
+         if (curr_element->this_anim.current_frame->next != NULL) {
+             curr_element->this_anim.current_frame =
+                curr_element->this_anim.current_frame->next;
+         } else {
+             curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
+         }
+      }
+      curr_element->this_anim.last_update = currTime;
    }
 }
 
@@ -504,6 +524,9 @@ void render_text_element(element *curr_element) {
       dst_rect_r.x += this_hds->stereo_offset;
    }
 
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
+
    /* Render the text */
    if (curr_element->texture != NULL) {
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
@@ -660,6 +683,9 @@ void render_map_element(element *curr_element) {
       dst_rect_r.x += this_hds->stereo_offset;
    }
 
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
+
    /* Render the map */
    this_texture = curr_element->texture;
    if (this_texture != NULL) {
@@ -710,6 +736,9 @@ void render_pitch_element(element *curr_element) {
         dst_rect_l.x -= this_hds->stereo_offset;
         dst_rect_r.x += this_hds->stereo_offset;
     }
+
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
     /* Render the pitch element */
     this_texture = curr_element->texture;
@@ -762,6 +791,9 @@ void render_heading_element(element *curr_element) {
         dst_rect_l.x -= this_hds->stereo_offset;
         dst_rect_r.x += this_hds->stereo_offset;
     }
+
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
     /* Render the heading element */
     this_texture = curr_element->texture;
@@ -818,6 +850,9 @@ void render_altitude_element(element *curr_element) {
         dst_rect_r.x += this_hds->stereo_offset;
     }
 
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
+
     /* Render the altitude element */
     this_texture = curr_element->texture;
     if (this_texture != NULL) {
@@ -832,54 +867,55 @@ void render_altitude_element(element *curr_element) {
 }
 
 void render_wifi_element(element *curr_element) {
-    SDL_Rect src_rect;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    motion *this_motion = get_motion_dev();
+   SDL_Rect src_rect;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
 
-    /* Get wifi signal level (0-9) */
-    int signal_level = get_wifi_signal_level();
+   /* Get wifi signal level (0-9) */
+   int signal_level = get_wifi_signal_level();
 
-    /* Clamp signal level to valid range for animation frames */
-    if (signal_level < 0) signal_level = 0;
-    if (signal_level >= curr_element->this_anim.frame_count)
-        signal_level = curr_element->this_anim.frame_count - 1;
+   /* Clamp signal level to valid range for animation frames */
+   if (signal_level < 0) signal_level = 0;
+   if (signal_level >= curr_element->this_anim.frame_count)
+      signal_level = curr_element->this_anim.frame_count - 1;
 
-    /* Get the frame */
-    curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[signal_level];
+   /* Get the frame */
+   curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[signal_level];
 
-    /* Set up source rectangle */
-    src_rect.x = curr_element->this_anim.current_frame->source_x;
-    src_rect.y = curr_element->this_anim.current_frame->source_y;
-    src_rect.w = curr_element->this_anim.current_frame->source_w;
-    src_rect.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up source rectangle */
+   src_rect.x = curr_element->this_anim.current_frame->source_x;
+   src_rect.y = curr_element->this_anim.current_frame->source_y;
+   src_rect.w = curr_element->this_anim.current_frame->source_w;
+   src_rect.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Set up destination rectangles */
-    dst_rect_l.x = dst_rect_r.x =
-        curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-    dst_rect_l.y = dst_rect_r.y =
-        curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+   /* Normal rendering, calculate from original position */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Apply stereo offset if not fixed */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
-    /* Render the wifi element */
-    this_texture = curr_element->texture;
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
-        } else {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
+
+   /* Render the wifi element */
+   this_texture = curr_element->texture;
+   if (this_texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
 }
 
 /*
@@ -1088,7 +1124,7 @@ void render_detect_element(element *curr_element) {
     /* Animation update for detection box graphics */
     Uint32 currTime = SDL_GetTicks();
     float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
-    int curr_fps = 60; /* This should be replaced with your actual fps calculation */
+    int curr_fps = get_curr_fps();
     int framesToUpdate = floor(dT / (1.0f / curr_fps));
 
     if (framesToUpdate > 0) {
@@ -1130,26 +1166,29 @@ void render_element(element *curr_element) {
 
 /* The rest of the helper functions remain similar */
 void render_element_with_alpha(element *curr_element, float alpha) {
-    if (!curr_element->enabled) {
-        return;
-    }
+   if (!curr_element->enabled) {
+      return;
+   }
 
-    /* Set transition state */
-    curr_element->transition_alpha = alpha;
-    curr_element->in_transition = 1;
+   /* Set transition state */
+   curr_element->transition_alpha = alpha;
+   curr_element->in_transition = 1;
 
-    /* Save original alpha values */
-    Uint8 original_alpha_main = 255;
-    if (curr_element->texture != NULL)
+   /* Save original alpha values */
+   Uint8 original_alpha_main = 255;
+   if (curr_element->texture != NULL) {
       SDL_GetTextureAlphaMod(curr_element->texture, &original_alpha_main);
+   }
 
-    /* Set new alpha value */
-    if (curr_element->texture != NULL)
-       SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
-          render_element(curr_element);
+   /* Set new alpha value */
+   if (curr_element->texture != NULL) {
+      SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
+   }
 
-    /* Restore original alpha */
-    SDL_SetTextureAlphaMod(curr_element->texture, original_alpha_main);
+   render_element(curr_element);
+
+   /* Restore original alpha */
+   SDL_SetTextureAlphaMod(curr_element->texture, original_alpha_main);
 }
 
 /* Apply a slide offset to an element during rendering */
@@ -1165,32 +1204,40 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
    /* Save original position */
    int original_x = curr_element->dst_rect.x;
    int original_y = curr_element->dst_rect.y;
+   int original_dest_x = curr_element->dest_x;
+   int original_dest_y = curr_element->dest_y;
 
    /* Apply offset */
    curr_element->dst_rect.x += offset_x;
    curr_element->dst_rect.y += offset_y;
+   curr_element->dest_x += offset_x;
+   curr_element->dest_y += offset_y;
 
    /* Get display settings for bounds checking */
    hud_display_settings *this_hds = get_hud_display_settings();
 
    /* Check if element is entirely off-screen in both eyes - don't render if so */
    if ((curr_element->dst_rect.x + curr_element->dst_rect.w < 0 &&
-      curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
-      (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
-      (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
-      (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
-      /* Element is entirely off-screen, don't render */
-        curr_element->dst_rect.x = original_x;
-        curr_element->dst_rect.y = original_y;
-        return;
-    }
+       curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
+       (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
+       (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
+       (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
+       /* Element is entirely off-screen, don't render */
+      curr_element->dst_rect.x = original_x;
+      curr_element->dst_rect.y = original_y;
+      curr_element->dest_x = original_dest_x;
+      curr_element->dest_y = original_dest_y;
+      return;
+   }
 
-    /* Render with offset - renderStereo will handle partial clipping */
-    render_element(curr_element);
+   /* Render with offset - renderStereo will handle partial clipping */
+   render_element(curr_element);
 
-    /* Restore original position */
-    curr_element->dst_rect.x = original_x;
-    curr_element->dst_rect.y = original_y;
+   /* Restore original position */
+   curr_element->dst_rect.x = original_x;
+   curr_element->dst_rect.y = original_y;
+   curr_element->dest_x = original_dest_x;
+   curr_element->dest_y = original_dest_y;
 }
 
 /* Apply scaling to an element during rendering */
@@ -1203,27 +1250,25 @@ void render_element_with_scale(element *curr_element, float scale, float alpha) 
    curr_element->in_transition = 1;
    curr_element->transition_alpha = alpha;
 
-    /* Save original dimensions and position */
-    SDL_Rect original_rect = curr_element->dst_rect;
+   int original_scale = curr_element->scale;
+   curr_element->scale = scale;
 
-    /* Calculate center point */
-    int center_x = curr_element->dst_rect.x + (curr_element->dst_rect.w / 2);
-    int center_y = curr_element->dst_rect.y + (curr_element->dst_rect.h / 2);
+   /* Save original dimensions and position */
+   SDL_Rect original_rect = curr_element->dst_rect;
+   int original_dest_x = curr_element->dest_x;
+   int original_dest_y = curr_element->dest_y;
 
-    /* Apply scaling centered on element */
-    curr_element->dst_rect.w = (int)(curr_element->dst_rect.w * scale);
-    curr_element->dst_rect.h = (int)(curr_element->dst_rect.h * scale);
-    curr_element->dst_rect.x = center_x - (curr_element->dst_rect.w / 2);
-    curr_element->dst_rect.y = center_y - (curr_element->dst_rect.h / 2);
+   /* Render the scaled element with alpha */
+   render_element_with_alpha(curr_element, alpha);
 
-    /* Render the scaled element with alpha */
-    render_element_with_alpha(curr_element, alpha);
+   /* Clear transition state */
+   curr_element->in_transition = 0;
 
-    /* Clear transition state */
-    curr_element->in_transition = 0;
-
-    /* Restore original dimensions and position */
-    curr_element->dst_rect = original_rect;
+   /* Restore original dimensions and position */
+   curr_element->dst_rect = original_rect;
+   curr_element->dest_x = original_dest_x;
+   curr_element->dest_y = original_dest_y;
+   curr_element->scale = original_scale;
 }
 
 /* Main HUD rendering function */
@@ -1233,193 +1278,193 @@ void render_hud_elements(void) {
    hud_display_settings *this_hds = get_hud_display_settings();
    element *first_element = get_first_element();
 
-    if (hud_mgr->transition_from != NULL) {
-        /* In transition between HUDs */
-        Uint32 elapsed = SDL_GetTicks() - hud_mgr->transition_start_time;
-        hud_mgr->transition_progress = (float)elapsed / hud_mgr->transition_duration_ms;
+   if (hud_mgr->transition_from != NULL) {
+      /* In transition between HUDs */
+      Uint32 elapsed = SDL_GetTicks() - hud_mgr->transition_start_time;
+      hud_mgr->transition_progress = (float)elapsed / hud_mgr->transition_duration_ms;
 
-        if (hud_mgr->transition_progress >= 1.0) {
-            /* Transition finished */
-            hud_mgr->transition_from = NULL;
-            hud_mgr->transition_progress = 0.0;
+      if (hud_mgr->transition_progress >= 1.0) {
+         /* Transition finished */
+         hud_mgr->transition_from = NULL;
+         hud_mgr->transition_progress = 0.0;
 
-            /* Render current HUD normally */
-            curr_element = first_element;
-            while (curr_element != NULL) {
-                if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                    render_element(curr_element);
+         /* Render current HUD normally */
+         curr_element = first_element;
+         while (curr_element != NULL) {
+            if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+               render_element(curr_element);
+            }
+            curr_element = curr_element->next;
+         }
+      } else {
+         /* We're in the middle of a transition */
+         float from_alpha = 1.0f - hud_mgr->transition_progress;
+         float to_alpha = hud_mgr->transition_progress;
+
+         /* Apply transition effect based on transition type */
+         switch (hud_mgr->current_screen->transition_type) {
+            case TRANSITION_MAX:
+               LOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
+               LOG_ERROR("Changing to valid default transition: %s", get_transition_name(TRANSITION_FADE));
+               hud_mgr->current_screen->transition_type = TRANSITION_FADE;
+
+            case TRANSITION_FADE: {
+               /* Render elements from the previous HUD that aren't in the new HUD */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_alpha(curr_element, from_alpha);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Render elements from the new HUD that aren't in the old HUD */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_alpha(curr_element, to_alpha);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Render elements that are in both HUDs */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element(curr_element);
+                  }
+                  curr_element = curr_element->next;
+               }
+               break;
+            }
+
+            case TRANSITION_SLIDE_LEFT: {
+               int from_offset = (int)(-(hud_mgr->transition_progress) * this_hds->eye_output_width);
+               int to_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+
+               /* First, render the shared elements that appear in both HUDs normally */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element(curr_element);
+                  }
+                     curr_element = curr_element->next;
+               }
+
+               /* Then render "from" HUD sliding left (only elements not in new HUD) */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_slide(curr_element, from_offset, 0);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Finally render "to" HUD sliding in from right (only elements not in old HUD) */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_slide(curr_element, to_offset, 0);
+                  }
+                  curr_element = curr_element->next;
                 }
-                curr_element = curr_element->next;
-            }
-        } else {
-            /* We're in the middle of a transition */
-            float from_alpha = 1.0f - hud_mgr->transition_progress;
-            float to_alpha = hud_mgr->transition_progress;
+                break;
+             }
 
-            /* Apply transition effect based on transition type */
-            //switch (hud_mgr->transition_type) {
-            switch (hud_mgr->current_screen->transition_type) {
-               case TRANSITION_MAX:
-                  LOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
-                  LOG_ERROR("Changing to valid default transition: %s", get_transition_name(TRANSITION_FADE));
-                  hud_mgr->current_screen->transition_type = TRANSITION_FADE;
+             case TRANSITION_SLIDE_RIGHT: {
+                int from_offset = (int)((hud_mgr->transition_progress) * this_hds->eye_output_width);
+                int to_offset = (int)(-(1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
 
-                case TRANSITION_FADE:
-                    /* Render elements from the previous HUD that aren't in the new HUD */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element_with_alpha(curr_element, from_alpha);
-                        }
-                        curr_element = curr_element->next;
-                    }
+                /* First, render the shared elements that appear in both HUDs normally */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element(curr_element);
+                   }
+                   curr_element = curr_element->next;
+                }
 
-                    /* Render elements from the new HUD that aren't in the old HUD */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element_with_alpha(curr_element, to_alpha);
-                        }
-                        curr_element = curr_element->next;
-                    }
+                /* Then render "from" HUD sliding right (only elements not in new HUD) */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element_with_slide(curr_element, from_offset, 0);
+                   }
+                   curr_element = curr_element->next;
+                }
 
-                    /* Render elements that are in both HUDs */
-                    curr_element = first_element;
-                    while (curr_element != NULL) {
-                        if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                            curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                            render_element(curr_element);
-                        }
-                        curr_element = curr_element->next;
-                    }
-                    break;
+                /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element_with_slide(curr_element, to_offset, 0);
+                   }
+                   curr_element = curr_element->next;
+                }
+                break;
+             }
 
-               case TRANSITION_SLIDE_LEFT: {
-                  int from_offset = (int)(-(hud_mgr->transition_progress) * this_hds->eye_output_width);
-                  int to_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+             case TRANSITION_ZOOM: {
+                float from_scale = 1.0f + hud_mgr->transition_progress;
+                float to_scale = 2.0f - hud_mgr->transition_progress;
 
-                  /* First, render the shared elements that appear in both HUDs normally */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element(curr_element);
-                     }
-                     curr_element = curr_element->next;
-                  }
+                /* Render elements from previous HUD zooming out */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element_with_scale(curr_element, from_scale, from_alpha);
+                   }
+                   curr_element = curr_element->next;
+                }
 
-                  /* Then render "from" HUD sliding left (only elements not in new HUD) */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_slide(curr_element, from_offset, 0);
-                     }
-                     curr_element = curr_element->next;
-                  }
+                /* Render elements from new HUD zooming in */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element_with_scale(curr_element, to_scale, to_alpha);
+                   }
+                   curr_element = curr_element->next;
+                }
 
-                  /* Finally render "to" HUD sliding in from right (only elements not in old HUD) */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_slide(curr_element, to_offset, 0);
-                     }
-                     curr_element = curr_element->next;
-                  }
-                  break;
-               }
+                /* Render elements that are in both HUDs normally */
+                curr_element = first_element;
+                while (curr_element != NULL) {
+                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                      render_element(curr_element);
+                   }
+                   curr_element = curr_element->next;
+                }
+                break;
+             }
+          }
 
-               case TRANSITION_SLIDE_RIGHT: {
-                  int from_offset = (int)((hud_mgr->transition_progress) * this_hds->eye_output_width);
-                  int to_offset = (int)(-(1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+          /* Reset all texture alphas after transition rendering */
+          curr_element = first_element;
+          while (curr_element != NULL) {
+             reset_texture_alpha(curr_element);
+             curr_element = curr_element->next;
+          }
 
-                  /* First, render the shared elements that appear in both HUDs normally */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element(curr_element);
-                     }
-                     curr_element = curr_element->next;
-                  }
-
-                  /* Then render "from" HUD sliding right (only elements not in new HUD) */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_slide(curr_element, from_offset, 0);
-                     }
-                     curr_element = curr_element->next;
-                  }
-
-                  /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_slide(curr_element, to_offset, 0);
-                     }
-                     curr_element = curr_element->next;
-                  }
-                  break;
-               }
-
-               case TRANSITION_ZOOM: {
-                  float from_scale = 1.0f + hud_mgr->transition_progress;
-                  float to_scale = 2.0f - hud_mgr->transition_progress;
-
-                  /* Render elements from previous HUD zooming out */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_scale(curr_element, from_scale, from_alpha);
-                     }
-                     curr_element = curr_element->next;
-                  }
-
-                  /* Render elements from new HUD zooming in */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element_with_scale(curr_element, to_scale, to_alpha);
-                     }
-                     curr_element = curr_element->next;
-                  }
-
-                  /* Render elements that are in both HUDs normally */
-                  curr_element = first_element;
-                  while (curr_element != NULL) {
-                     if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                        curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                        render_element(curr_element);
-                     }
-                     curr_element = curr_element->next;
-                  }
-                  break;
-               }
-            }
-
-            /* Reset all texture alphas after transition rendering */
-            curr_element = first_element;
-            while (curr_element != NULL) {
-                reset_texture_alpha(curr_element);
-                curr_element = curr_element->next;
-            }
-
-            /* Reset transition states in all elements */
-            curr_element = first_element;
-            while (curr_element != NULL) {
-               curr_element->in_transition = 0;
-               curr_element->transition_alpha = 0.0f;
-               curr_element = curr_element->next;
-            }
-        }
+          /* Reset transition states in all elements */
+          curr_element = first_element;
+          while (curr_element != NULL) {
+             curr_element->in_transition = 0;
+             curr_element->transition_alpha = 0.0f;
+             curr_element = curr_element->next;
+          }
+       }
     } else {
         /* Normal rendering - just the current HUD */
         curr_element = first_element;

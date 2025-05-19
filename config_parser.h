@@ -108,13 +108,6 @@ typedef struct _element {
    char filename_warning[MAX_FILENAME_LENGTH * 2];   /* Filename of warning armor graphic. */
    char filename_offline[MAX_FILENAME_LENGTH * 2];   /* Filename of offline armor graphic. */
 
-   /* Dynamic Animation */
-   SDL_Rect src_dst_rect, dst_dst_rect;         /* Where to start and end the animation. */
-   int anim_dur;                                /* How long should this animation take (secs)? */
-   int anim_frames_calc;                        /* We'll calculate how many total frames they'll
-                                                 * based on current FPS. */
-   int dyn_anim_frame;                          /* Which frame are we currenty on? */
-
    /* Text elements */
    char text[MAX_TEXT_LENGTH];
    char font[MAX_FILENAME_LENGTH * 2];
@@ -179,6 +172,7 @@ typedef struct _element {
    /* Transition state - used for fade/zoom effects */
    float transition_alpha;
    int in_transition;
+   float scale;
 
    struct _element *prev;
    struct _element *next;

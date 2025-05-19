@@ -275,12 +275,12 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
    /* Parse position */
    json_object_object_get_ex(element_obj, "dest_x", &tmpobj);
    if (tmpobj != NULL) {
-      curr_element->dest_x = json_object_get_int(tmpobj);
+      curr_element->dest_x = curr_element->dst_rect.x = json_object_get_int(tmpobj);
    }
 
    json_object_object_get_ex(element_obj, "dest_y", &tmpobj);
    if (tmpobj != NULL) {
-      curr_element->dest_y = json_object_get_int(tmpobj);
+      curr_element->dest_y = curr_element->dst_rect.y = json_object_get_int(tmpobj);
    }
 
    /* Parse angle */
@@ -637,8 +637,6 @@ int parse_json_config(char *filename)
                            curr_element->dst_rect.w = curr_element->width;
                            curr_element->dst_rect.h = curr_element->height;
                         }
-                        curr_element->dst_rect.x = curr_element->dest_x;
-                        curr_element->dst_rect.y = curr_element->dest_y;
                      /* Record Graphic */
                      } else if (strcmp("record-ui", element_type) == 0) {
                         curr_element->type = STATIC;
@@ -702,8 +700,6 @@ int parse_json_config(char *filename)
 
                         SDL_QueryTexture(curr_element->texture, NULL, NULL,
                                        &curr_element->dst_rect.w, &curr_element->dst_rect.h);
-                        curr_element->dst_rect.x = curr_element->dest_x;
-                        curr_element->dst_rect.y = curr_element->dest_y;
                      /* AI Status Graphic */
                      } else if (strcmp("ai-ui", element_type) == 0) {
                         curr_element->type = STATIC;
@@ -770,8 +766,6 @@ int parse_json_config(char *filename)
 
                         SDL_QueryTexture(curr_element->texture, NULL, NULL,
                                        &curr_element->dst_rect.w, &curr_element->dst_rect.h);
-                        curr_element->dst_rect.x = curr_element->dest_x;
-                        curr_element->dst_rect.y = curr_element->dest_y;
                      /* ANIMATED */
                      } else if (strcmp("animated", element_type) == 0) {
                         curr_element->type = ANIMATED;
