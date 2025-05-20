@@ -1934,6 +1934,10 @@ int main(int argc, char **argv)
                LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
                break;
 
+            case SDLK_TAB:  // Tab key to cycle through HUDs
+               switch_to_next_hud();
+               break;
+
             case SDLK_ESCAPE:
             case SDLK_q:
                quit = 1;

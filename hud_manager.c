@@ -227,3 +227,33 @@ int find_transition_by_name(const char* name) {
    return get_hud_manager()->transition_type; /* Default if not found */
 }
 
+/**
+ * @brief Switches to the next HUD in the sequence.
+ *
+ * This function cycles through the available HUDs in order. If currently on the last HUD,
+ * it wraps around to the first HUD. Uses the default transition type and duration.
+ */
+void switch_to_next_hud(void) {
+   hud_manager *hud_mgr = get_hud_manager();
+
+   if (hud_mgr == NULL || hud_mgr->current_screen == NULL) {
+      LOG_ERROR("No HUD manager or current screen available");
+      return;
+   }
+
+   hud_screen *next_screen = hud_mgr->current_screen->next;
+
+   // If we're at the end of the list, wrap around to the first screen
+   if (next_screen == NULL) {
+      next_screen = hud_mgr->screens;
+   }
+
+   // If we still don't have a next screen, there's only one HUD or none
+   if (next_screen == NULL) {
+      LOG_WARNING("No other HUDs available to switch to");
+      return;
+   }
+
+   // Use the existing switch function with default transition settings
+   switch_to_hud(next_screen->name, hud_mgr->transition_type, hud_mgr->transition_duration_ms);
+}

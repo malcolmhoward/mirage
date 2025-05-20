@@ -446,6 +446,25 @@ int parse_json_command(char *command_string, char *topic)
          if (tmpobj2 != NULL) {
             tmpstr2 = json_object_get_string(tmpobj2);
 
+            // This is the basic form of this command
+            if (strcmp(tmpstr2, "set") == 0) {
+               json_object_object_get_ex(parsed_json, "value", &tmpobj);
+               if (tmpobj != NULL) {
+                  const char *hudName = json_object_get_string(tmpobj);
+
+                  if (strcmp(hudName, "next") == 0) {
+                     switch_to_next_hud();
+                  } else {
+                     switch_to_hud(hudName, get_hud_manager()->transition_type, get_hud_manager()->transition_duration_ms);
+                  }
+
+                  char temp_msg[128];
+                  snprintf(temp_msg, sizeof(temp_msg), "Switched to %s hud.", hudName);
+                  mqttTextToSpeech(temp_msg);
+               }
+            }
+
+            // This is a more complete version of this command
             if (strcmp(tmpstr2, "switchHUD") == 0) {
                json_object_object_get_ex(parsed_json, "hudName", &tmpobj);
                if (tmpobj != NULL) {
