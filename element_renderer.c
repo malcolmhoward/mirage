@@ -342,7 +342,7 @@ void render_text_element(element *curr_element) {
 
    } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
-   } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
+   } else if (strcmp("*AIRQUALITYDESC*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->air_quality_description);
    } else if (strcmp("*TVOC*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->tvoc_ppb);
