@@ -163,365 +163,372 @@ int parse_json_command(char *command_string, char *topic)
    /* Is this a device? */
    if (tmpobj != NULL) {
       tmpstr = json_object_get_string(tmpobj);
+      if (tmpstr != NULL ) {
       //printf("device: %s\n", tmpstr);
+         if (strcmp("Motion", tmpstr) == 0) {
+            /* Motion */
+            json_object_object_get_ex(parsed_json, "format", &tmpobj);
+            tmpstr = json_object_get_string(tmpobj);
+            /* Only look for "Orientation" style for now. */
+            if (strcmp("Orientation", tmpstr) == 0) {
+               json_object_object_get_ex(parsed_json, "heading", &tmpobj);
 
-      if (strcmp("Motion", tmpstr) == 0) {
-         /* Motion */
-         json_object_object_get_ex(parsed_json, "format", &tmpobj);
-         tmpstr = json_object_get_string(tmpobj);
-         /* Only look for "Orientation" style for now. */
-         if (strcmp("Orientation", tmpstr) == 0) {
-            json_object_object_get_ex(parsed_json, "heading", &tmpobj);
+               // Get the sensor heading value
+               double raw_heading = json_object_get_double(tmpobj);
 
-            // Get the sensor heading value
-            double raw_heading = json_object_get_double(tmpobj);
+               // If we get a negative value, convert from -180 to +180 range to 0 to 360 range
+               if (raw_heading < 0) {
+                  raw_heading += 360.0;
+               }
 
-            // If we get a negative value, convert from -180 to +180 range to 0 to 360 range
-            if (raw_heading < 0) {
-               raw_heading += 360.0;
+               // Apply inversion if needed
+               if (get_inv_compass()) {
+                  this_motion->heading = 360.0 - raw_heading;
+               } else {
+                  this_motion->heading = raw_heading;
+               }
+
+               json_object_object_get_ex(parsed_json, "pitch", &tmpobj);
+               this_motion->pitch = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "roll", &tmpobj);
+               this_motion->roll = json_object_get_double(tmpobj);
+            }
+            //printf("Motion: heading: %f, pitch, %f, roll: %f\n",
+            //       this_motion->heading, this_motion->pitch, this_motion->roll);
+         } else if (strcmp("Enviro", tmpstr) == 0) {
+            /* Enviro - Basic data */
+            json_object_object_get_ex(parsed_json, "temp", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->temp = json_object_get_double(tmpobj);
             }
 
-            // Apply inversion if needed
-            if (get_inv_compass()) {
-               this_motion->heading = 360.0 - raw_heading;
+            json_object_object_get_ex(parsed_json, "humidity", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->humidity = json_object_get_double(tmpobj);
             } else {
-               this_motion->heading = raw_heading;
+               this_enviro->humidity = 0.0;
             }
 
-            json_object_object_get_ex(parsed_json, "pitch", &tmpobj);
-            this_motion->pitch = json_object_get_double(tmpobj);
+            /* Air Quality */
+            json_object_object_get_ex(parsed_json, "air_quality", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->air_quality = json_object_get_double(tmpobj);
+            }
 
-            json_object_object_get_ex(parsed_json, "roll", &tmpobj);
-            this_motion->roll = json_object_get_double(tmpobj);
-         }
-         //printf("Motion: heading: %f, pitch, %f, roll: %f\n",
-         //       this_motion->heading, this_motion->pitch, this_motion->roll);
-      } else if (strcmp("Enviro", tmpstr) == 0) {
-         /* Enviro - Basic data */
-         json_object_object_get_ex(parsed_json, "temp", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->temp = json_object_get_double(tmpobj);
-         }
+            json_object_object_get_ex(parsed_json, "air_quality_description", &tmpobj);
+            if (tmpobj != NULL) {
+               strncpy(this_enviro->air_quality_description, json_object_get_string(tmpobj), 14);
+               this_enviro->air_quality_description[14] = '\0'; /* Ensure null termination */
+            }
 
-         json_object_object_get_ex(parsed_json, "humidity", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->humidity = json_object_get_double(tmpobj);
-         } else {
-            this_enviro->humidity = 0.0;
-         }
+            /* VOC and CO2 Data */
+            json_object_object_get_ex(parsed_json, "tvoc_ppb", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->tvoc_ppb = json_object_get_double(tmpobj);
+            }
 
-         /* Air Quality */
-         json_object_object_get_ex(parsed_json, "air_quality", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->air_quality = json_object_get_double(tmpobj);
-         }
+            json_object_object_get_ex(parsed_json, "eco2_ppm", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->eco2_ppm = json_object_get_double(tmpobj);
+            }
 
-         json_object_object_get_ex(parsed_json, "air_quality_description", &tmpobj);
-         if (tmpobj != NULL) {
-            strncpy(this_enviro->air_quality_description, json_object_get_string(tmpobj), 14);
-            this_enviro->air_quality_description[14] = '\0'; /* Ensure null termination */
-         }
+            json_object_object_get_ex(parsed_json, "co2_ppm", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->co2_ppm = json_object_get_double(tmpobj);
+            }
 
-         /* VOC and CO2 Data */
-         json_object_object_get_ex(parsed_json, "tvoc_ppb", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->tvoc_ppb = json_object_get_double(tmpobj);
-         }
+            json_object_object_get_ex(parsed_json, "co2_quality", &tmpobj);
+            if (tmpobj != NULL) {
+               strncpy(this_enviro->co2_quality_description, json_object_get_string(tmpobj), 14);
+               this_enviro->co2_quality_description[14] = '\0'; /* Ensure null termination */
+            }
 
-         json_object_object_get_ex(parsed_json, "eco2_ppm", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->eco2_ppm = json_object_get_double(tmpobj);
-         }
+            json_object_object_get_ex(parsed_json, "co2_eco2_diff", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->co2_eco2_diff = json_object_get_int(tmpobj);
+            }
 
-         json_object_object_get_ex(parsed_json, "co2_ppm", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->co2_ppm = json_object_get_double(tmpobj);
-         }
+            json_object_object_get_ex(parsed_json, "co2_source_analysis", &tmpobj);
+            if (tmpobj != NULL) {
+               strncpy(this_enviro->co2_source_analysis, json_object_get_string(tmpobj), 29);
+               this_enviro->co2_source_analysis[29] = '\0'; /* Ensure null termination */
+            }
 
-         json_object_object_get_ex(parsed_json, "co2_quality", &tmpobj);
-         if (tmpobj != NULL) {
-            strncpy(this_enviro->co2_quality_description, json_object_get_string(tmpobj), 14);
-            this_enviro->co2_quality_description[14] = '\0'; /* Ensure null termination */
-         }
+            /* Calculated Indices */
+            json_object_object_get_ex(parsed_json, "heat_index_c", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->heat_index_c = json_object_get_double(tmpobj);
+            }
 
-         json_object_object_get_ex(parsed_json, "co2_eco2_diff", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->co2_eco2_diff = json_object_get_int(tmpobj);
-         }
-
-         json_object_object_get_ex(parsed_json, "co2_source_analysis", &tmpobj);
-         if (tmpobj != NULL) {
-            strncpy(this_enviro->co2_source_analysis, json_object_get_string(tmpobj), 29);
-            this_enviro->co2_source_analysis[29] = '\0'; /* Ensure null termination */
-         }
-
-         /* Calculated Indices */
-         json_object_object_get_ex(parsed_json, "heat_index_c", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->heat_index_c = json_object_get_double(tmpobj);
-         }
-
-         json_object_object_get_ex(parsed_json, "dew_point", &tmpobj);
-         if (tmpobj != NULL) {
-            this_enviro->dew_point = json_object_get_double(tmpobj);
-         }
-         //printf("Enviro: temp: %f, humidity: %f, air_quality: %f, desc: %s, tvoc_ppb: %f, eco2_ppm: %f, co2_ppm: %f, co2_quality: %s, co2_eco2_diff: %d, co2_source: %s, heat_index_c: %f, dew_point: %f\n",
-         //       this_enviro->temp, this_enviro->humidity, this_enviro->air_quality,
-         //       this_enviro->air_quality_description, this_enviro->tvoc_ppb, this_enviro->eco2_ppm,
-         //       this_enviro->co2_ppm, this_enviro->co2_quality_description, this_enviro->co2_eco2_diff,
-         //       this_enviro->co2_source_analysis, this_enviro->heat_index_c, this_enviro->dew_point);
-      } else if (strcmp("GPS", tmpstr) == 0) {
-         /* GPS */
-         json_object_object_get_ex(parsed_json, "time", &tmpobj);
-         tmpstr = json_object_get_string(tmpobj);
-         if (tmpstr != NULL) {
-            strcpy(this_gps->time, tmpstr);
-         }
-
-         json_object_object_get_ex(parsed_json, "date", &tmpobj);
-         tmpstr = json_object_get_string(tmpobj);
-         if (tmpstr != NULL) {
-            strcpy(this_gps->date, tmpstr);
-         }
-
-         json_object_object_get_ex(parsed_json, "fix", &tmpobj);
-         this_gps->fix = json_object_get_int(tmpobj);
-
-         if (this_gps->fix) {
-            json_object_object_get_ex(parsed_json, "quality", &tmpobj);
-            this_gps->quality = json_object_get_int(tmpobj);
-
-            json_object_object_get_ex(parsed_json, "latitude", &tmpobj);
-            this_gps->latitude = json_object_get_double(tmpobj);
-
-            json_object_object_get_ex(parsed_json, "lat", &tmpobj);
+            json_object_object_get_ex(parsed_json, "dew_point", &tmpobj);
+            if (tmpobj != NULL) {
+               this_enviro->dew_point = json_object_get_double(tmpobj);
+            }
+            //printf("Enviro: temp: %f, humidity: %f, air_quality: %f, desc: %s, tvoc_ppb: %f, eco2_ppm: %f, co2_ppm: %f, co2_quality: %s, co2_eco2_diff: %d, co2_source: %s, heat_index_c: %f, dew_point: %f\n",
+            //       this_enviro->temp, this_enviro->humidity, this_enviro->air_quality,
+            //       this_enviro->air_quality_description, this_enviro->tvoc_ppb, this_enviro->eco2_ppm,
+            //       this_enviro->co2_ppm, this_enviro->co2_quality_description, this_enviro->co2_eco2_diff,
+            //       this_enviro->co2_source_analysis, this_enviro->heat_index_c, this_enviro->dew_point);
+         } else if (strcmp("GPS", tmpstr) == 0) {
+            /* GPS */
+            json_object_object_get_ex(parsed_json, "time", &tmpobj);
             tmpstr = json_object_get_string(tmpobj);
             if (tmpstr != NULL) {
-               strcpy(this_gps->lat, tmpstr);
+               strcpy(this_gps->time, tmpstr);
             }
 
-            json_object_object_get_ex(parsed_json, "latitudeDegrees", &tmpobj);
-            this_gps->latitudeDegrees = json_object_get_double(tmpobj);
-
-            json_object_object_get_ex(parsed_json, "longitude", &tmpobj);
-            this_gps->longitude = json_object_get_double(tmpobj);
-
-            json_object_object_get_ex(parsed_json, "lon", &tmpobj);
+            json_object_object_get_ex(parsed_json, "date", &tmpobj);
             tmpstr = json_object_get_string(tmpobj);
             if (tmpstr != NULL) {
-               strcpy(this_gps->lon, tmpstr);
+               strcpy(this_gps->date, tmpstr);
             }
 
-            json_object_object_get_ex(parsed_json, "longitudeDegrees", &tmpobj);
-            this_gps->longitudeDegrees = json_object_get_double(tmpobj);
+            json_object_object_get_ex(parsed_json, "fix", &tmpobj);
+            this_gps->fix = json_object_get_int(tmpobj);
 
-            json_object_object_get_ex(parsed_json, "speed", &tmpobj);
-            this_gps->speed = json_object_get_double(tmpobj);
+            if (this_gps->fix) {
+               json_object_object_get_ex(parsed_json, "quality", &tmpobj);
+               this_gps->quality = json_object_get_int(tmpobj);
 
-            json_object_object_get_ex(parsed_json, "angle", &tmpobj);
-            this_gps->angle = json_object_get_double(tmpobj);
+               json_object_object_get_ex(parsed_json, "latitude", &tmpobj);
+               this_gps->latitude = json_object_get_double(tmpobj);
 
-            json_object_object_get_ex(parsed_json, "altitude", &tmpobj);
-            this_gps->altitude = json_object_get_double(tmpobj);
+               json_object_object_get_ex(parsed_json, "lat", &tmpobj);
+               tmpstr = json_object_get_string(tmpobj);
+               if (tmpstr != NULL) {
+                  strcpy(this_gps->lat, tmpstr);
+               }
 
-            json_object_object_get_ex(parsed_json, "satellites", &tmpobj);
-            this_gps->satellites = json_object_get_int(tmpobj);
-         }
-         //printf("GPS: time: %s, date: %s, fix: %d, quality: %d, latitude: %f, lat: %s, latitudeDegrees: %f, longitude: %f, lon: %s, longitudeDegrees: %f, speed: %f, angle: %f, altitude: %f, satellites: %d\n", this_gps->time, this_gps->date, this_gps->fix, this_gps->quality, this_gps->latitude, this_gps->lat, this_gps->latitudeDegrees, this_gps->longitude, this_gps->lon, this_gps->longitudeDegrees, this_gps->speed, this_gps->angle, this_gps->altitude, this_gps->satellites);
-      } else if (strcmp("audio", tmpstr) == 0) {
-         /* Audio */
-         command = 0;
-         filename[0] = '\0';
-         start_percent = 0.0;
+               json_object_object_get_ex(parsed_json, "latitudeDegrees", &tmpobj);
+               this_gps->latitudeDegrees = json_object_get_double(tmpobj);
 
-         json_object_object_get_ex(parsed_json, "command", &tmpobj);
-         tmpstr = json_object_get_string(tmpobj);
-         if (strcmp(tmpstr, "play") == 0) {
-            command = SOUND_PLAY;
-            json_object_object_get_ex(parsed_json, "arg1", &tmpobj);
+               json_object_object_get_ex(parsed_json, "longitude", &tmpobj);
+               this_gps->longitude = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "lon", &tmpobj);
+               tmpstr = json_object_get_string(tmpobj);
+               if (tmpstr != NULL) {
+                  strcpy(this_gps->lon, tmpstr);
+               }
+
+               json_object_object_get_ex(parsed_json, "longitudeDegrees", &tmpobj);
+               this_gps->longitudeDegrees = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "speed", &tmpobj);
+               this_gps->speed = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "angle", &tmpobj);
+               this_gps->angle = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "altitude", &tmpobj);
+               this_gps->altitude = json_object_get_double(tmpobj);
+
+               json_object_object_get_ex(parsed_json, "satellites", &tmpobj);
+               this_gps->satellites = json_object_get_int(tmpobj);
+            }
+            //printf("GPS: time: %s, date: %s, fix: %d, quality: %d, latitude: %f, lat: %s, latitudeDegrees: %f, longitude: %f, lon: %s, longitudeDegrees: %f, speed: %f, angle: %f, altitude: %f, satellites: %d\n", this_gps->time, this_gps->date, this_gps->fix, this_gps->quality, this_gps->latitude, this_gps->lat, this_gps->latitudeDegrees, this_gps->longitude, this_gps->lon, this_gps->longitudeDegrees, this_gps->speed, this_gps->angle, this_gps->altitude, this_gps->satellites);
+         } else if (strcmp("audio", tmpstr) == 0) {
+            /* Audio */
+            command = 0;
+            filename[0] = '\0';
+            start_percent = 0.0;
+
+            json_object_object_get_ex(parsed_json, "command", &tmpobj);
             tmpstr = json_object_get_string(tmpobj);
-            if (tmpstr != NULL) {
-               strncpy(filename, tmpstr, MAX_FILENAME_LENGTH);
-            }
-            json_object_object_get_ex(parsed_json, "arg2", &tmpobj);
-            start_percent = json_object_get_double(tmpobj);
+            if (strcmp(tmpstr, "play") == 0) {
+               command = SOUND_PLAY;
+               json_object_object_get_ex(parsed_json, "arg1", &tmpobj);
+               tmpstr = json_object_get_string(tmpobj);
+               if (tmpstr != NULL) {
+                  strncpy(filename, tmpstr, MAX_FILENAME_LENGTH);
+               }
+               json_object_object_get_ex(parsed_json, "arg2", &tmpobj);
+               start_percent = json_object_get_double(tmpobj);
 
-            process_audio_command(command, filename, start_percent);
-         } else if (strcmp(tmpstr, "stop") == 0) {
-            command = SOUND_STOP;
-            json_object_object_get_ex(parsed_json, "arg1", &tmpobj);
-            tmpstr = json_object_get_string(tmpobj);
-            if (tmpstr != NULL) {
-               strncpy(filename, tmpstr, MAX_FILENAME_LENGTH);
-            }
+               process_audio_command(command, filename, start_percent);
+            } else if (strcmp(tmpstr, "stop") == 0) {
+               command = SOUND_STOP;
+               json_object_object_get_ex(parsed_json, "arg1", &tmpobj);
+               tmpstr = json_object_get_string(tmpobj);
+               if (tmpstr != NULL) {
+                  strncpy(filename, tmpstr, MAX_FILENAME_LENGTH);
+               }
 
-            process_audio_command(command, filename, start_percent);
-         } else {
-            LOG_WARNING("Unrecognized audio command: %s", tmpstr);
+               process_audio_command(command, filename, start_percent);
+            } else {
+               LOG_WARNING("Unrecognized audio command: %s", tmpstr);
+            }
+         } else if (strcmp("viewing", tmpstr) == 0) {
+            time_t r_time;
+            struct tm *l_time = NULL;
+            char datetime[16];
+
+            time(&r_time);
+            l_time = localtime(&r_time);
+            strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+
+            trigger_snapshot(datetime);
+         } else if (strcmp("ai", tmpstr) == 0) {
+            const char *aiName = NULL;
+            const char *aiState = NULL;
+
+            json_object_object_get_ex(parsed_json, "name", &tmpobj);
+            aiName = json_object_get_string(tmpobj);
+
+            json_object_object_get_ex(parsed_json, "state", &tmpobj);
+            aiState = json_object_get_string(tmpobj);
+
+            process_ai_state(aiName, aiState);
          }
-      } else if (strcmp("viewing", tmpstr) == 0) {
-         json_object_object_get_ex(parsed_json, "datetime", &tmpobj);
-         tmpstr = json_object_get_string(tmpobj);
-         trigger_snapshot(tmpstr);
-      } else if (strcmp("ai", tmpstr) == 0) {
-         const char *aiName = NULL;
-         const char *aiState = NULL;
 
-         json_object_object_get_ex(parsed_json, "name", &tmpobj);
-         aiName = json_object_get_string(tmpobj);
-
-         json_object_object_get_ex(parsed_json, "state", &tmpobj);
-         aiState = json_object_get_string(tmpobj);
-
-         process_ai_state(aiName, aiState);
-      }
-
-      json_object_object_get_ex(parsed_json, "action", &tmpobj2);
-      if (tmpobj2 != NULL) {
-         tmpstr2 = json_object_get_string(tmpobj2);
-
-         if (strcmp(tmpstr2, "enable") == 0) {
-            enabled = 1;
-         } else if (strcmp(tmpstr2, "disable") == 0) {
-            enabled = 0;
-         }
-
-         if (enabled > -1) {
-            LOG_INFO("Going to enable or disable %s.", tmpstr);
-
-            /* Recording/Streaming */
-            if (!strcmp(tmpstr, "record")) {
-               if (enabled) {
-                  set_recording_state(RECORD);
-               } else {
-                  set_recording_state(DISABLED);
-               }
-            } else if (!strcmp(tmpstr, "stream")) {
-               if (enabled) {
-                  set_recording_state(STREAM);
-               } else {
-                  set_recording_state(DISABLED);
-               }
-            } else if (!strcmp(tmpstr, "record and stream")) {
-               if (enabled) {
-                  set_recording_state(RECORD_STREAM);
-               } else {
-                  set_recording_state(DISABLED);
-               }
-            }
-
-            /* Armor is a special case. */
-            if (!strcmp(tmpstr, "armor")) {
-               //printf("Setting armor enabled to: %d\n", enabled);
-               if (!alreadySpoke) {
-                  snprintf(text, 2048, "%s armor display.",
-                           enabled ? "Enabling" : "Disabling");
-                  mqttTextToSpeech(text);
-                  alreadySpoke++;
-               }
-               setArmorEnabled(enabled);
-            }
-
-            /* Let's find this device(s). */
-            while (this_element != NULL) {
-               if (!strcmp(this_element->name, tmpstr)) {
-                  if (!alreadySpoke) {
-                     snprintf(text, 2048, "%s %s display.",
-                              enabled ? "Enabling" : "Disabling",
-                              this_element->name);
-                     mqttTextToSpeech(text);
-                     alreadySpoke++;
-                  }
-                  //printf("Found the item: %s: %s\n", this_element->name,
-                  //       enabled ? "enable" : "disable");
-                  this_element->enabled = enabled;
-               }
-               this_element = this_element->next;
-            }
-         }
-      }
-
-      if (strcmp(tmpstr, "hud") == 0) {
          json_object_object_get_ex(parsed_json, "action", &tmpobj2);
          if (tmpobj2 != NULL) {
             tmpstr2 = json_object_get_string(tmpobj2);
 
-            // This is the basic form of this command
-            if (strcmp(tmpstr2, "set") == 0) {
-               json_object_object_get_ex(parsed_json, "value", &tmpobj);
-               if (tmpobj != NULL) {
-                  const char *hudName = json_object_get_string(tmpobj);
-
-                  if (strcmp(hudName, "next") == 0) {
-                     switch_to_next_hud();
-                  } else {
-                     switch_to_hud(hudName, get_hud_manager()->transition_type, get_hud_manager()->transition_duration_ms);
-                  }
-
-                  char temp_msg[128];
-                  snprintf(temp_msg, sizeof(temp_msg), "Switched to %s hud.", hudName);
-                  mqttTextToSpeech(temp_msg);
-               }
+            if (strcmp(tmpstr2, "enable") == 0) {
+               enabled = 1;
+            } else if (strcmp(tmpstr2, "disable") == 0) {
+               enabled = 0;
             }
 
-            // This is a more complete version of this command
-            if (strcmp(tmpstr2, "switchHUD") == 0) {
-               json_object_object_get_ex(parsed_json, "hudName", &tmpobj);
-               if (tmpobj != NULL) {
-                  const char *hudName = json_object_get_string(tmpobj);
+            if (enabled > -1) {
+               LOG_INFO("Going to enable or disable %s.", tmpstr);
 
-                  /* Get transition type */
-                  int transition_type = get_hud_manager()->transition_type; /* Default */
-                  json_object_object_get_ex(parsed_json, "transitionType", &tmpobj);
+               /* Recording/Streaming */
+               if (!strcmp(tmpstr, "record")) {
+                  if (enabled) {
+                     set_recording_state(RECORD);
+                  } else {
+                     set_recording_state(DISABLED);
+                  }
+               } else if (!strcmp(tmpstr, "stream")) {
+                  if (enabled) {
+                     set_recording_state(STREAM);
+                  } else {
+                     set_recording_state(DISABLED);
+                  }
+               } else if (!strcmp(tmpstr, "record and stream")) {
+                  if (enabled) {
+                     set_recording_state(RECORD_STREAM);
+                  } else {
+                     set_recording_state(DISABLED);
+                  }
+               }
+
+               /* Armor is a special case. */
+               if (!strcmp(tmpstr, "armor")) {
+                  //printf("Setting armor enabled to: %d\n", enabled);
+                  if (!alreadySpoke) {
+                     snprintf(text, 2048, "%s armor display.",
+                              enabled ? "Enabling" : "Disabling");
+                     mqttTextToSpeech(text);
+                     alreadySpoke++;
+                  }
+                  setArmorEnabled(enabled);
+               }
+
+               /* Let's find this device(s). */
+               while (this_element != NULL) {
+                  if (!strcmp(this_element->name, tmpstr)) {
+                     if (!alreadySpoke) {
+                        snprintf(text, 2048, "%s %s display.",
+                                 enabled ? "Enabling" : "Disabling",
+                                 this_element->name);
+                        mqttTextToSpeech(text);
+                        alreadySpoke++;
+                     }
+                     //printf("Found the item: %s: %s\n", this_element->name,
+                     //       enabled ? "enable" : "disable");
+                     this_element->enabled = enabled;
+                  }
+                  this_element = this_element->next;
+               }
+            }
+         }
+
+         if (strcmp(tmpstr, "hud") == 0) {
+            json_object_object_get_ex(parsed_json, "action", &tmpobj2);
+            if (tmpobj2 != NULL) {
+               tmpstr2 = json_object_get_string(tmpobj2);
+
+               // This is the basic form of this command
+               if (strcmp(tmpstr2, "set") == 0) {
+                  json_object_object_get_ex(parsed_json, "value", &tmpobj);
                   if (tmpobj != NULL) {
-                     if (json_object_get_type(tmpobj) == json_type_string) {
-                        const char *transition_name = json_object_get_string(tmpobj);
-                        transition_type = find_transition_by_name(transition_name);
+                     const char *hudName = json_object_get_string(tmpobj);
+
+                     if (strcmp(hudName, "next") == 0) {
+                        switch_to_next_hud();
                      } else {
-                        transition_type = json_object_get_int(tmpobj);
-                        if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-                           LOG_WARNING("Invalid transition type %d in JSON command, using default", transition_type);
-                           transition_type = get_hud_manager()->transition_type; // Fall back to default
+                        switch_to_hud(hudName, get_hud_manager()->transition_type, get_hud_manager()->transition_duration_ms);
+                     }
+
+                     char temp_msg[128];
+                     snprintf(temp_msg, sizeof(temp_msg), "Switched to %s hud.", hudName);
+                     mqttTextToSpeech(temp_msg);
+                  }
+               }
+
+               // This is a more complete version of this command
+               if (strcmp(tmpstr2, "switchHUD") == 0) {
+                  json_object_object_get_ex(parsed_json, "hudName", &tmpobj);
+                  if (tmpobj != NULL) {
+                     const char *hudName = json_object_get_string(tmpobj);
+
+                     /* Get transition type */
+                     int transition_type = get_hud_manager()->transition_type; /* Default */
+                     json_object_object_get_ex(parsed_json, "transitionType", &tmpobj);
+                     if (tmpobj != NULL) {
+                        if (json_object_get_type(tmpobj) == json_type_string) {
+                           const char *transition_name = json_object_get_string(tmpobj);
+                           transition_type = find_transition_by_name(transition_name);
+                        } else {
+                           transition_type = json_object_get_int(tmpobj);
+                           if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
+                              LOG_WARNING("Invalid transition type %d in JSON command, using default", transition_type);
+                              transition_type = get_hud_manager()->transition_type; // Fall back to default
+                           }
                         }
                      }
-                  }
 
-                  /* Get transition duration */
-                  int transition_duration_ms = get_hud_manager()->transition_duration_ms; /* Default */
-                  json_object_object_get_ex(parsed_json, "transitionDuration", &tmpobj);
-                  if (tmpobj != NULL) {
-                     transition_duration_ms = json_object_get_int(tmpobj);
-                  }
+                     /* Get transition duration */
+                     int transition_duration_ms = get_hud_manager()->transition_duration_ms; /* Default */
+                     json_object_object_get_ex(parsed_json, "transitionDuration", &tmpobj);
+                     if (tmpobj != NULL) {
+                        transition_duration_ms = json_object_get_int(tmpobj);
+                     }
 
-                  /* Switch with the specified parameters */
-                  switch_to_hud(hudName, transition_type, transition_duration_ms);
+                     /* Switch with the specified parameters */
+                     switch_to_hud(hudName, transition_type, transition_duration_ms);
+                  }
                }
             }
          }
-      }
 
-      /* Let's see if this device is from armor. */
-      while (armor_element != NULL) {
-         if (!strcmp(armor_element->mqtt_device, topic)) {
-            //printf("Found the item: %s : %s\n", armor_element->mqtt_device, topic);
-            break;
-         }
-         armor_element = armor_element->next;
-      }
-
-      if (armor_element != NULL) {
-         json_object_object_get_ex(parsed_json, "temp", &tmpobj);
-         if (tmpobj != NULL) {
-            armor_element->last_temp = json_object_get_double(tmpobj);
-            //LOG_INFO("Setting last_temp = %0.2f on %s.", armor_element->last_temp,
-            //       armor_element->mqtt_device);
+         /* Let's see if this device is from armor. */
+         while (armor_element != NULL) {
+            if (!strcmp(armor_element->mqtt_device, topic)) {
+               //printf("Found the item: %s : %s\n", armor_element->mqtt_device, topic);
+               break;
+            }
+            armor_element = armor_element->next;
          }
 
-         json_object_object_get_ex(parsed_json, "voltage", &tmpobj);
-         if (tmpobj != NULL) {
-            armor_element->last_voltage = json_object_get_double(tmpobj);
-            //LOG_INFO("Setting last_voltage = %0.2f on %s.", armor_element->last_voltage,
-            //       armor_element->mqtt_device);
+         if (armor_element != NULL) {
+            json_object_object_get_ex(parsed_json, "temp", &tmpobj);
+            if (tmpobj != NULL) {
+               armor_element->last_temp = json_object_get_double(tmpobj);
+               //LOG_INFO("Setting last_temp = %0.2f on %s.", armor_element->last_temp,
+               //       armor_element->mqtt_device);
+            }
+
+            json_object_object_get_ex(parsed_json, "voltage", &tmpobj);
+            if (tmpobj != NULL) {
+               armor_element->last_voltage = json_object_get_double(tmpobj);
+               //LOG_INFO("Setting last_voltage = %0.2f on %s.", armor_element->last_voltage,
+               //       armor_element->mqtt_device);
+            }
          }
       }
    }
