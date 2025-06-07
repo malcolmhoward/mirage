@@ -73,6 +73,7 @@ void *image_download_thread(void *arg) {
    CURLcode res;
    time_t last_update = 0;
    time_t current_time;
+   int downloads = 0;
 
    /* Initialize curl */
    curl_handle = curl_easy_init();
@@ -97,6 +98,15 @@ void *image_download_thread(void *arg) {
          }
 
          pthread_mutex_unlock(&this_data->mutex);
+
+         if ((this_data->download_count > 0) && (this_data->download_count - downloads <= 0)) {
+            /* We've downloaded all we need to. This thread is being monitored though, so just sleep for a
+             * while and then continue.
+             */
+            LOG_INFO("Download limit reached.");
+            sleep(60);
+            continue;
+         }
 
          /* Set up curl options */
          curl_easy_setopt(curl_handle, CURLOPT_URL, this_data->url);
@@ -125,6 +135,7 @@ void *image_download_thread(void *arg) {
             this_data->updated = 1;
             time(&last_update);
             LOG_INFO("Downloaded new map data, %zu bytes", this_data->size);
+            downloads++;
          }
 
          pthread_mutex_unlock(&this_data->mutex);

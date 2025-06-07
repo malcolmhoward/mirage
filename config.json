@@ -147,6 +147,7 @@
          "angle": 0,
          "layer": 1,
          "enabled": 1,
+         "download_count": 0,
          "huds": ["default"]
       },
       {

@@ -151,6 +151,9 @@ typedef struct _element {
    int width;
    int height;
 
+   /* Also for map, how many times should we limit downloading the image. */
+   int download_count;
+
    int center_x_offset;
    int center_y_offset;
 

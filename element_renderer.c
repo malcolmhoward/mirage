@@ -622,6 +622,7 @@ void render_map_element(element *curr_element) {
 
    if (map_thread_started == 0) {
       map_data.update_interval_sec = MAP_UPDATE_SEC;
+      map_data.download_count = curr_element->download_count;
       map_data.updated = 0;
       map_data.size = 0;
       map_data.data = NULL;

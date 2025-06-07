@@ -256,6 +256,8 @@ element default_element =
    .width = 0,
    .height = 0,
 
+   .download_count = 0,
+
    .center_x_offset = 0,
    .center_y_offset = 0,
 

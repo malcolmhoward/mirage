@@ -879,6 +879,11 @@ int parse_json_config(char *filename)
                            curr_element->height = json_object_get_int(tmpobj3);
                         }
 
+                        json_object_object_get_ex(tmpobj2, "download_count", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->download_count = json_object_get_int(tmpobj3);
+                        }
+
                         /* Font properties for special elements that need text rendering */
                         json_object_object_get_ex(tmpobj2, "font", &tmpobj3);
                         if (tmpobj3 != NULL) {

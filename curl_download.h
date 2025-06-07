@@ -26,6 +26,7 @@
 struct curl_data {
    char url[512];
    int update_interval_sec;
+   int download_count;  // Set to 0 for infinite
    int updated;         // Flag set when new data is available, cleared when consumed
 
    /* curl download area */
