@@ -862,24 +862,54 @@ void *serial_command_processing_thread(void *arg) {
         sread_buf[read_result] = '\0';
 
         for (int j = 0; j < read_result; j++) {
-            if (sread_buf[j] == '\n') {
-                command_buffer[command_length] = '\0';
-                if (command_length > 0) {
-                    log_command(command_buffer);
-                    registerArmor("helmet");
-                    parse_json_command(command_buffer, "helmet");
-                }
-                command_buffer[0] = '\0';
-                command_length = 0;
-            } else if (sread_buf[j] == '\r') {
-                /* Ignore carriage returns */
-            } else if (command_length < MAX_SERIAL_BUFFER_LENGTH - 2) {
-                command_buffer[command_length++] = sread_buf[j];
-            } else {
-                LOG_WARNING("Command buffer overflow, discarding data");
-                command_buffer[0] = '\0';
-                command_length = 0;
-            }
+           if (sread_buf[j] == '\n') {
+              command_buffer[command_length] = '\0';
+              if (command_length > 0) {
+                 log_command(command_buffer);
+
+                 // Default topic is "helmet"
+                 char topic[256] = "helmet";
+
+                 // Parse JSON to extract device
+                 struct json_object *parsed_json = json_tokener_parse(command_buffer);
+                 if (parsed_json != NULL) {
+                    struct json_object *device_obj = NULL;
+                    if (json_object_object_get_ex(parsed_json, "device", &device_obj)) {
+                       const char *device = json_object_get_string(device_obj);
+                       if (device != NULL) {
+                          // Check if device matches any armor component
+                          armor_settings *this_as = get_armor_settings();
+                          element *armor_element = this_as->armor_elements;
+
+                          while (armor_element != NULL) {
+                             if (strcmp(armor_element->mqtt_device, device) == 0) {
+                                // Found matching armor component, copy the device to topic
+                                strncpy(topic, device, sizeof(topic) - 1);
+                                topic[sizeof(topic) - 1] = '\0';
+                                break;
+                             }
+                             armor_element = armor_element->next;
+                          }
+                       }
+                    }
+                    json_object_put(parsed_json);  // Free the JSON object
+                 }
+
+                 // Use the determined topic
+                 registerArmor(topic);
+                 parse_json_command(command_buffer, topic);
+              }
+              command_buffer[0] = '\0';
+              command_length = 0;
+           } else if (sread_buf[j] == '\r') {
+              /* Ignore carriage returns */
+           } else if (command_length < MAX_SERIAL_BUFFER_LENGTH - 2) {
+              command_buffer[command_length++] = sread_buf[j];
+           } else {
+              LOG_WARNING("Command buffer overflow, discarding data");
+              command_buffer[0] = '\0';
+              command_length = 0;
+           }
         }
     }
 
