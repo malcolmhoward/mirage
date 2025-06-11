@@ -479,24 +479,6 @@ int parse_json_config(char *filename)
                           16);
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Snapshot Overlay") == 0) {
                   this_hds->snapshot_overlay = json_object_get_boolean(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_x") == 0) {
-                  this_as->armor_dest.x = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_y") == 0) {
-                  this_as->armor_dest.y = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_w") == 0) {
-                  this_as->armor_dest.w = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor dest_h") == 0) {
-                  this_as->armor_dest.h = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_x") == 0) {
-                  this_as->armor_notice_dest.x = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_y") == 0) {
-                  this_as->armor_notice_dest.y = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_w") == 0) {
-                  this_as->armor_notice_dest.w = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice dest_h") == 0) {
-                  this_as->armor_notice_dest.h = json_object_get_int(json_object_iter_peek_value(&itSub));
-               } else if (strcmp(json_object_iter_peek_name(&itSub), "Armor notice timeout") == 0) {
-                  this_as->armor_notice_timeout = json_object_get_int(json_object_iter_peek_value(&itSub));
                } else {
                   printf("%s\n", json_object_iter_peek_name(&itSub));
                }
@@ -952,6 +934,50 @@ int parse_json_config(char *filename)
                               }
                            }
                         }
+
+                        /* Check if this is an armor display element */
+                        if (strcmp("armor_display", curr_element->special_name) == 0) {
+                           json_object_object_get_ex(tmpobj2, "notice_x", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->notice_x = json_object_get_int(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "notice_y", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->notice_y = json_object_get_int(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "notice_width", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->notice_width = json_object_get_int(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "notice_height", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->notice_height = json_object_get_int(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "notice_timeout", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->notice_timeout = json_object_get_int(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "show_metrics", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->show_metrics = json_object_get_boolean(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "metrics_font", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              snprintf(curr_element->metrics_font, MAX_FILENAME_LENGTH * 2,
+                                       "%s/%s", get_font_path(), json_object_get_string(tmpobj3));
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "metrics_font_size", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->metrics_font_size = json_object_get_int(tmpobj3);
+                           }
+                        }
                      }
 
                      /* Add the element to the element list */
@@ -1017,6 +1043,40 @@ int parse_json_config(char *filename)
 
                   if (json_object_object_get_ex(tmpobj2, "warning voltage", &tmpobj3)) {
                      curr_element->warning_voltage = json_object_get_double(tmpobj3);
+                  }
+
+                  /* Parse armor display properties */
+                  json_object *metrics_x_offset_obj;
+                  json_object *metrics_y_offset_obj;
+
+                  /* Default values if not specified */
+                  curr_element->metrics_x_offset = 0.5f;
+                  curr_element->metrics_y_offset = 0.5f;
+
+                  /* Check if metrics_x_offset is specified */
+                  if (json_object_object_get_ex(tmpobj2, "metrics_x_offset", &metrics_x_offset_obj)) {
+                     curr_element->metrics_x_offset = (float)json_object_get_double(metrics_x_offset_obj);
+
+                     /* Clamp to valid range */
+                     if (curr_element->metrics_x_offset < 0.0f) {
+                        curr_element->metrics_x_offset = 0.0f;
+                     }
+                     if (curr_element->metrics_x_offset > 1.0f) {
+                        curr_element->metrics_x_offset = 1.0f;
+                     }
+                  }
+
+                  /* Check if metrics_y_offset is specified */
+                  if (json_object_object_get_ex(tmpobj2, "metrics_y_offset", &metrics_y_offset_obj)) {
+                      curr_element->metrics_y_offset = (float)json_object_get_double(metrics_y_offset_obj);
+
+                     /* Clamp to valid range */
+                     if (curr_element->metrics_y_offset < 0.0f) {
+                        curr_element->metrics_y_offset = 0.0f;
+                     }
+                     if (curr_element->metrics_y_offset > 1.0f) {
+                        curr_element->metrics_y_offset = 1.0f;
+                     }
                   }
 
                   curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename);

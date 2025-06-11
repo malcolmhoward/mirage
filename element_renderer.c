@@ -563,6 +563,8 @@ void render_special_element(element *curr_element) {
      if (detect_enabled) {
         render_detect_element(curr_element);
      }
+   } else if (strcmp("armor_display", curr_element->name) == 0) {
+      render_armor_display_element(curr_element);
    } else {
      LOG_ERROR("Unknown special element type: %s", curr_element->special_name);
    }
@@ -917,6 +919,308 @@ void render_wifi_element(element *curr_element) {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
    }
+}
+
+/**
+ * @brief Renders an armor display element - COMPLETE FIXED VERSION
+ *
+ * @param curr_element The element to render
+ */
+static time_t armor_timeout = 0;
+static time_t armor_timeout_trigger = 0;
+
+void render_armor_display_element(element *curr_element) {
+   armor_settings *this_as = get_armor_settings();
+   element *armor_element = this_as->armor_elements;
+   time_t current_time = time(NULL);
+   SDL_Renderer *renderer = get_sdl_renderer();
+   char text[2048] = "";
+   hud_display_settings *this_hds = get_hud_display_settings();
+
+   /* Check for external timeout trigger from registerArmor */
+   if (armor_timeout_trigger > 0) {
+      armor_timeout = armor_timeout_trigger;
+      armor_timeout_trigger = 0;  /* Clear the trigger */
+   }
+
+   /* Timeout checking and reset logic */
+   if ((armor_timeout > 0) && (current_time > armor_timeout)) {
+      armor_timeout = 0;
+   }
+
+   /* Determine if we're showing a notification or the regular display */
+   SDL_Rect armor_dest_l, armor_dest_r;
+
+   /* Initialize destination rectangle from element properties */
+   armor_dest_l.x = armor_dest_r.x = curr_element->dest_x;
+   armor_dest_l.y = armor_dest_r.y = curr_element->dest_y;
+   armor_dest_l.w = armor_dest_r.w = curr_element->width;
+   armor_dest_l.h = armor_dest_r.h = curr_element->height;
+
+   /* Use notification position/size when timeout is active */
+   if (armor_timeout > 0) {
+      if (curr_element->notice_x > 0 && curr_element->notice_y > 0 &&
+          curr_element->notice_width > 0 && curr_element->notice_height > 0) {
+         armor_dest_l.x = armor_dest_r.x = curr_element->notice_x;
+         armor_dest_l.y = armor_dest_r.y = curr_element->notice_y;
+         armor_dest_l.w = armor_dest_r.w = curr_element->notice_width;
+         armor_dest_l.h = armor_dest_r.h = curr_element->notice_height;
+      }
+   }
+
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      armor_dest_l.x -= this_hds->stereo_offset;
+      armor_dest_r.x += this_hds->stereo_offset;
+   }
+
+   /* Apply scale for zoom transitions */
+   calculate_zoom_rect(&armor_dest_l, &armor_dest_r, curr_element->scale);
+
+   /* Initialize metrics texture caching if needed */
+   if (curr_element->show_metrics && curr_element->metrics_textures == NULL) {
+      /* Count armor components */
+      int component_count = 0;
+      element *count_element = this_as->armor_elements;
+      while (count_element != NULL) {
+         component_count++;
+         count_element = count_element->next;
+      }
+
+      if (component_count > 0) {
+         /* Allocate arrays for texture caching */
+         curr_element->metrics_textures = calloc(component_count, sizeof(SDL_Texture*));
+         curr_element->last_metrics_text = calloc(component_count, sizeof(char*));
+
+         if (curr_element->metrics_textures && curr_element->last_metrics_text) {
+            for (int i = 0; i < component_count; i++) {
+               curr_element->metrics_textures[i] = NULL;
+               curr_element->last_metrics_text[i] = calloc(64, sizeof(char));
+               if (curr_element->last_metrics_text[i]) {
+                  curr_element->last_metrics_text[i][0] = '\0';
+               }
+            }
+            curr_element->metrics_texture_count = component_count;
+         }
+      }
+   }
+
+   /* Process each armor component with full state management */
+   int component_index = 0;
+   while (armor_element != NULL) {
+      SDL_Texture *texture_to_use = armor_element->texture_base;
+
+      /* Warning state management */
+      if ((armor_element->warning_temp >= 0) && (armor_element->last_temp >= 0)) {
+         if (!(armor_element->warn_state & WARN_OVER_TEMP) &&
+             (armor_element->last_temp > armor_element->warning_temp)) {
+            armor_element->texture = armor_element->texture_warning;
+            armor_element->warn_state |= WARN_OVER_TEMP;
+            time(&armor_timeout);
+            armor_timeout += curr_element->notice_timeout > 0 ? curr_element->notice_timeout : 5;
+         } else if (armor_element->warn_state & WARN_OVER_TEMP) {
+            if (armor_element->last_temp < (armor_element->warning_temp * 0.97)) {
+               armor_element->warn_state &= ~WARN_OVER_TEMP;
+               if (!armor_element->warn_state) {
+                  armor_element->texture = armor_element->texture_online;
+               }
+            }
+         }
+      }
+
+      if ((armor_element->warning_voltage >= 0) && (armor_element->last_voltage >= 0)) {
+         if (!(armor_element->warn_state & WARN_OVER_VOLT) &&
+             (armor_element->last_voltage < armor_element->warning_voltage)) {
+            armor_element->texture = armor_element->texture_warning;
+            armor_element->warn_state |= WARN_OVER_VOLT;
+            time(&armor_timeout);
+            armor_timeout += curr_element->notice_timeout > 0 ? curr_element->notice_timeout : 5;
+         } else if (armor_element->warn_state & WARN_OVER_VOLT) {
+            if (armor_element->last_voltage > (armor_element->warning_voltage * 1.03)) {
+               armor_element->warn_state &= ~WARN_OVER_VOLT;
+               if (!armor_element->warn_state) {
+                  armor_element->texture = armor_element->texture_online;
+               }
+            }
+         }
+      }
+
+      /* Complete deregistration logic with TTS */
+      if (armor_element->mqtt_registered && armor_element->mqtt_last_time > 0 &&
+          ((current_time - this_as->armor_deregister) > armor_element->mqtt_last_time)) {
+         armor_element->mqtt_registered = 0;
+         armor_element->last_temp = armor_element->last_voltage = -1.0;
+         armor_element->warn_state = WARN_NORMAL;
+         armor_element->texture = armor_element->texture_offline;
+
+         time(&armor_timeout);
+         armor_timeout += curr_element->notice_timeout > 0 ? curr_element->notice_timeout : 5;
+
+         snprintf(text, 2048, "%s disconnected.", armor_element->name);
+         mqttTextToSpeech(text);
+      }
+
+      /* Select texture based on component status */
+      if (armor_element->mqtt_last_time == 0) {
+         /* Never been registered - use base texture (blue) */
+         texture_to_use = armor_element->texture_base;
+      } else if (armor_element->mqtt_registered) {
+         /* Currently registered - check for warnings */
+         if ((current_time - armor_element->mqtt_last_time) < this_as->armor_deregister) {
+            if ((armor_element->warning_temp > 0 &&
+                 armor_element->last_temp >= armor_element->warning_temp) ||
+                (armor_element->warning_voltage > 0 &&
+                 armor_element->last_voltage <= armor_element->warning_voltage)) {
+               texture_to_use = armor_element->texture_warning;
+            } else {
+               texture_to_use = armor_element->texture_online;
+            }
+         } else {
+            /* Registered but timed out - use offline */
+            texture_to_use = armor_element->texture_offline;
+         }
+      } else {
+         /* Was registered but now disconnected - use offline (red) */
+         texture_to_use = armor_element->texture_offline;
+      }
+
+      /* Render the component with proper alpha support */
+      if (texture_to_use != NULL) {
+         /* Apply alpha for transitions */
+         if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+            SDL_SetTextureAlphaMod(texture_to_use, (Uint8)(curr_element->transition_alpha * 255));
+         }
+
+         renderStereo(texture_to_use, NULL, &armor_dest_l, &armor_dest_r, curr_element->angle);
+
+         /* Reset alpha after rendering */
+         if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+            SDL_SetTextureAlphaMod(texture_to_use, 255);
+         }
+      }
+
+      /* Render metrics if enabled and component is active */
+      if (curr_element->show_metrics &&
+          armor_element->mqtt_registered &&
+          (current_time - armor_element->mqtt_last_time) < this_as->armor_deregister &&
+          component_index < curr_element->metrics_texture_count) {
+
+         char metrics_text[64] = "";
+
+         // Check if temperature is valid
+         if (armor_element->last_temp > -1.0) {
+            snprintf(metrics_text, sizeof(metrics_text), "%.1f C", armor_element->last_temp);
+         }
+
+         // Check if voltage is valid
+         if (armor_element->last_voltage > -1.0) {
+            // If temperature was added, add a separator
+            if (metrics_text[0] != '\0') {
+               strncat(metrics_text, " | ", sizeof(metrics_text) - strlen(metrics_text) - 1);
+            }
+
+            // Buffer for voltage text
+            char voltage_text[16];
+            snprintf(voltage_text, sizeof(voltage_text), "%.2f V", armor_element->last_voltage);
+
+            // Append voltage to metrics text
+            strncat(metrics_text, voltage_text, sizeof(metrics_text) - strlen(metrics_text) - 1);
+         }
+
+         /* Check if we need to update the texture */
+         if (curr_element->last_metrics_text[component_index] == NULL ||
+             strcmp(metrics_text, curr_element->last_metrics_text[component_index]) != 0) {
+
+            /* Update cached text */
+            if (curr_element->last_metrics_text[component_index]) {
+               strncpy(curr_element->last_metrics_text[component_index],
+                      metrics_text, 63);
+               curr_element->last_metrics_text[component_index][63] = '\0';
+            }
+
+            /* Clean up old texture */
+            if (curr_element->metrics_textures[component_index]) {
+               SDL_DestroyTexture(curr_element->metrics_textures[component_index]);
+               curr_element->metrics_textures[component_index] = NULL;
+            }
+
+            /* Create new texture */
+            SDL_Color text_color = {255, 255, 255, 255}; /* White text */
+            TTF_Font *metrics_font = get_local_font(
+               curr_element->metrics_font[0] ? curr_element->metrics_font : "ui_assets/fonts/Aldrich-Regular.ttf",
+               curr_element->metrics_font_size > 0 ? curr_element->metrics_font_size : 20
+            );
+
+            if (metrics_font) {
+               SDL_Surface *metrics_surface = TTF_RenderText_Blended(
+                  metrics_font, metrics_text, text_color);
+
+               if (metrics_surface) {
+                  curr_element->metrics_textures[component_index] =
+                     SDL_CreateTextureFromSurface(renderer, metrics_surface);
+                  SDL_FreeSurface(metrics_surface);
+               }
+            }
+         }
+
+         /* Render the metrics texture if it exists */
+         if (curr_element->metrics_textures[component_index]) {
+            /* Get texture dimensions */
+            int tex_w, tex_h;
+            SDL_QueryTexture(curr_element->metrics_textures[component_index],
+                           NULL, NULL, &tex_w, &tex_h);
+
+            /* Use the component's metrics positioning offsets (with defaults) */
+            float x_offset = 0.5f;  /* Default to center */
+            float y_offset = 0.5f;  /* Default to center */
+
+            /* Use the component's configured offsets if they're valid */
+            if (armor_element->metrics_x_offset >= 0.0f && armor_element->metrics_x_offset <= 1.0f) {
+               x_offset = armor_element->metrics_x_offset;
+            }
+
+            if (armor_element->metrics_y_offset >= 0.0f && armor_element->metrics_y_offset <= 1.0f) {
+               y_offset = armor_element->metrics_y_offset;
+            }
+
+            /* Calculate the position based on the armor display area and offsets */
+            SDL_Rect metrics_rect_l, metrics_rect_r;
+            metrics_rect_l.w = metrics_rect_r.w = tex_w;
+            metrics_rect_l.h = metrics_rect_r.h = tex_h;
+
+            /* Position the metrics text according to the offsets */
+            metrics_rect_l.x = (int)(armor_dest_l.x + (armor_dest_l.w * x_offset) - (tex_w / 2));
+            metrics_rect_l.y = (int)(armor_dest_l.y + (armor_dest_l.h * y_offset) - (tex_h / 2));
+            metrics_rect_r.x = (int)(armor_dest_r.x + (armor_dest_r.w * x_offset) - (tex_w / 2));
+            metrics_rect_r.y = (int)(armor_dest_r.y + (armor_dest_r.h * y_offset) - (tex_h / 2));
+
+            /* Apply alpha for transitions */
+            if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+               SDL_SetTextureAlphaMod(curr_element->metrics_textures[component_index],
+                                      (Uint8)(curr_element->transition_alpha * 255));
+            }
+
+            /* Render using renderStereo for proper eye handling */
+            renderStereo(curr_element->metrics_textures[component_index],
+                        NULL, &metrics_rect_l, &metrics_rect_r, curr_element->angle);
+
+            /* Reset alpha after rendering */
+            if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+               SDL_SetTextureAlphaMod(curr_element->metrics_textures[component_index], 255);
+            }
+         }
+      }
+
+      armor_element = armor_element->next;
+      component_index++;
+   }
+}
+
+/* Helper function to trigger armor notification timeout from external sources */
+void trigger_armor_notification_timeout(int timeout_seconds) {
+   time_t current_time;
+   time(&current_time);
+   armor_timeout_trigger = current_time + timeout_seconds;
 }
 
 /*
