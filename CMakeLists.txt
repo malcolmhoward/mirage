@@ -69,7 +69,6 @@ set(SOURCE_FILES
     detect.cpp
     devices.c
     element_renderer.c
-    fan_monitoring.c
     frame_rate_tracker.c
     hud_manager.c
     image_utils.c
@@ -78,6 +77,7 @@ set(SOURCE_FILES
     mosquitto_comms.c
     recording.c
     screenshot.c
+    system_metrics.c
     utils.c)
 
 # Set C compiler and flags

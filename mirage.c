@@ -117,6 +117,7 @@
 #include "recording.h"
 #include "screenshot.h"
 #include "secrets.h"
+#include "system_metrics.h"
 #include "utils.h"
 #include "version.h"
 
@@ -155,6 +156,7 @@ motion this_motion = {
    .y = 0.0,
    .z = 0.0
 };
+
 enviro this_enviro = {
    .temp = 0.0,
    .humidity = 0.0,
@@ -169,6 +171,7 @@ enviro this_enviro = {
    .heat_index_c = 0.0,
    .dew_point = 0.0
 };
+
 gps this_gps = {
    .time = "00:00:00",
    .date = "2021/01/01",
@@ -185,6 +188,8 @@ gps this_gps = {
    .altitude = 0.0,
    .satellites = 0
 };
+
+/* AI */
 #define AI_NAME_MAX_LENGTH 32
 #define AI_STATE_MAX_LENGTH 18   /* This is actually defined by the states in DAWN. */
 static char aiName[AI_NAME_MAX_LENGTH] = "";
@@ -1800,6 +1805,9 @@ int main(int argc, char **argv)
       play_intro(15, 1, NULL);
    }
 
+   // Init the metrics after the intro so they aren't reported as stale.
+   init_system_metrics();
+
    //od_data oddataL, oddataR;
    oddataL.complete = 1;
    oddataL.processed = 1;
@@ -2256,7 +2264,6 @@ int main(int argc, char **argv)
 #endif
 
    cleanup_hud_manager();
-   cleanup_fan_monitoring();
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting on MQTT disconnect.");

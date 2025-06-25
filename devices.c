@@ -30,66 +30,18 @@
 #include "devices.h"
 #include "logging.h"
 #include "mirage.h"
-
-static long double loadavg = 0.0;         /* Load average of the CPU(s) in percent. */
-
-/* If we have a CPU monitoring element, this thread is launched to maintain the stat.
- * Calculated every 2 seconds. */
-void *cpu_utilization_thread(void *arg)
-{
-   long double a[6], b[6], cpu_delta;
-   FILE *fp;
-
-   while (!checkShutdown()) {
-      fp = fopen("/proc/stat", "r");
-      fscanf(fp, "%*s %Lf %Lf %Lf %Lf %Lf %Lf", &a[0], &a[1], &a[2], &a[3], &a[4], &a[5]);
-      fclose(fp);
-      sleep(2);
-
-      fp = fopen("/proc/stat", "r");
-      fscanf(fp, "%*s %Lf %Lf %Lf %Lf %Lf %Lf", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]);
-      fclose(fp);
-
-      cpu_delta =
-          (b[0] + b[1] + b[2] + b[3] + b[4] + b[5]) - (a[0] + a[1] + a[2] + a[3] + a[4] + a[5]);
-      loadavg = (100 * (cpu_delta - (b[3] - a[3]))) / cpu_delta;
-   }
-
-   return NULL;
-}
+#include "system_metrics.h"
 
 long double get_loadavg(void)
 {
-   return loadavg;
+   float cpu_usage = get_cpu_usage();
+   return (cpu_usage >= 0.0f) ? (long double)cpu_usage : 0.0L;
 }
 
-/* If we have a memory monitoring element, this function calculate memory usage. */
 long double get_mem_usage(void)
 {
-   char buf[100];
-   char *cp = NULL;
-   long double mem_total = 0.0;
-   long double mem_avail = 0.0;
-   long double mem_used = 0.0;
-   FILE *fp;
-
-   fp = fopen("/proc/meminfo", "r");
-   fgets(buf, 100, fp);
-   cp = &buf[9];
-   mem_total = strtol(cp, NULL, 10);
-
-   fgets(buf, 100, fp);
-   fgets(buf, 100, fp);
-   cp = &buf[13];
-   mem_avail = strtol(cp, NULL, 10);
-
-   fclose(fp);
-
-   mem_used = ((mem_total - mem_avail) / mem_total) * 100.0;
-
-   //printf("mem_total: %Lf, mem_avail: %Lf, mem_used: %Lf\n", mem_total, mem_avail, mem_used);
-
-   return mem_used;
+   float memory_usage = get_memory_usage();
+   return (memory_usage >= 0.0f) ? (long double)memory_usage : 0.0L;
 }
 
 /* Get the wifi signal level from the wireless driver.

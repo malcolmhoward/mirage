@@ -43,6 +43,7 @@
 #include "logging.h"
 #include "mirage.h"
 #include "screenshot.h"
+#include "system_metrics.h"
 
 #define SERVER_TIMEOUT 10
 
@@ -130,6 +131,101 @@ void serial_get_port(char *buffer, size_t size) {
    pthread_mutex_unlock(&serial_state.mutex);
 }
 
+/* Parse commands specifically from the "stat" topic. */
+int parse_stat_command(char *command_string)
+{
+   /* Parse JSON message */
+   struct json_object *parsed_json = json_tokener_parse(command_string);
+   if (parsed_json == NULL) {
+      LOG_ERROR("Failed to parse JSON message from STAT");
+      return FAILURE;
+   }
+
+   /* Get device type */
+   struct json_object *device_obj = NULL;
+   if (!json_object_object_get_ex(parsed_json, "device", &device_obj)) {
+      LOG_ERROR("Missing 'device' field in STAT message");
+      json_object_put(parsed_json);
+      return FAILURE;
+   }
+
+   const char *device_type = json_object_get_string(device_obj);
+   time_t current_time = time(NULL);
+
+   /* Process based on device type */
+   if (strcmp(device_type, "CPU") == 0) {
+      struct json_object *usage_obj = NULL;
+      if (json_object_object_get_ex(parsed_json, "usage", &usage_obj)) {
+         system_metrics.cpu_usage = (float)json_object_get_double(usage_obj);
+         system_metrics.cpu_update_time = current_time;
+         system_metrics.cpu_available = true;
+      }
+   }
+   else if (strcmp(device_type, "Memory") == 0) {
+      struct json_object *usage_obj = NULL;
+      if (json_object_object_get_ex(parsed_json, "usage", &usage_obj)) {
+         system_metrics.memory_usage = (float)json_object_get_double(usage_obj);
+         system_metrics.memory_update_time = current_time;
+         system_metrics.memory_available = true;
+      }
+   }
+   else if (strcmp(device_type, "Fan") == 0) {
+      struct json_object *rpm_obj = NULL;
+      struct json_object *load_obj = NULL;
+
+      if (json_object_object_get_ex(parsed_json, "rpm", &rpm_obj)) {
+         system_metrics.fan_rpm = json_object_get_int(rpm_obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "load", &load_obj)) {
+         system_metrics.fan_load = json_object_get_int(load_obj);
+      }
+
+      system_metrics.fan_update_time = current_time;
+      system_metrics.fan_available = true;
+   }
+   else if (strcmp(device_type, "Power") == 0) {
+      struct json_object *obj = NULL;
+
+      if (json_object_object_get_ex(parsed_json, "voltage", &obj)) {
+         system_metrics.power_voltage = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "current", &obj)) {
+         system_metrics.power_current = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "power", &obj)) {
+         system_metrics.power_consumption = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "temperature", &obj)) {
+         system_metrics.power_temperature = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "battery_level", &obj)) {
+         system_metrics.battery_level = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "battery_status", &obj)) {
+         const char *status = json_object_get_string(obj);
+         strncpy(system_metrics.battery_status, status, sizeof(system_metrics.battery_status) - 1);
+         system_metrics.battery_status[sizeof(system_metrics.battery_status) - 1] = '\0';
+      }
+
+      system_metrics.power_update_time = current_time;
+      system_metrics.power_available = true;
+   }
+
+   /* Free JSON object */
+   json_object_put(parsed_json);
+
+   /* Check for stale metrics */
+   update_metrics_availability(10); /* Consider metrics stale after 10 seconds */
+
+   return SUCCESS;
+}
+
 /* Parse the JSON "commands" that come over serial/USB or MQTT. */
 int parse_json_command(char *command_string, char *topic)
 {
@@ -168,6 +264,12 @@ int parse_json_command(char *command_string, char *topic)
       return FAILURE;
    }
 
+   /* This function is getting too long. let's try something new. */
+   if (strcmp(topic, "stat") == 0) {
+      return parse_stat_command(command_string);
+   }
+
+   /* If not "stat" topic, continue. */
    parsed_json = json_tokener_parse(command_string);
    if (!parsed_json) {
       LOG_ERROR("Failed to parse JSON command: %s", command_string);
@@ -183,8 +285,6 @@ int parse_json_command(char *command_string, char *topic)
       if (tmpstr == NULL) {
          LOG_WARNING("Device field exists but is not a string");
       } else {
-         LOG_INFO("Processing device: %s", tmpstr);
-
          if (strcmp("Motion", tmpstr) == 0) {
             /* Motion */
             if (!json_object_object_get_ex(parsed_json, "format", &tmpobj)) {

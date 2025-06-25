@@ -69,7 +69,6 @@ typedef struct _gps {
    int satellites;
 } gps;
 
-void *cpu_utilization_thread(void *arg);
 long double get_loadavg(void);
 long double get_mem_usage(void);
 int get_wifi_signal_level(void);

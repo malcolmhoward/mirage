@@ -41,12 +41,12 @@
 #include "defines.h"
 #include "devices.h"
 #include "element_renderer.h"
-#include "fan_monitoring.h"
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
 #include "recording.h"
 #include "secrets.h"
+#include "system_metrics.h"
 
 /* Globals and external references */
 // video elements
@@ -280,12 +280,9 @@ void render_animated_element(element *curr_element) {
 
 /* Render a text element */
 void render_text_element(element *curr_element) {
-   static int cpu_thread_started = 0;
-   static pthread_t cpu_util_thread = 0;
    SDL_Rect dst_rect_l, dst_rect_r;
    hud_display_settings *this_hds = get_hud_display_settings();
    char render_text[MAX_TEXT_LENGTH] = "";
-   static FILE *fan_file = NULL;
    unsigned int currTime = SDL_GetTicks();
    int override_dst_rect = curr_element->in_transition;
    float alpha_override = curr_element->transition_alpha;
@@ -321,15 +318,6 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*AINAME*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
    } else if (strcmp("*CPU*", curr_element->text) == 0) {
-      if (cpu_thread_started == 0) {
-         if (pthread_create(&cpu_util_thread, NULL, cpu_utilization_thread, NULL) != 0) {
-            LOG_ERROR("Error creating cpu utilization thread.");
-            cpu_thread_started = 0;
-         } else {
-            cpu_thread_started = 1;
-         }
-      }
-
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_loadavg());
    } else if (strcmp("*MEM*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_mem_usage());
@@ -362,11 +350,6 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
 
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
-      // Initialize fan monitoring if not already done
-      if (fan_file == NULL) {
-         init_fan_monitoring();
-      }
-
       // Get fan percentage and format text
       int fan_percent = get_fan_load_percent();
       snprintf(render_text, MAX_TEXT_LENGTH, "%03d", fan_percent);
