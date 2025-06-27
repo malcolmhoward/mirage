@@ -213,6 +213,31 @@ int parse_stat_command(char *command_string)
          system_metrics.battery_status[sizeof(system_metrics.battery_status) - 1] = '\0';
       }
 
+      /* Parse the new battery monitoring fields */
+      if (json_object_object_get_ex(parsed_json, "time_remaining_min", &obj)) {
+         system_metrics.time_remaining_min = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "time_remaining_fmt", &obj)) {
+         const char *time_fmt = json_object_get_string(obj);
+         strncpy(system_metrics.time_remaining_fmt, time_fmt, sizeof(system_metrics.time_remaining_fmt) - 1);
+         system_metrics.time_remaining_fmt[sizeof(system_metrics.time_remaining_fmt) - 1] = '\0';
+      }
+
+      if (json_object_object_get_ex(parsed_json, "battery_chemistry", &obj)) {
+         const char *chemistry = json_object_get_string(obj);
+         strncpy(system_metrics.battery_chemistry, chemistry, sizeof(system_metrics.battery_chemistry) - 1);
+         system_metrics.battery_chemistry[sizeof(system_metrics.battery_chemistry) - 1] = '\0';
+      }
+
+      if (json_object_object_get_ex(parsed_json, "battery_capacity_mah", &obj)) {
+         system_metrics.battery_capacity_mah = (float)json_object_get_double(obj);
+      }
+
+      if (json_object_object_get_ex(parsed_json, "battery_cells", &obj)) {
+         system_metrics.battery_cells = json_object_get_int(obj);
+      }
+
       system_metrics.power_update_time = current_time;
       system_metrics.power_available = true;
    }

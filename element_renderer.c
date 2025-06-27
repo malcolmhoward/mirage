@@ -348,11 +348,75 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
    } else if (strcmp("*DEWPOINT*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
-
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
-      // Get fan percentage and format text
       int fan_percent = get_fan_load_percent();
       snprintf(render_text, MAX_TEXT_LENGTH, "%03d", fan_percent);
+   } else if (strcmp("*BATTERY_LEVEL*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f%%", system_metrics.battery_level);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.-%%");
+      }
+   } else if (strcmp("*BATTERY_STATUS*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_status);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "UNKNOWN");
+      }
+   } else if (strcmp("*BATTERY_TIME*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--:--");
+      }
+   } else if (strcmp("*BATTERY_TIME_MIN*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", system_metrics.time_remaining_min);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.-");
+      }
+   } else if (strcmp("*BATTERY_VOLTAGE*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f V", system_metrics.power_voltage);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- V");
+      }
+   } else if (strcmp("*BATTERY_CURRENT*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f A", system_metrics.power_current);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- A");
+      }
+   } else if (strcmp("*BATTERY_POWER*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f W", system_metrics.power_consumption);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- W");
+      }
+   } else if (strcmp("*BATTERY_TEMP*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f C", system_metrics.power_temperature);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.- C");
+      }
+   } else if (strcmp("*BATTERY_CHEMISTRY*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_chemistry);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "UNKN");
+      }
+   } else if (strcmp("*BATTERY_CAPACITY*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f mAh", system_metrics.battery_capacity_mah);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "---- mAh");
+      }
+   } else if (strcmp("*BATTERY_CELLS*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--S");
+      }
    } else if (strcmp("*LATLON*", curr_element->text) == 0) {
       if (this_gps->latitudeDegrees != 0.0) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f",
@@ -542,6 +606,8 @@ void render_special_element(element *curr_element) {
       render_altitude_element(curr_element);
    } else if (strcmp("wifi", curr_element->special_name) == 0) {
       render_wifi_element(curr_element);
+   } else if (strcmp("battery", curr_element->special_name) == 0) {
+      render_battery_element(curr_element);
    } else if (strcmp("detect", curr_element->special_name) == 0) {
      if (detect_enabled) {
         render_detect_element(curr_element);
@@ -900,6 +966,54 @@ void render_wifi_element(element *curr_element) {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
       } else {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+   }
+}
+
+void render_battery_element(element *curr_element) {
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
+
+   /* Get battery level (0-100) */
+   float battery_level = system_metrics.battery_level;
+
+   dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->dst_rect.w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->dst_rect.h;
+
+   /* Apply fixed/stereo offset */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
+
+   /* Select appropriate texture based on state */
+   if (battery_level <= 0.0 && curr_element->texture_offline) {
+      this_texture = curr_element->texture_offline;
+   } else if (battery_level <= 25.0 && curr_element->texture_warning) {
+      this_texture = curr_element->texture_warning;
+   } else if (battery_level <= 50.0 && curr_element->texture_online) {
+      this_texture = curr_element->texture_online;
+   } else if (battery_level <= 75.0 && curr_element->texture_base) {
+      this_texture = curr_element->texture_base;
+   } else {
+      this_texture = curr_element->texture;
+   }
+
+   /* Apply scale, currently used for zoom effect */
+   calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
+
+   /* Render the element */
+   if (this_texture != NULL) {
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
    }
 }

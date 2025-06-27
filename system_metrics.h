@@ -37,6 +37,11 @@ typedef struct {
    float power_temperature;    /* Temperature of INA238 die in °C */
    float battery_level;        /* Battery level percentage (0-100) */
    char battery_status[16];    /* Battery status string (e.g., "NORMAL", "WARNING", "CRITICAL") */
+   float time_remaining_min;   /* Estimated battery runtime remaining in minutes */
+   char time_remaining_fmt[8]; /* Formatted battery runtime remaining (HH:MM) */
+   char battery_chemistry[8];  /* Battery chemistry type (e.g., "LiPo", "Li-Ion") */
+   float battery_capacity_mah; /* Battery capacity in milliamp-hours */
+   int battery_cells;          /* Number of battery cells */
    
    /* Timestamp of last update for each metric */
    time_t cpu_update_time;

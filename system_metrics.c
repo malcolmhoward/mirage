@@ -39,12 +39,17 @@ system_metrics_t system_metrics = {
    .power_temperature = 0.0f,
    .battery_level = 0.0f,
    .battery_status = "UNKNOWN",
-   
+   .time_remaining_min = 0.0f,
+   .time_remaining_fmt = "0:00",
+   .battery_chemistry = "UNKN",
+   .battery_capacity_mah = 0.0f,
+   .battery_cells = 0,
+
    .cpu_update_time = 0,
    .memory_update_time = 0,
    .fan_update_time = 0,
    .power_update_time = 0,
-   
+
    .cpu_available = false,
    .memory_available = false,
    .fan_available = false,
@@ -67,6 +72,11 @@ void init_system_metrics(void)
    system_metrics.power_temperature = 0.0f;
    system_metrics.battery_level = 0.0f;
    strcpy(system_metrics.battery_status, "UNKNOWN");
+   system_metrics.time_remaining_min = 0.0f;
+   strcpy(system_metrics.time_remaining_fmt, "0:00");
+   strcpy(system_metrics.battery_chemistry, "UNKN");
+   system_metrics.battery_capacity_mah = 0.0f;
+   system_metrics.battery_cells = 0;
    
    /* Reset all timestamps */
    time_t current_time = time(NULL);
@@ -107,8 +117,6 @@ bool is_metric_stale(time_t update_time, int timeout_seconds)
  */
 void update_metrics_availability(int timeout_seconds)
 {
-   time_t current_time = time(NULL);
-   
    /* Check each metric and update its availability */
    system_metrics.cpu_available = !is_metric_stale(system_metrics.cpu_update_time, timeout_seconds);
    system_metrics.memory_available = !is_metric_stale(system_metrics.memory_update_time, timeout_seconds);

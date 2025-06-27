@@ -935,6 +935,79 @@ int parse_json_config(char *filename)
                            }
                         }
 
+                        /* Battery display elements */
+                        if (strcmp("battery", curr_element->special_name) == 0) {
+                           /* We're reusing filenames and textures here. No reason for new ones. */
+                           json_object_object_get_ex(tmpobj2, "file_100", &tmpobj3);
+                           snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+
+                           json_object_object_get_ex(tmpobj2, "file_75", &tmpobj3);
+                           snprintf(curr_element->filename_base, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+
+                           json_object_object_get_ex(tmpobj2, "file_50", &tmpobj3);
+                           snprintf(curr_element->filename_online, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+
+                           json_object_object_get_ex(tmpobj2, "file_25", &tmpobj3);
+                           snprintf(curr_element->filename_warning, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+
+                           json_object_object_get_ex(tmpobj2, "file_0", &tmpobj3);
+                           snprintf(curr_element->filename_offline, MAX_FILENAME_LENGTH * 2,
+                                    "%s/%s", image_path, json_object_get_string(tmpobj3));
+
+                           /* Load textures */
+                           curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
+                           if (!curr_element->texture) {
+                              SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
+                                      SDL_GetError());
+                              json_object_put(parsed_json);
+                              free(config_string);
+                              return FAILURE;
+                           }
+
+                           curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename_base);
+                           if (!curr_element->texture_base) {
+                              SDL_Log("Couldn't load %s: %s\n", curr_element->filename_base,
+                                      SDL_GetError());
+                              json_object_put(parsed_json);
+                              free(config_string);
+                              return FAILURE;
+                           }
+
+                           curr_element->texture_online = IMG_LoadTexture(renderer, curr_element->filename_online);
+                           if (!curr_element->texture_online) {
+                              SDL_Log("Couldn't load %s: %s\n", curr_element->filename_online,
+                                      SDL_GetError());
+                              json_object_put(parsed_json);
+                              free(config_string);
+                              return FAILURE;
+                           }
+
+                           curr_element->texture_warning = IMG_LoadTexture(renderer, curr_element->filename_warning);
+                           if (!curr_element->texture_warning) {
+                              SDL_Log("Couldn't load %s: %s\n", curr_element->filename_warning,
+                                      SDL_GetError());
+                              json_object_put(parsed_json);
+                              free(config_string);
+                              return FAILURE;
+                           }
+
+                           curr_element->texture_offline = IMG_LoadTexture(renderer, curr_element->filename_offline);
+                           if (!curr_element->texture_offline) {
+                              SDL_Log("Couldn't load %s: %s\n", curr_element->filename_offline,
+                                      SDL_GetError());
+                              json_object_put(parsed_json);
+                              free(config_string);
+                              return FAILURE;
+                           }
+
+                           SDL_QueryTexture(curr_element->texture, NULL, NULL,
+                                            &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                        }
+
                         /* Check if this is an armor display element */
                         if (strcmp("armor_display", curr_element->special_name) == 0) {
                            json_object_object_get_ex(tmpobj2, "notice_x", &tmpobj3);
@@ -1022,7 +1095,7 @@ int parse_json_config(char *filename)
 
 
                   json_object_object_get_ex(tmpobj2, "base file", &tmpobj3);
-                  snprintf(curr_element->filename, MAX_FILENAME_LENGTH * 2,
+                  snprintf(curr_element->filename_base, MAX_FILENAME_LENGTH * 2,
                            "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                   json_object_object_get_ex(tmpobj2, "online file", &tmpobj3);
@@ -1079,9 +1152,9 @@ int parse_json_config(char *filename)
                      }
                   }
 
-                  curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename);
+                  curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename_base);
                   if (!curr_element->texture_base) {
-                     SDL_Log("Couldn't load %s: %s\n",
+                     LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename, SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
@@ -1090,7 +1163,7 @@ int parse_json_config(char *filename)
 
                   curr_element->texture_online = IMG_LoadTexture(renderer, curr_element->filename_online);
                   if (!curr_element->texture_online) {
-                     SDL_Log("Couldn't load %s: %s\n",
+                     LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_online, SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
@@ -1099,7 +1172,7 @@ int parse_json_config(char *filename)
 
                   curr_element->texture_warning = IMG_LoadTexture(renderer, curr_element->filename_warning);
                   if (!curr_element->texture_warning) {
-                     SDL_Log("Couldn't load %s: %s\n",
+                     LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_warning, SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
@@ -1108,7 +1181,7 @@ int parse_json_config(char *filename)
 
                   curr_element->texture_offline = IMG_LoadTexture(renderer, curr_element->filename_offline);
                   if (!curr_element->texture_offline) {
-                     SDL_Log("Couldn't load %s: %s\n",
+                     LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_offline, SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);

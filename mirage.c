@@ -219,6 +219,7 @@ element default_element =
    .filename_s = "",
    .filename_rs = "",
 
+   .filename_base = "",
    .filename_online = "",
    .filename_warning = "",
    .filename_offline = "",
@@ -1479,7 +1480,7 @@ int main(int argc, char **argv)
       switch (opt) {
       case 'b':
          no_camera_mode = 1;
-         printf("No camera mode enabled - cameras disabled");
+         printf("No camera mode enabled - cameras disabled\n");
          break;
       case 'c':
          if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {

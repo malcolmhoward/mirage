@@ -104,6 +104,7 @@ typedef struct _element {
    char filename_w[MAX_FILENAME_LENGTH * 2];    /* AI wakework filename graphic. */
    char filename_p[MAX_FILENAME_LENGTH * 2];    /* AI processing filename graphic. */
 
+   char filename_base[MAX_FILENAME_LENGTH * 2];      /* Filename of base armor graphic. */
    char filename_online[MAX_FILENAME_LENGTH * 2];    /* Filename of online armor graphic. */
    char filename_warning[MAX_FILENAME_LENGTH * 2];   /* Filename of warning armor graphic. */
    char filename_offline[MAX_FILENAME_LENGTH * 2];   /* Filename of offline armor graphic. */
