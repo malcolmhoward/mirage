@@ -1900,8 +1900,7 @@ int main(int argc, char **argv)
                if (screen->hotkey[0] != '\0') {
                   if (event.key.keysym.sym == SDL_GetKeyFromName(screen->hotkey)) {
                      /* Use default transition settings when using hotkeys */
-                     switch_to_hud(screen->name, get_hud_manager()->transition_type,
-                                  get_hud_manager()->transition_duration_ms);
+                     switch_to_hud(screen, screen->transition_type);
                      break;
                   }
                }

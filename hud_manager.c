@@ -155,41 +155,34 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
 }
 
 /* Switch to a different HUD with specified transition */
-void switch_to_hud(const char *hud_name, transition_t transition_type, int transition_duration_ms) {
-   hud_screen *target = find_hud_by_name(hud_name);
-   
-   if (target == NULL) {
-      LOG_ERROR("HUD '%s' not found", hud_name);
+void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
+   if (this_screen == NULL) {
+      LOG_ERROR("Invalid HD passed for transition.");
       return;
    }
    
-   if (target == hud_mgr.current_screen) {
-      LOG_INFO("Already on HUD '%s'", hud_name);
+   if (this_screen == hud_mgr.current_screen) {
+      LOG_INFO("Already on HUD '%s'", this_screen->name);
       return;
    }
    
    /* Validate transition type */
    if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-      LOG_WARNING("Invalid transition type %d, using default fade", transition_type);
-      transition_type = TRANSITION_FADE;
+      LOG_WARNING("Invalid transition type %d, using default for screen %s",
+                  transition_type, this_screen->transition_type);
+      transition_type = this_screen->transition_type;
    }
 
-   /* Validate transition duration */
-   if (transition_duration_ms <= 0) {
-      LOG_WARNING("Invalid transition duration %d, using default 500ms", transition_duration_ms);
-      transition_duration_ms = 500;
-   }
-   
    /* Start transition */
    hud_mgr.transition_from = hud_mgr.current_screen;
-   hud_mgr.current_screen = target;
+   hud_mgr.current_screen = this_screen;
    hud_mgr.transition_progress = 0.0;
    hud_mgr.transition_type = transition_type;
-   hud_mgr.transition_duration_ms = transition_duration_ms;
+   //hud_mgr.transition_duration_ms = transition_duration_ms;
    hud_mgr.transition_start_time = SDL_GetTicks();
    
-   LOG_INFO("Switching to HUD: %s with transition %s (%dms)", 
-            hud_name, get_transition_name(transition_type), transition_duration_ms);
+   LOG_INFO("Switching to HUD: %s with transition %s", 
+            this_screen->name, get_transition_name(transition_type));
 }
 
 /* Get ID of current HUD */
@@ -255,5 +248,5 @@ void switch_to_next_hud(void) {
    }
 
    // Use the existing switch function with default transition settings
-   switch_to_hud(next_screen->name, hud_mgr->transition_type, hud_mgr->transition_duration_ms);
+   switch_to_hud(next_screen, next_screen->transition_type);
 }

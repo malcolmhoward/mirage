@@ -1704,7 +1704,7 @@ void render_hud_elements(void) {
          float to_alpha = hud_mgr->transition_progress;
 
          /* Apply transition effect based on transition type */
-         switch (hud_mgr->current_screen->transition_type) {
+         switch (hud_mgr->transition_type) {
             case TRANSITION_MAX:
                LOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
                LOG_ERROR("Changing to valid default transition: %s", get_transition_name(TRANSITION_FADE));

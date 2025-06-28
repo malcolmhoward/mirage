@@ -103,11 +103,10 @@ hud_screen* find_hud_by_id(int id);
  * target HUD using the given transition type and duration. If the target HUD
  * is the same as the current HUD, no action is taken.
  *
- * @param hud_name Name of the target HUD to switch to
+ * @param this_screen Pointer to the target HUD to switch to
  * @param transition_type Type of transition animation to use
- * @param transition_duration_ms Duration of the transition in milliseconds
  */
-void switch_to_hud(const char *hud_name, transition_t transition_type, int transition_duration_ms);
+void switch_to_hud(hud_screen *this_screen, transition_t transition_type);
 
 /**
  * @brief Switches to the next HUD in the sequence.

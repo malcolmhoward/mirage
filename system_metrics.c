@@ -124,6 +124,7 @@ void update_metrics_availability(int timeout_seconds)
    system_metrics.power_available = !is_metric_stale(system_metrics.power_update_time, timeout_seconds);
    
    /* Log if metrics become unavailable */
+#if 0 /* Suppressing these for now. */
    if (!system_metrics.cpu_available) {
       LOG_WARNING("CPU metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
@@ -139,6 +140,7 @@ void update_metrics_availability(int timeout_seconds)
    if (!system_metrics.power_available) {
       LOG_WARNING("Power metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
+#endif
 }
 
 /**

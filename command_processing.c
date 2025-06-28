@@ -295,6 +295,13 @@ int parse_json_command(char *command_string, char *topic)
    }
 
    /* If not "stat" topic, continue. */
+
+   /* Check if command_string starts with '{' to validate it's JSON */
+   if (command_string[0] != '{') {
+      LOG_INFO("Non-JSON debug message received: %s", command_string);
+      return SUCCESS;  /* Exit gracefully for debug messages */
+   }
+
    parsed_json = json_tokener_parse(command_string);
    if (!parsed_json) {
       LOG_ERROR("Failed to parse JSON command: %s", command_string);
@@ -647,14 +654,22 @@ int parse_json_command(char *command_string, char *topic)
                                  if (strcmp(hudName, "next") == 0) {
                                     switch_to_next_hud();
                                  } else {
-                                    switch_to_hud(hudName, get_hud_manager()->transition_type,
-                                                 get_hud_manager()->transition_duration_ms);
-                                 }
+                                    hud_screen *target = find_hud_by_name(hudName);
+                                    char temp_msg[128];
+                                    if (target != NULL) {
+                                       switch_to_hud(target, target->transition_type);
 
-                                 char temp_msg[128];
-                                 snprintf(temp_msg, sizeof(temp_msg) - 1, "Switched to %s hud.", hudName);
-                                 temp_msg[sizeof(temp_msg) - 1] = '\0';
-                                 mqttTextToSpeech(temp_msg);
+                                       snprintf(temp_msg, sizeof(temp_msg) - 1, "Switched to %s hud.", hudName);
+                                       temp_msg[sizeof(temp_msg) - 1] = '\0';
+                                       mqttTextToSpeech(temp_msg);
+                                    } else {
+                                       snprintf(temp_msg, sizeof(temp_msg) - 1, "Requested HUD, \"%s\", not found.",
+                                                hudName);
+                                       temp_msg[sizeof(temp_msg) - 1] = '\0';
+                                       mqttTextToSpeech(temp_msg);
+                                       LOG_ERROR(temp_msg);
+                                    }
+                                 }
                               }
                            }
                         }
@@ -666,36 +681,31 @@ int parse_json_command(char *command_string, char *topic)
                            if (tmpobj != NULL) {
                               const char *hudName = json_object_get_string(tmpobj);
                               if (hudName != NULL) {
-                                 /* Get transition type */
-                                 int transition_type = get_hud_manager()->transition_type; /* Default */
-                                 if (json_object_object_get_ex(parsed_json, "transitionType", &tmpobj)) {
-                                    if (tmpobj != NULL) {
-                                       if (json_object_get_type(tmpobj) == json_type_string) {
-                                          const char *transition_name = json_object_get_string(tmpobj);
-                                          if (transition_name != NULL) {
-                                             transition_type = find_transition_by_name(transition_name);
-                                          }
-                                       } else {
-                                          transition_type = json_object_get_int(tmpobj);
-                                          if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-                                             LOG_WARNING("Invalid transition type %d in JSON command, using default",
-                                                         transition_type);
-                                             transition_type = get_hud_manager()->transition_type; // Fall back to default
+                                 hud_screen *target = find_hud_by_name(hudName);
+                                 if (target != NULL) {
+                                    /* Get transition type */
+                                    int transition_type = target->transition_type; /* Default */
+                                    if (json_object_object_get_ex(parsed_json, "transitionType", &tmpobj)) {
+                                       if (tmpobj != NULL) {
+                                          if (json_object_get_type(tmpobj) == json_type_string) {
+                                             const char *transition_name = json_object_get_string(tmpobj);
+                                             if (transition_name != NULL) {
+                                                transition_type = find_transition_by_name(transition_name);
+                                             }
+                                          } else {
+                                             transition_type = json_object_get_int(tmpobj);
+                                             if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
+                                                LOG_WARNING("Invalid transition type %d in JSON command, using default",
+                                                            transition_type);
+                                                transition_type = target->transition_type; // Fall back to default
+                                             }
                                           }
                                        }
                                     }
-                                 }
 
-                                 /* Get transition duration */
-                                 int transition_duration_ms = get_hud_manager()->transition_duration_ms; /* Default */
-                                 if (json_object_object_get_ex(parsed_json, "transitionDuration", &tmpobj)) {
-                                    if (tmpobj != NULL) {
-                                       transition_duration_ms = json_object_get_int(tmpobj);
-                                    }
+                                    /* Switch with the specified parameters */
+                                    switch_to_hud(target, transition_type);
                                  }
-
-                                 /* Switch with the specified parameters */
-                                 switch_to_hud(hudName, transition_type, transition_duration_ms);
                               }
                            }
                         }
