@@ -225,6 +225,7 @@ element default_element =
    .filename_offline = "",
 
    .text = "",
+   .last_rendered_text = "",
    .font = "",
    //SDL_Color font_color;
    .ttf_font = NULL,

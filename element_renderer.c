@@ -284,7 +284,6 @@ void render_text_element(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
    char render_text[MAX_TEXT_LENGTH] = "";
    unsigned int currTime = SDL_GetTicks();
-   int override_dst_rect = curr_element->in_transition;
    float alpha_override = curr_element->transition_alpha;
    static unsigned int last_log = 0;
    char (*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
@@ -500,9 +499,14 @@ void render_text_element(element *curr_element) {
       render_text[MAX_TEXT_LENGTH-1] = '\0';
    }
 
+   /* Prevent empty text */
+   if (strlen(render_text) == 0) {
+      strcpy(render_text, " ");
+   }
+
    /* Recreate texture if needed */
-   if (curr_element->texture == NULL ||
-      render_text[0] != '\0') { /* Don't recreate for static text */
+   if ((curr_element->texture == NULL) ||
+      (strncmp(render_text, curr_element->last_rendered_text, MAX_TEXT_LENGTH) != 0)) {
 
       /* Clean up old texture and surface if they exist */
       if (curr_element->texture != NULL) {
@@ -516,30 +520,12 @@ void render_text_element(element *curr_element) {
       }
 
       /* Create new text surface and texture */
-      if (strlen(render_text) == 0) {
-         strcpy(render_text, " "); /* Prevent empty text */
-      }
-
       curr_element->surface = TTF_RenderText_Blended(
          curr_element->ttf_font, render_text, curr_element->font_color);
 
       if (curr_element->surface != NULL) {
          curr_element->dst_rect.w = curr_element->surface->w;
          curr_element->dst_rect.h = curr_element->surface->h;
-
-         /* Only recalculate position if not in transition */
-         if (!override_dst_rect) {
-            if (strcmp("left", curr_element->halign) == 0) {
-               curr_element->dst_rect.x = curr_element->dest_x;
-               curr_element->dst_rect.y = curr_element->dest_y;
-            } else if (strcmp("center", curr_element->halign) == 0) {
-               curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
-               curr_element->dst_rect.y = curr_element->dest_y;
-            } else if (strcmp("right", curr_element->halign) == 0) {
-               curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
-               curr_element->dst_rect.y = curr_element->dest_y;
-            }
-         }
 
          if (curr_element->surface != NULL && alpha_override > 0.0f) {
             // Apply alpha to the surface color
@@ -556,7 +542,17 @@ void render_text_element(element *curr_element) {
          if (curr_element->texture == NULL) {
             LOG_ERROR("SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
          }
+
+         snprintf(curr_element->last_rendered_text, MAX_TEXT_LENGTH, "%s", render_text);
       }
+   }
+
+   if (strcmp("left", curr_element->halign) == 0) {
+      curr_element->dst_rect.x = curr_element->dest_x;
+   } else if (strcmp("right", curr_element->halign) == 0) {
+      curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
+   } else if (strcmp("center", curr_element->halign) == 0) {
+      curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
    }
 
    /* Set up render coordinates */
@@ -1681,6 +1677,13 @@ void render_hud_elements(void) {
    element *first_element = get_first_element();
 
    if (hud_mgr->transition_from != NULL) {
+      /* We need to reset text elements on the beginning of the transition. */
+      curr_element = first_element;
+      while (curr_element != NULL) {
+         curr_element->last_rendered_text[0] = '\0';
+         curr_element = curr_element->next;
+      }
+
       /* In transition between HUDs */
       Uint32 elapsed = SDL_GetTicks() - hud_mgr->transition_start_time;
       hud_mgr->transition_progress = (float)elapsed / hud_mgr->transition_duration_ms;
@@ -1852,16 +1855,11 @@ void render_hud_elements(void) {
              }
           }
 
+          /* Reset transition states in all elements */
           /* Reset all texture alphas after transition rendering */
           curr_element = first_element;
           while (curr_element != NULL) {
              reset_texture_alpha(curr_element);
-             curr_element = curr_element->next;
-          }
-
-          /* Reset transition states in all elements */
-          curr_element = first_element;
-          while (curr_element != NULL) {
              curr_element->in_transition = 0;
              curr_element->transition_alpha = 0.0f;
              curr_element = curr_element->next;

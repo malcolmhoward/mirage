@@ -111,6 +111,7 @@ typedef struct _element {
 
    /* Text elements */
    char text[MAX_TEXT_LENGTH];
+   char last_rendered_text[MAX_TEXT_LENGTH];
    char font[MAX_FILENAME_LENGTH * 2];
    SDL_Color font_color;
    TTF_Font *ttf_font;

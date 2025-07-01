@@ -130,7 +130,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
                                                             the angle measured or opposite it. */
 
 #define GOOGLE_MAPS_API       "https://maps.googleapis.com/maps/api/staticmap?center=%f,%f&size=%dx%d&format=png32&" \
-                              "maptype=hybrid&markers=size:mid%%7Ccolor:red%%7C%f,%f&map_id=1f0d991c235e0c32&zoom=18&key=%s"
+                              "maptype=hybrid&markers=size:mid%%7Ccolor:red%%7C%f,%f&key=%s"
 #define GOOGLE_APIKEY_FILE    "googleapi.key"      /* Where do we store our Google API key? */
 #define MAP_UPDATE_SEC        30                   /* Fixed map update interval. */
                                                    /* TODO: Make these available in the config file. */
