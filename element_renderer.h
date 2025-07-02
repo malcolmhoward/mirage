@@ -25,6 +25,11 @@
 #include "config_parser.h"
 #include "hud_manager.h"
 
+// The following defines the default *LOG* window dimensions.
+// These were just what I needed but they're dependant on the graphics.
+#define DEFAULT_LOG_WIDTH  615
+#define DEFAULT_LOG_HEIGHT 345
+
 /* Basic element rendering functions */
 void render_static_element(element *curr_element);
 void render_animated_element(element *curr_element);

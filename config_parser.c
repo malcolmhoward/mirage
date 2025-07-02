@@ -824,6 +824,19 @@ int parse_json_config(char *filename)
                         if (tmpobj3 != NULL) {
                            strncpy(curr_element->halign, json_object_get_string(tmpobj3), 7);
                         }
+
+                        /* These are currently just for the *LOG* text. */
+                        // Parse width if present
+                        json_object_object_get_ex(tmpobj2, "width", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                            curr_element->width = json_object_get_int(tmpobj3);
+                        }
+
+                        // Parse height if present
+                        json_object_object_get_ex(tmpobj2, "height", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           curr_element->height = json_object_get_int(tmpobj3);
+                        }
                      /* SPECIAL */
                      } else if (strcmp("special", element_type) == 0) {
                         curr_element->type = SPECIAL;

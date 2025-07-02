@@ -149,7 +149,6 @@ typedef struct _element {
    int mqtt_registered;
    time_t mqtt_last_time;
 
-   /* The following are currently only used for map size. */
    int width;
    int height;
 

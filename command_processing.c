@@ -49,9 +49,18 @@
 
 static char raw_log[LOG_ROWS][LOG_LINE_LENGTH];
 static int next_log_row = 0;
+static unsigned int log_generation = 0;
 
 char (*get_raw_log(void))[LOG_LINE_LENGTH] {
    return raw_log;
+}
+
+int get_next_log_row(void) {
+   return next_log_row;
+}
+
+unsigned int get_log_generation(void) {
+   return log_generation;
 }
 
 // Serial port state management structure
@@ -756,6 +765,7 @@ void log_command(char *command)
    if (next_log_row >= LOG_ROWS) {
       next_log_row = 0;
    }
+   log_generation++;
 }
 
 /**

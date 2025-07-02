@@ -25,6 +25,8 @@
 #include "defines.h"
 
 char (*get_raw_log(void))[LOG_LINE_LENGTH];
+int get_next_log_row(void);
+unsigned int get_log_generation(void);
 int parse_json_command(char *command_string, char *topic);
 void *serial_command_processing_thread(void *arg);
 void *socket_command_processing_thread(void *arg);

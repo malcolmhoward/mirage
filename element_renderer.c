@@ -445,8 +445,14 @@ void render_text_element(element *curr_element) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NW");
       }
    } else if (strcmp("*LOG*", curr_element->text) == 0) {
-      if ((currTime - last_log) > 500) {
-         last_log = currTime;
+      static unsigned int last_log_generation = 0;  // Track the last log generation we rendered
+      unsigned int current_log_generation = get_log_generation();
+
+      // Only redraw if log has changed
+      if (last_log_generation != current_log_generation) {
+         last_log_generation = current_log_generation;
+
+         // Clear and recreate texture
          if (curr_element->texture != NULL) {
             SDL_DestroyTexture(curr_element->texture);
             curr_element->texture = NULL;
@@ -456,18 +462,27 @@ void render_text_element(element *curr_element) {
             curr_element->surface = NULL;
          }
 
-         curr_element->surface = SDL_CreateRGBSurface(0, 615, 345, 32, 0, 0, 0, 0);
-            SDL_SetColorKey(curr_element->surface, SDL_TRUE,
+         // Use configurable dimensions with defaults if not specified
+         int log_width = curr_element->width > 0 ? curr_element->width : DEFAULT_LOG_WIDTH;
+         int log_height = curr_element->height > 0 ? curr_element->height : DEFAULT_LOG_HEIGHT;
+
+         curr_element->surface = SDL_CreateRGBSurface(0, log_width, log_height, 32, 0, 0, 0, 0);
+         SDL_SetColorKey(curr_element->surface, SDL_TRUE,
             SDL_MapRGB(curr_element->surface->format, 0, 0,
             SDL_ALPHA_TRANSPARENT));
 
+         // Get the index of the oldest entry
+         int start_idx = get_next_log_row();
+
          for (int ii = 0; ii < LOG_ROWS; ii++) {
-            if (strcmp("", raw_log[ii]) != 0) {
+            int idx = (start_idx + ii) % LOG_ROWS;  // Wrap around when needed
+
+            if (strcmp("", raw_log[idx]) != 0) {
                SDL_Surface *tmpsfc = NULL;
                SDL_Rect tmprect;
 
-               tmpsfc = TTF_RenderText_Blended(curr_element->ttf_font, raw_log[ii],
-                                               curr_element->font_color);
+               tmpsfc = TTF_RenderText_Blended(curr_element->ttf_font, raw_log[idx],
+                                              curr_element->font_color);
                if (tmpsfc != NULL) {
                   tmprect.x = 0;
                   tmprect.y = ii * curr_element->font_size;
@@ -476,12 +491,33 @@ void render_text_element(element *curr_element) {
 
                   SDL_BlitSurface(tmpsfc, NULL, curr_element->surface, &tmprect);
                   SDL_FreeSurface(tmpsfc);
-               } else {
-                  LOG_ERROR("Error creating log render, %d.", ii);
                }
             }
          }
+
+         /* Create texture from the prepared surface */
+         SDL_Renderer *renderer = get_sdl_renderer();
+         curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
+         if (curr_element->texture == NULL) {
+            LOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
+         } else {
+            /* Update destination rectangle dimensions to match the surface */
+            curr_element->dst_rect.w = curr_element->surface->w;
+            curr_element->dst_rect.h = curr_element->surface->h;
+
+            /* Position calculations need to happen here as in the standard path */
+            if (strcmp("left", curr_element->halign) == 0) {
+               /* Left-aligned text - no change needed */
+            } else if (strcmp("center", curr_element->halign) == 0) {
+               curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
+            } else if (strcmp("right", curr_element->halign) == 0) {
+               curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
+            }
+         }
       }
+
+      /* Set render_text to a space to prevent it from being recreated in the standard path */
+      strcpy(render_text, " ");
    } else if (strcmp("*ALERT*", curr_element->text) == 0) {
       char alert_text[MAX_TEXT_LENGTH] = "";
 
@@ -505,8 +541,9 @@ void render_text_element(element *curr_element) {
    }
 
    /* Recreate texture if needed */
-   if ((curr_element->texture == NULL) ||
-      (strncmp(render_text, curr_element->last_rendered_text, MAX_TEXT_LENGTH) != 0)) {
+   if (((curr_element->texture == NULL) ||
+         (strncmp(render_text, curr_element->last_rendered_text, MAX_TEXT_LENGTH) != 0)) &&
+         (strcmp("*LOG*", curr_element->text) != 0)) {
 
       /* Clean up old texture and surface if they exist */
       if (curr_element->texture != NULL) {

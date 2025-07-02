@@ -345,6 +345,8 @@
          "size": 16,
          "dest_x": 210,
          "dest_y": 1015,
+         "width": 615,
+         "height": 345,
          "halign": "left",
          "angle": 0,
          "layer": 1,
