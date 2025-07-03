@@ -79,6 +79,18 @@ typedef enum {
    ARMOR_COMPONENT
 } element_t;
 
+/* Map type enumeration */
+typedef enum {
+   MAP_TYPE_HYBRID = 0,
+   MAP_TYPE_SATELLITE,
+   MAP_TYPE_ROADMAP,
+   MAP_TYPE_TERRAIN,
+   MAP_TYPE_COUNT  /* Always keep last to get count */
+} map_type_t;
+
+/* Map type string representations - declare as extern */
+extern const char* MAP_TYPE_STRINGS[];
+
 /* Parent data type for all UI elements. Not all fields are used for all types. */
 typedef struct _element {
    element_t type;
@@ -152,8 +164,12 @@ typedef struct _element {
    int width;
    int height;
 
-   /* Also for map, how many times should we limit downloading the image. */
+   /* Map-specific settings */
    int download_count;
+   map_type_t map_type;
+   int map_zoom;
+   int update_interval_sec;
+   int force_refresh;
 
    int center_x_offset;
    int center_y_offset;

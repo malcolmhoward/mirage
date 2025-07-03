@@ -73,5 +73,10 @@ long double get_loadavg(void);
 long double get_mem_usage(void);
 int get_wifi_signal_level(void);
 
+element* find_map_element(void);
+void change_map_zoom(int direction);
+void cycle_map_type(void);
+void trigger_map_refresh(void);
+
 #endif // DEVICES_H
 

@@ -85,8 +85,22 @@ void *image_download_thread(void *arg) {
    while (!checkShutdown()) {
       time(&current_time);
 
+      int should_refresh = 0;
+
+      /* Check if it's time for an update or if a refresh is forced */
+      pthread_mutex_lock(&this_data->mutex);
+      should_refresh = (difftime(current_time, last_update) >= this_data->update_interval_sec) ||
+                       this_data->force_refresh;
+
+      if (this_data->force_refresh) {
+         this_data->force_refresh = 0;  // Reset the flag
+      }
+      pthread_mutex_unlock(&this_data->mutex);
+
       /* Check if it's time for an update */
-      if (difftime(current_time, last_update) >= this_data->update_interval_sec) {
+      if (should_refresh) {
+         LOG_INFO("image_download_thread should_refresh received.");
+
          /* Lock the mutex before modifying shared data */
          pthread_mutex_lock(&this_data->mutex);
 
@@ -120,24 +134,12 @@ void *image_download_thread(void *arg) {
 
          /* Lock mutex again for post-download updates */
          pthread_mutex_lock(&this_data->mutex);
-
-         if (res != CURLE_OK) {
-            LOG_ERROR("curl_easy_perform() failed: %s", curl_easy_strerror(res));
-
-            /* Clean up on error */
-            if (this_data->data) {
-               free(this_data->data);
-               this_data->data = NULL;
-            }
-            this_data->size = 0;
-         } else if (this_data->data && this_data->size > 0) {
-            /* Set the flag to indicate new data is available */
+         if (res == CURLE_OK && this_data->data && this_data->size > 0) {
             this_data->updated = 1;
             time(&last_update);
             LOG_INFO("Downloaded new map data, %zu bytes", this_data->size);
             downloads++;
          }
-
          pthread_mutex_unlock(&this_data->mutex);
       }
 

@@ -143,7 +143,10 @@
          "angle": 0,
          "layer": 1,
          "enabled": 1,
-         "download_count": 1,
+         "download_count": 0,
+         "maptype": "hybrid",
+         "zoom": 18,
+         "update_interval": 30,
          "huds": ["default"]
       },
       {

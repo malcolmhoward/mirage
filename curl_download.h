@@ -28,6 +28,7 @@ struct curl_data {
    int update_interval_sec;
    int download_count;  // Set to 0 for infinite
    int updated;         // Flag set when new data is available, cleared when consumed
+   int force_refresh;   // Flag to force an immediate refresh
 
    /* curl download area */
    size_t size;

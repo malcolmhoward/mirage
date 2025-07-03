@@ -579,6 +579,44 @@ int parse_json_command(char *command_string, char *topic)
             } else {
                LOG_WARNING("AI command missing name or state");
             }
+         } else if (strcmp("map", tmpstr) == 0) {
+            if (json_object_object_get_ex(parsed_json, "action", &tmpobj)) {
+               const char *action = json_object_get_string(tmpobj);
+
+               if (action != NULL) {
+                  if (strcmp(action, "zoom") == 0) {
+                     // Get zoom value
+                     if (json_object_object_get_ex(parsed_json, "value", &tmpobj)) {
+                        float zoom_value = json_object_get_int(tmpobj);
+                        element* map_elem = find_map_element();
+                        if (map_elem && zoom_value > 0) {
+                           map_elem->map_zoom = zoom_value;
+                           map_elem->force_refresh = 1;
+                        }
+                     }
+                  } else if (strcmp(action, "maptype") == 0) {
+                     // Get map type
+                     if (json_object_object_get_ex(parsed_json, "value", &tmpobj)) {
+                        const char *maptype_str = json_object_get_string(tmpobj);
+                        element* map_elem = find_map_element();
+
+                        if (map_elem) {
+                           // Convert string to enum
+                           for (int i = 0; i < MAP_TYPE_COUNT; i++) {
+                              if (strcmp(maptype_str, MAP_TYPE_STRINGS[i]) == 0) {
+                                 map_elem->map_type = (map_type_t)i;
+                                 map_elem->force_refresh = 1;
+                                 break;
+                              }
+                           }
+                        }
+                     }
+                  } else if (strcmp(action, "refresh") == 0) {
+                     // Force map refresh
+                     trigger_map_refresh();
+                  }
+               }
+            }
          }
 
          /* Check for action field */

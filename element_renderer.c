@@ -699,17 +699,20 @@ void render_map_element(element *curr_element) {
       pthread_mutex_init(&map_data.mutex, NULL);
    }
 
-   /* Update map URL and start download thread if needed */
    snprintf(map_data.url, 512, GOOGLE_MAPS_API, lat, lon,
-            curr_element->width, curr_element->height,
-            lat, lon, GOOGLE_API_KEY);
+         curr_element->width, curr_element->height,
+         MAP_TYPE_STRINGS[curr_element->map_type],
+         curr_element->map_zoom,
+         lat, lon, GOOGLE_API_KEY);
 
    if (map_thread_started == 0) {
-      map_data.update_interval_sec = MAP_UPDATE_SEC;
+      map_data.update_interval_sec = curr_element->update_interval_sec > 0 ?
+                                    curr_element->update_interval_sec : MAP_UPDATE_SEC;
       map_data.download_count = curr_element->download_count;
       map_data.updated = 0;
       map_data.size = 0;
       map_data.data = NULL;
+      map_data.force_refresh = curr_element->force_refresh;
 
       if (pthread_create(&map_download_thread, NULL, image_download_thread, &map_data) != 0) {
          LOG_ERROR("Error creating map download thread.");
@@ -717,6 +720,14 @@ void render_map_element(element *curr_element) {
       } else {
          map_thread_started = 1;
       }
+   } else {
+      // Update force_refresh flag in the shared data
+      pthread_mutex_lock(&map_data.mutex);
+      map_data.force_refresh |= curr_element->force_refresh;
+      pthread_mutex_unlock(&map_data.mutex);
+
+      // Reset element's flag after transferring to shared data
+      curr_element->force_refresh = 0;
    }
 
    // Check for new map data with mutex protection

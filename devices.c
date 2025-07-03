@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include "config_manager.h"
+#include "config_parser.h"
 #include "devices.h"
 #include "logging.h"
 #include "mirage.h"
@@ -92,4 +93,69 @@ int get_wifi_signal_level(void)
    return level;
 }
 
+/**
+ * @brief Find the map element in the element list.
+ * @return Pointer to the map element, or NULL if not found.
+ */
+element* find_map_element(void) {
+   element* curr = get_first_element();
+   while (curr != NULL) {
+      if (curr->type == SPECIAL && strcmp(curr->special_name, "map") == 0) {
+         return curr;
+      }
+      curr = curr->next;
+   }
+   return NULL;
+}
 
+/**
+ * @brief Changes the zoom level of the map in Google Maps API.
+ *
+ * This function modifies the zoom level parameter sent to the Google Maps API,
+ * not the rendering scale of the element. The zoom level is constrained to
+ * valid Google Maps API values (1-21).
+ *
+ * @param direction Direction of zoom change: positive to zoom in, negative to zoom out.
+ */
+void change_map_zoom(int direction) {
+   element* map_elem = find_map_element();
+   if (map_elem) {
+      // Change the API zoom level (not the rendering scale)
+      map_elem->map_zoom += direction;
+
+      // Ensure zoom stays within valid Google Maps API range (1-21)
+      if (map_elem->map_zoom < 1) map_elem->map_zoom = 1;
+      if (map_elem->map_zoom > 21) map_elem->map_zoom = 21;
+
+      LOG_INFO("New map zoom set to: %d", map_elem->map_zoom);
+
+      // Force refresh
+      map_elem->force_refresh = 1;
+   }
+}
+
+/**
+ * @brief Cycle through available map types.
+ */
+void cycle_map_type(void) {
+   element* map_elem = find_map_element();
+   if (map_elem) {
+      // Cycle to next map type
+      map_elem->map_type = (map_elem->map_type + 1) % MAP_TYPE_COUNT;
+
+      LOG_INFO("New map type is: %s", MAP_TYPE_STRINGS[map_elem->map_type]);
+
+      // Force refresh
+      map_elem->force_refresh = 1;
+   }
+}
+
+/**
+ * @brief Force an immediate refresh of the map.
+ */
+void trigger_map_refresh() {
+   element* map_elem = find_map_element();
+   if (map_elem) {
+      map_elem->force_refresh = 1;
+   }
+}

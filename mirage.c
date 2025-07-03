@@ -264,6 +264,10 @@ element default_element =
    .height = 0,
 
    .download_count = 0,
+   .map_type = MAP_TYPE_HYBRID,
+   .map_zoom = 15,
+   .update_interval_sec = MAP_UPDATE_SEC,
+   .force_refresh = 0,
 
    .center_x_offset = 0,
    .center_y_offset = 0,
@@ -1986,6 +1990,20 @@ int main(int argc, char **argv)
 
             case SDLK_TAB:  // Tab key to cycle through HUDs
                switch_to_next_hud();
+               break;
+
+            case SDLK_EQUALS:
+            case SDLK_KP_PLUS:
+               change_map_zoom(1);
+               break;
+
+            case SDLK_MINUS:
+            case SDLK_KP_MINUS:
+               change_map_zoom(-1);
+               break;
+
+            case SDLK_m:
+               cycle_map_type();      // Cycle through map types
                break;
 
             case SDLK_ESCAPE:

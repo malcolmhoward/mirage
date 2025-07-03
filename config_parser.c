@@ -30,6 +30,14 @@
 #include "hud_manager.h"
 #include "logging.h"
 
+/* Map type string representations */
+const char* MAP_TYPE_STRINGS[] = {
+   "hybrid",
+   "satellite",
+   "roadmap",
+   "terrain"
+};
+
 /* Parse json animation files. */
 int parse_animated_json(element * curr_element)
 {
@@ -945,6 +953,35 @@ int parse_json_config(char *filename)
                                  free(config_string);
                                  return FAILURE;
                               }
+                           }
+                        }
+
+                        /* Map elements, parse map-specific properties */
+                        if (strcmp("map", curr_element->special_name) == 0) {
+                           // Parse maptype
+                           json_object_object_get_ex(tmpobj2, "maptype", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              const char *maptype_str = json_object_get_string(tmpobj3);
+
+                              // Convert string to enum
+                              for (int i = 0; i < MAP_TYPE_COUNT; i++) {
+                                 if (strcmp(maptype_str, MAP_TYPE_STRINGS[i]) == 0) {
+                                    curr_element->map_type = (map_type_t)i;
+                                    break;
+                                 }
+                              }
+                           }
+
+                           // Parse zoom_level
+                           json_object_object_get_ex(tmpobj2, "zoom", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->map_zoom = json_object_get_int(tmpobj3);
+                           }
+
+                           // Parse update_interval
+                           json_object_object_get_ex(tmpobj2, "update_interval", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->update_interval_sec = json_object_get_int(tmpobj3);
                            }
                         }
 
