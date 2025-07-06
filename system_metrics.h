@@ -31,10 +31,10 @@ typedef struct {
    float memory_usage;         /* Memory usage percentage (0-100) */
    int fan_rpm;                /* Fan speed in RPM */
    int fan_load;               /* Fan load percentage (0-100) */
-   float power_voltage;        /* Bus voltage in volts */
-   float power_current;        /* Current in amps */
-   float power_consumption;    /* Power in watts */
-   float power_temperature;    /* Temperature of INA238 die in °C */
+   float battery_voltage;      /* Bus voltage in volts */
+   float battery_current;      /* Current in amps */
+   float battery_consumption;  /* Power in watts */
+   float battery_temperature;  /* Temperature of INA238 die in °C */
    float battery_level;        /* Battery level percentage (0-100) */
    char battery_status[16];    /* Battery status string (e.g., "NORMAL", "WARNING", "CRITICAL") */
    float time_remaining_min;   /* Estimated battery runtime remaining in minutes */

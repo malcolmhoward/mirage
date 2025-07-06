@@ -193,23 +193,23 @@ int parse_stat_command(char *command_string)
       system_metrics.fan_update_time = current_time;
       system_metrics.fan_available = true;
    }
-   else if (strcmp(device_type, "Power") == 0) {
+   else if (strcmp(device_type, "Battery") == 0) {
       struct json_object *obj = NULL;
 
       if (json_object_object_get_ex(parsed_json, "voltage", &obj)) {
-         system_metrics.power_voltage = (float)json_object_get_double(obj);
+         system_metrics.battery_voltage = (float)json_object_get_double(obj);
       }
 
       if (json_object_object_get_ex(parsed_json, "current", &obj)) {
-         system_metrics.power_current = (float)json_object_get_double(obj);
+         system_metrics.battery_current = (float)json_object_get_double(obj);
       }
 
       if (json_object_object_get_ex(parsed_json, "power", &obj)) {
-         system_metrics.power_consumption = (float)json_object_get_double(obj);
+         system_metrics.battery_consumption = (float)json_object_get_double(obj);
       }
 
       if (json_object_object_get_ex(parsed_json, "temperature", &obj)) {
-         system_metrics.power_temperature = (float)json_object_get_double(obj);
+         system_metrics.battery_temperature = (float)json_object_get_double(obj);
       }
 
       if (json_object_object_get_ex(parsed_json, "battery_level", &obj)) {

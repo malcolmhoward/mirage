@@ -376,25 +376,25 @@ void render_text_element(element *curr_element) {
       }
    } else if (strcmp("*BATTERY_VOLTAGE*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f V", system_metrics.power_voltage);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f V", system_metrics.battery_voltage);
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--.-- V");
       }
    } else if (strcmp("*BATTERY_CURRENT*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f A", system_metrics.power_current);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f A", system_metrics.battery_current);
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--.-- A");
       }
    } else if (strcmp("*BATTERY_POWER*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f W", system_metrics.power_consumption);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f W", system_metrics.battery_consumption);
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--.-- W");
       }
    } else if (strcmp("*BATTERY_TEMP*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f C", system_metrics.power_temperature);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f C", system_metrics.battery_temperature);
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--.- C");
       }
