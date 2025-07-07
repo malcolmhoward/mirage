@@ -315,6 +315,7 @@
          "show_metrics": false,
          "angle": 0,
          "layer": 5,
+         "hotkey": "a",
          "huds": ["default", "environmental"]
       },
       {
@@ -374,7 +375,7 @@
          "huds": ["default", "environmental"]
       },
       {
-         "name": "armor",
+         "name": "armor_display",
          "type": "animated",
          "file": "IronMan-UI-Pedestal-Animated-V2.json",
          "dest_x": 180,
@@ -382,6 +383,7 @@
          "width": 230,
          "angle": 0,
          "layer": 0,
+         "hotkey": "a",
          "huds": ["default", "environmental"]
       },
       {
