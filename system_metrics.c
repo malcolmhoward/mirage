@@ -31,6 +31,7 @@
 system_metrics_t system_metrics = {
    .cpu_usage = 0.0f,
    .memory_usage = 0.0f,
+   .system_temperature = 0.0f,
    .fan_rpm = -1,
    .fan_load = -1,
    .battery_voltage = 0.0f,
@@ -56,11 +57,13 @@ system_metrics_t system_metrics = {
 
    .cpu_update_time = 0,
    .memory_update_time = 0,
+   .system_temp_update_time = 0,
    .fan_update_time = 0,
    .power_update_time = 0,
 
    .cpu_available = false,
    .memory_available = false,
+   .system_temp_available = false,
    .fan_available = false,
    .power_available = false
 };
@@ -73,6 +76,7 @@ void init_system_metrics(void)
    /* Reset all metrics to default values */
    system_metrics.cpu_usage = 0.0f;
    system_metrics.memory_usage = 0.0f;
+   system_metrics.system_temperature = 0.0f;
    system_metrics.fan_rpm = -1;
    system_metrics.fan_load = -1;
    system_metrics.battery_voltage = 0.0f;
@@ -108,12 +112,14 @@ void init_system_metrics(void)
    time_t current_time = time(NULL);
    system_metrics.cpu_update_time = current_time;
    system_metrics.memory_update_time = current_time;
+   system_metrics.system_temp_update_time = current_time;
    system_metrics.fan_update_time = current_time;
    system_metrics.power_update_time = current_time;
 
    /* Set all metrics as unavailable initially */
    system_metrics.cpu_available = false;
    system_metrics.memory_available = false;
+   system_metrics.system_temp_available = false;
    system_metrics.fan_available = false;
    system_metrics.power_available = false;
 
@@ -146,6 +152,7 @@ void update_metrics_availability(int timeout_seconds)
    /* Check each metric and update its availability */
    system_metrics.cpu_available = !is_metric_stale(system_metrics.cpu_update_time, timeout_seconds);
    system_metrics.memory_available = !is_metric_stale(system_metrics.memory_update_time, timeout_seconds);
+   system_metrics.system_temp_available = !is_metric_stale(system_metrics.system_temp_update_time, timeout_seconds);
    system_metrics.fan_available = !is_metric_stale(system_metrics.fan_update_time, timeout_seconds);
    system_metrics.power_available = !is_metric_stale(system_metrics.power_update_time, timeout_seconds);
    
@@ -157,6 +164,10 @@ void update_metrics_availability(int timeout_seconds)
    
    if (!system_metrics.memory_available) {
       LOG_WARNING("Memory metrics have become stale (not updated in %d seconds)", timeout_seconds);
+   }
+
+   if (!system_metrics.system_temp_available) {
+      LOG_WARNING("System temperature metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
    
    if (!system_metrics.fan_available) {
@@ -192,6 +203,20 @@ float get_memory_usage(void)
 {
    if (system_metrics.memory_available) {
       return system_metrics.memory_usage;
+   } else {
+      return -1.0f;
+   }
+}
+
+/**
+ * @brief Get system temperature
+ *
+ * @return float System temperature in Celsius or -1.0f if unavailable
+ */
+float get_system_temperature(void)
+{
+   if (system_metrics.system_temp_available) {
+      return system_metrics.system_temperature;
    } else {
       return -1.0f;
    }

@@ -161,19 +161,23 @@ int parse_stat_command(char *command_string)
    const char *device_type = json_object_get_string(device_obj);
    time_t current_time = time(NULL);
 
-   /* Process based on device type */
-   if (strcmp(device_type, "CPU") == 0) {
+   /* Check if this is a system metrics message */
+   if (strcmp(device_type, "SystemMetrics") == 0) {
       struct json_object *usage_obj = NULL;
-      if (json_object_object_get_ex(parsed_json, "usage", &usage_obj)) {
+      if (json_object_object_get_ex(parsed_json, "cpu_usage", &usage_obj)) {
          system_metrics.cpu_usage = (float)json_object_get_double(usage_obj);
          system_metrics.cpu_update_time = current_time;
          system_metrics.cpu_available = true;
       }
-   }
-   else if (strcmp(device_type, "Memory") == 0) {
-      struct json_object *usage_obj = NULL;
-      if (json_object_object_get_ex(parsed_json, "usage", &usage_obj)) {
-         system_metrics.memory_usage = (float)json_object_get_double(usage_obj);
+
+      if (json_object_object_get_ex(parsed_json, "system_temp", &usage_obj)) {
+         system_metrics.system_temperature = (float)json_object_get_double(usage_obj);
+         system_metrics.system_temp_update_time = current_time;
+         system_metrics.system_temp_available = true;
+      }
+
+      if (json_object_object_get_ex(parsed_json, "memory_usage", &usage_obj)) {
+         system_metrics.memory_usage = json_object_get_double(usage_obj);
          system_metrics.memory_update_time = current_time;
          system_metrics.memory_available = true;
       }

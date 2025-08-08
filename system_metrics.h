@@ -34,6 +34,7 @@
 typedef struct {
    float cpu_usage;            /* CPU usage percentage (0-100) */
    float memory_usage;         /* Memory usage percentage (0-100) */
+   float system_temperature;   /* System junction temperature in Celsius */
    int fan_rpm;                /* Fan speed in RPM */
    int fan_load;               /* Fan load percentage (0-100) */
    float battery_voltage;      /* Bus voltage in volts */
@@ -63,12 +64,14 @@ typedef struct {
    /* Timestamp of last update for each metric */
    time_t cpu_update_time;
    time_t memory_update_time;
+   time_t system_temp_update_time;
    time_t fan_update_time;
    time_t power_update_time;
 
    /* Status flags for each metric (true if valid/available) */
    bool cpu_available;
    bool memory_available;
+   bool system_temp_available;
    bool fan_available;
    bool power_available;
 } system_metrics_t;
@@ -81,6 +84,7 @@ void init_system_metrics(void);
 bool is_metric_stale(time_t update_time, int timeout_seconds);
 void update_metrics_availability(int timeout_seconds);
 float get_cpu_usage(void);
+float get_system_temperature(void);
 float get_memory_usage(void);
 int get_fan_rpm(void);
 int get_fan_load_percent(void);

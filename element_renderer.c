@@ -317,15 +317,28 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*AINAME*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
    } else if (strcmp("*CPU*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_loadavg());
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_loadavg());
+   } else if (strcmp("*SYSTEM_TEMP*", curr_element->text) == 0) {
+      if (system_metrics.system_temp_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f C", system_metrics.system_temperature);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.- C");
+      }
+   } else if (strcmp("*SYSTEM_TEMP_F*", curr_element->text) == 0) {
+      if (system_metrics.system_temp_available) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f F",
+                 system_metrics.system_temperature * 9/5 + 32.0);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--.- F");
+      }
    } else if (strcmp("*MEM*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf", get_mem_usage());
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_mem_usage());
    } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f C", this_enviro->temp);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f C", this_enviro->temp);
    } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f F", this_enviro->temp * 9/5 + 32.0);
    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->humidity);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f%%", this_enviro->humidity);
 
    } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
@@ -349,7 +362,7 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
       int fan_percent = get_fan_load_percent();
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03d", fan_percent);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03d%%", fan_percent);
    } else if (strcmp("*BATTERY_LEVEL*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f%%", system_metrics.battery_level);
