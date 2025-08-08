@@ -32,26 +32,107 @@
 //#define ORIGINAL_RATIO
 
 /* This is per eye/display. */
-#if 1
-#define DEFAULT_CAM_INPUT_WIDTH  1920
-#define DEFAULT_CAM_INPUT_HEIGHT 1080
-#define DEFAULT_CAM_INPUT_FPS    60
-#ifndef ORIGINAL_RATIO
-#define DEFAULT_CAM_CROP_WIDTH   1080
-#define DEFAULT_CAM_CROP_X       420
+/* === CAMERA RESOLUTION SELECTION === */
+/* Uncomment ONE of the following resolution options */
+
+//#define USE_720P_30FPS
+#define USE_720P_60FPS
+//#define USE_1080P_30FPS
+//#define USE_1080P_60FPS
+//#define USE_1440P_30FPS
+//#define USE_1440P_60FPS
+//#define USE_CUSTOM_RESOLUTION
+
+/* === AUTOMATIC CONFIGURATION BASED ON SELECTION === */
+
+#ifdef USE_720P_30FPS
+   #define DEFAULT_CAM_INPUT_WIDTH  1280
+   #define DEFAULT_CAM_INPUT_HEIGHT 720
+   #define DEFAULT_CAM_INPUT_FPS    30
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   720
+      #define DEFAULT_CAM_CROP_X       280
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_720P_60FPS)
+   #define DEFAULT_CAM_INPUT_WIDTH  1280
+   #define DEFAULT_CAM_INPUT_HEIGHT 720
+   #define DEFAULT_CAM_INPUT_FPS    60
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   720
+      #define DEFAULT_CAM_CROP_X       280
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_1080P_30FPS)
+   #define DEFAULT_CAM_INPUT_WIDTH  1920
+   #define DEFAULT_CAM_INPUT_HEIGHT 1080
+   #define DEFAULT_CAM_INPUT_FPS    30
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   1080
+      #define DEFAULT_CAM_CROP_X       420
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_1080P_60FPS)
+   #define DEFAULT_CAM_INPUT_WIDTH  1920
+   #define DEFAULT_CAM_INPUT_HEIGHT 1080
+   #define DEFAULT_CAM_INPUT_FPS    60
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   1080
+      #define DEFAULT_CAM_CROP_X       420
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_1440P_30FPS)
+   #define DEFAULT_CAM_INPUT_WIDTH  2560
+   #define DEFAULT_CAM_INPUT_HEIGHT 1440
+   #define DEFAULT_CAM_INPUT_FPS    30
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   1440
+      #define DEFAULT_CAM_CROP_X       560
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_1440P_60FPS)
+   #define DEFAULT_CAM_INPUT_WIDTH  2560
+   #define DEFAULT_CAM_INPUT_HEIGHT 1440
+   #define DEFAULT_CAM_INPUT_FPS    60
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   1440
+      #define DEFAULT_CAM_CROP_X       560
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
+#elif defined(USE_CUSTOM_RESOLUTION)
+   /* Define your custom resolution here */
+   #define DEFAULT_CAM_INPUT_WIDTH  1920
+   #define DEFAULT_CAM_INPUT_HEIGHT 1080
+   #define DEFAULT_CAM_INPUT_FPS    30
+   #ifndef ORIGINAL_RATIO
+      #define DEFAULT_CAM_CROP_WIDTH   1080
+      #define DEFAULT_CAM_CROP_X       420
+   #else
+      #define DEFAULT_CAM_CROP_X       0
+   #endif
+
 #else
-#define DEFAULT_CAM_CROP_X       0
+   /* Default fallback if nothing is selected */
+   #error "Please uncomment one camera resolution option in defines.h"
 #endif
-#else
-#define DEFAULT_CAM_INPUT_WIDTH  2560
-#define DEFAULT_CAM_INPUT_HEIGHT 1440
-#define DEFAULT_CAM_INPUT_FPS    30
-#ifndef ORIGINAL_RATIO
-#define DEFAULT_CAM_CROP_WIDTH   1440
-#define DEFAULT_CAM_CROP_X       560
-#else
-#define DEFAULT_CAM_CROP_X       0
-#endif
+
+/* === SANITY CHECK === */
+#if defined(USE_720P_30FPS) + defined(USE_720P_60FPS) + defined(USE_1080P_30FPS) + \
+    defined(USE_1080P_60FPS) + defined(USE_1440P_30FPS) + defined(USE_1440P_60FPS) + \
+    defined(USE_CUSTOM_RESOLUTION) > 1
+   #error "Only ONE camera resolution option should be uncommented"
 #endif
 
 //#define DEBUG_BUFFERS
@@ -64,9 +145,9 @@
 #define DEFAULT_EYE_OUTPUT_HEIGHT   1440
 
 #define DEFAULT_STREAM_DEST_IP      "192.168.10.195"
-#define STREAM_WIDTH                1920
-#define STREAM_HEIGHT                960
-#define STREAM_BITRATE              8000000
+#define STREAM_WIDTH                1280
+#define STREAM_HEIGHT                640
+#define STREAM_BITRATE              4500000
 
 #define DEFAULT_ARMOR_NOTICE_TIMEOUT      5
 #define DEFAULT_ARMOR_DEREGISTER_TIMEOUT  30
@@ -164,7 +245,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
  * FIXME: These are getting a bit out of hand, so I think I need to break these up into their components.
  *        After my latest work getting YouTube streaming working... it's worse. Sorry.
  */
-#define GSTREAMER_PIPELINE_LENGTH   1024
+#define GSTREAMER_PIPELINE_LENGTH   2048
 #define DEFAULT_CSI_CAM1            0
 #define DEFAULT_CSI_CAM2            1
 #define DEFAULT_USB_CAM1            0
@@ -186,7 +267,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #ifdef PLATFORM_JETSON
 // Input pipeline portions for CSI cameras
 #define GST_CAM_PIPELINE_CSI_INPUT \
-    "nvarguscamerasrc exposurecompensation=-2 tnr-mode=0 sensor_id=%d ! " \
+    "nvarguscamerasrc exposurecompensation=0 tnr-mode=0 sensor_id=%d ! " \
     "video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! " \
     "nvvidconv flip-method=0 ! "
 
@@ -225,8 +306,8 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
         #define GST_PIPE_VIDEO_HLS     "nvvidconv ! video/x-raw, format=I420 ! " \
                                       "x264enc bitrate=8000 tune=zerolatency ! "
 
-        #define GST_PIPE_VIDEO_YOUTUBE "nvvidconv ! video/x-raw, width=(int)%d, height=(int)%d, format=I420 ! " \
-                                      "x264enc bitrate=%d tune=zerolatency ! "
+        #define GST_PIPE_VIDEO_YOUTUBE "videoconvert ! video/x-raw, width=(int)%d, height=(int)%d, format=I420 ! " \
+                                      "x264enc bitrate=%d tune=zerolatency speed-preset=veryfast key-int-max=60 ! "
     #else
         /* Jetson hardware encoding paths */
         #define GST_PIPE_VIDEO_MAIN    "nvvidconv ! video/x-raw(memory:NVMM), format=NV12 ! " \
@@ -238,9 +319,20 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
         #define GST_PIPE_VIDEO_HLS     "nvvidconv ! video/x-raw(memory:NVMM), format=NV12 ! " \
                                       "nvv4l2h264enc bitrate=8000000 profile=2 preset-level=3 ! "
 
-        #define GST_PIPE_VIDEO_YOUTUBE "nvvidconv ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=NV12 ! " \
-                                      "nvv4l2h264enc bitrate=%d control-rate=0 iframeinterval=120 profile=2 preset-level=3 ! "
-    #endif
+        #define GST_PIPE_VIDEO_YOUTUBE "nvvidconv ! " \
+                                      "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=NV12 ! " \
+                                      "nvv4l2h264enc bitrate=%d " \
+                                      "control-rate=1 " \
+                                      "preset-level=4 " \
+                                      "profile=4 " \
+                                      "maxperf-enable=1 " \
+                                      "EnableTwopassCBR=1 " \
+                                      "num-B-Frames=2 " \
+                                      "disable-cabac=0 " \
+                                      "insert-sps-pps=1 " \
+                                      "iframeinterval=60 " \
+                                      "vbv-size=8000000 ! "
+#endif
 #elif defined(PLATFORM_RPI)
     #ifdef SOFTWARE_ENCODE
         /* Software encoding not supported on Raspberry Pi */
@@ -304,7 +396,8 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #define GST_PIPE_TEE            "tee name=split ! "
 #define GST_PIPE_TEE_BRANCH     "split. ! "
 #define GST_PIPE_QUEUE          "queue ! mux."
-#define GST_PIPE_QUEUE_LEAKY    "queue leaky=2 ! mux."
+#define GST_PIPE_QUEUE_LEAKY    "queue max-size-buffers=10 leaky=2 ! mux."
+#define GST_PIPE_INPUT_QUEUE_LEAKY "queue name=stream_queue max-size-buffers=5 leaky=downstream ! "
 
 /* === COMPLETE PIPELINE DEFINITIONS === */
 
@@ -341,6 +434,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 /* Streaming-only pipeline */
 #ifdef RECORD_AUDIO
 #define GST_STR_PIPELINE        GST_PIPE_INPUT \
+                               GST_PIPE_INPUT_QUEUE_LEAKY \
                                GST_PIPE_VIDEO_YOUTUBE \
                                GST_PIPE_PARSE \
                                GST_PIPE_QUEUE_LEAKY " " \
@@ -348,6 +442,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
                                GST_PIPE_RTMP_OUT
 #else
 #define GST_STR_PIPELINE        GST_PIPE_INPUT \
+                               GST_PIPE_INPUT_QUEUE_LEAKY \
                                GST_PIPE_VIDEO_YOUTUBE \
                                GST_PIPE_PARSE \
                                GST_PIPE_RTMP_OUT

@@ -510,6 +510,12 @@ void *video_next_thread(void *arg) {
          clock_gettime(CLOCK_MONOTONIC, &start_time);
 
          if (this_vod.rgb_out_pixels[this_vod.read_index] != NULL) {
+            // Verify buffer integrity before using
+            if (this_vod.read_index == this_vod.write_index) {
+               LOG_WARNING("Read caught up to write - skipping frame");
+               pthread_mutex_unlock(&this_vod.p_mutex);
+               continue;
+            }
             buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.read_index],
                                            window_width * RGB_OUT_SIZE * window_height);
             if (buffer == NULL) {

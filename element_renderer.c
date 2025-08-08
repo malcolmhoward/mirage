@@ -362,6 +362,89 @@ void render_text_element(element *curr_element) {
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "UNKNOWN");
       }
+   } else if (strcmp("*BATTERY_STATUS_REASON*", curr_element->text) == 0) {
+      if (system_metrics.power_available && strlen(system_metrics.status_reason) > 0) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.status_reason);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "No status information");
+      }
+   } else if (strcmp("*BATTERY_CELLS_CONFIG*", curr_element->text) == 0) {
+      if (system_metrics.power_available && system_metrics.battery_cells_series > 0) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%dS%dP",
+                 system_metrics.battery_cells_series,
+                 system_metrics.battery_cells_parallel > 0 ? system_metrics.battery_cells_parallel : 1);
+      } else if (system_metrics.power_available && system_metrics.battery_cells > 0) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--S--P");
+      }
+   } else if (strcmp("*BATTERY_FAULT_COUNT*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         if (system_metrics.critical_fault_count > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "CRIT:%d WARN:%d INFO:%d",
+                    system_metrics.critical_fault_count,
+                    system_metrics.warning_fault_count,
+                    system_metrics.info_fault_count);
+         } else if (system_metrics.warning_fault_count > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "WARN:%d INFO:%d",
+                    system_metrics.warning_fault_count,
+                    system_metrics.info_fault_count);
+         } else if (system_metrics.info_fault_count > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "INFO:%d", system_metrics.info_fault_count);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "No faults");
+         }
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "--");
+      }
+   } else if (strcmp("*BATTERY_CRITICAL_FAULTS*", curr_element->text) == 0) {
+      if (system_metrics.power_available && system_metrics.critical_fault_count > 0) {
+         /* Concatenate all critical fault messages */
+         render_text[0] = '\0';
+         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count; i++) {
+            if (strlen(system_metrics.critical_faults[i]) > 0) {
+               if (i > 0) {
+                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+               strncat(render_text, system_metrics.critical_faults[i],
+                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+            }
+         }
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "No critical faults");
+      }
+   } else if (strcmp("*BATTERY_WARNING_FAULTS*", curr_element->text) == 0) {
+      if (system_metrics.power_available && system_metrics.warning_fault_count > 0) {
+         /* Concatenate all warning fault messages */
+         render_text[0] = '\0';
+         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
+            if (strlen(system_metrics.warning_faults[i]) > 0) {
+               if (i > 0) {
+                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+               strncat(render_text, system_metrics.warning_faults[i],
+                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+            }
+         }
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "No warning faults");
+      }
+   } else if (strcmp("*BATTERY_INFO_FAULTS*", curr_element->text) == 0) {
+      if (system_metrics.power_available && system_metrics.info_fault_count > 0) {
+         /* Concatenate all info fault messages */
+         render_text[0] = '\0';
+         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
+            if (strlen(system_metrics.info_faults[i]) > 0) {
+               if (i > 0) {
+                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+               strncat(render_text, system_metrics.info_faults[i],
+                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+            }
+         }
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "No info faults");
+      }
    } else if (strcmp("*BATTERY_TIME*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);

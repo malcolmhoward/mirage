@@ -132,6 +132,10 @@ include_directories(${MOSQUITTO_INCLUDE_DIRS})
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 
+# Misc.
+pkg_check_modules(GD REQUIRED gdlib)
+include_directories(${GD_INCLUDE_DIRS})
+
 # Optional CUDA support
 if(USE_CUDA)
     pkg_check_modules(CUDA REQUIRED cuda-12.2 cudart-12.2)
@@ -158,6 +162,7 @@ set(LIBRARIES
   ${GLIB_LIBRARIES}
   ${OPENGL_LIBRARIES}
   ${GLEW_LIBRARIES}
+  ${GD_LIBRARIES}
   X11
   gd
 

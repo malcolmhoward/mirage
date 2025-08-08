@@ -193,7 +193,11 @@ int parse_stat_command(char *command_string)
       system_metrics.fan_update_time = current_time;
       system_metrics.fan_available = true;
    }
-   else if (strcmp(device_type, "Battery") == 0) {
+   /* Note: We could process both Battery and BatteryStatus messages but it would take storing the
+    * hierarchy of these devices. It's a scope I didn't want to have to worry about and don't really
+    * need at this point. With that being said, some of the framework is here. */
+   /* else if (strcmp(device_type, "Battery") == 0 || strcmp(device_type, "BatteryStatus") == 0) { */
+   else if (strcmp(device_type, "BatteryStatus") == 0) {
       struct json_object *obj = NULL;
 
       if (json_object_object_get_ex(parsed_json, "voltage", &obj)) {
@@ -222,7 +226,7 @@ int parse_stat_command(char *command_string)
          system_metrics.battery_status[sizeof(system_metrics.battery_status) - 1] = '\0';
       }
 
-      /* Parse the new battery monitoring fields */
+      /* Parse the battery monitoring fields - common to both Battery and BatteryStatus */
       if (json_object_object_get_ex(parsed_json, "time_remaining_min", &obj)) {
          system_metrics.time_remaining_min = (float)json_object_get_double(obj);
       }
@@ -245,6 +249,114 @@ int parse_stat_command(char *command_string)
 
       if (json_object_object_get_ex(parsed_json, "battery_cells", &obj)) {
          system_metrics.battery_cells = json_object_get_int(obj);
+      }
+
+      /* Fields specific to BatteryStatus */
+      if (strcmp(device_type, "BatteryStatus") == 0) {
+         /* Parse fault counts */
+         if (json_object_object_get_ex(parsed_json, "critical_fault_count", &obj)) {
+            system_metrics.critical_fault_count = json_object_get_int(obj);
+         }
+
+         if (json_object_object_get_ex(parsed_json, "warning_fault_count", &obj)) {
+            system_metrics.warning_fault_count = json_object_get_int(obj);
+         }
+
+         if (json_object_object_get_ex(parsed_json, "info_fault_count", &obj)) {
+            system_metrics.info_fault_count = json_object_get_int(obj);
+         }
+
+         /* Parse fault message arrays */
+         struct json_object *fault_array = NULL;
+
+         /* Parse critical faults */
+         if (json_object_object_get_ex(parsed_json, "critical_faults", &fault_array) &&
+             json_object_is_type(fault_array, json_type_array)) {
+
+            int fault_count = json_object_array_length(fault_array);
+            fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
+
+            /* Clear existing fault messages */
+            for (int i = 0; i < MAX_FAULT_COUNT; i++) {
+               system_metrics.critical_faults[i][0] = '\0';
+            }
+
+            /* Store new fault messages */
+            for (int i = 0; i < fault_count; i++) {
+               struct json_object *fault_msg = json_object_array_get_idx(fault_array, i);
+               if (fault_msg && json_object_is_type(fault_msg, json_type_string)) {
+                  const char *msg = json_object_get_string(fault_msg);
+                  strncpy(system_metrics.critical_faults[i], msg, MAX_FAULT_MSG_LENGTH - 1);
+                  system_metrics.critical_faults[i][MAX_FAULT_MSG_LENGTH - 1] = '\0';
+               }
+            }
+         }
+
+         /* Parse warning faults */
+         if (json_object_object_get_ex(parsed_json, "warning_faults", &fault_array) &&
+             json_object_is_type(fault_array, json_type_array)) {
+
+            int fault_count = json_object_array_length(fault_array);
+            fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
+
+            /* Clear existing fault messages */
+            for (int i = 0; i < MAX_FAULT_COUNT; i++) {
+               system_metrics.warning_faults[i][0] = '\0';
+            }
+
+            /* Store new fault messages */
+            for (int i = 0; i < fault_count; i++) {
+               struct json_object *fault_msg = json_object_array_get_idx(fault_array, i);
+               if (fault_msg && json_object_is_type(fault_msg, json_type_string)) {
+                  const char *msg = json_object_get_string(fault_msg);
+                  strncpy(system_metrics.warning_faults[i], msg, MAX_FAULT_MSG_LENGTH - 1);
+                  system_metrics.warning_faults[i][MAX_FAULT_MSG_LENGTH - 1] = '\0';
+               }
+            }
+         }
+
+         /* Parse info faults */
+         if (json_object_object_get_ex(parsed_json, "info_faults", &fault_array) &&
+             json_object_is_type(fault_array, json_type_array)) {
+
+            int fault_count = json_object_array_length(fault_array);
+            fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
+
+            /* Clear existing fault messages */
+            for (int i = 0; i < MAX_FAULT_COUNT; i++) {
+               system_metrics.info_faults[i][0] = '\0';
+            }
+
+            /* Store new fault messages */
+            for (int i = 0; i < fault_count; i++) {
+               struct json_object *fault_msg = json_object_array_get_idx(fault_array, i);
+               if (fault_msg && json_object_is_type(fault_msg, json_type_string)) {
+                  const char *msg = json_object_get_string(fault_msg);
+                  strncpy(system_metrics.info_faults[i], msg, MAX_FAULT_MSG_LENGTH - 1);
+                  system_metrics.info_faults[i][MAX_FAULT_MSG_LENGTH - 1] = '\0';
+               }
+            }
+         }
+
+         /* Parse status reason */
+         if (json_object_object_get_ex(parsed_json, "status_reason", &obj)) {
+            const char *reason = json_object_get_string(obj);
+            strncpy(system_metrics.status_reason, reason, sizeof(system_metrics.status_reason) - 1);
+            system_metrics.status_reason[sizeof(system_metrics.status_reason) - 1] = '\0';
+         }
+
+         /* Parse additional battery configuration details */
+         if (json_object_object_get_ex(parsed_json, "battery_cells_series", &obj)) {
+            system_metrics.battery_cells_series = json_object_get_int(obj);
+         }
+
+         if (json_object_object_get_ex(parsed_json, "battery_cells_parallel", &obj)) {
+            system_metrics.battery_cells_parallel = json_object_get_int(obj);
+         }
+
+         if (json_object_object_get_ex(parsed_json, "battery_nominal_voltage", &obj)) {
+            system_metrics.battery_nominal_voltage = (float)json_object_get_double(obj);
+         }
       }
 
       system_metrics.power_update_time = current_time;

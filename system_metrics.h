@@ -25,6 +25,11 @@
 #include <time.h>
 #include <stdbool.h>
 
+/* Maximum number of fault entries to store */
+#define MAX_FAULT_COUNT 10
+/* Maximum length for fault message strings */
+#define MAX_FAULT_MSG_LENGTH 64
+
 /* Structure for system metrics received from STAT */
 typedef struct {
    float cpu_usage;            /* CPU usage percentage (0-100) */
@@ -42,13 +47,25 @@ typedef struct {
    char battery_chemistry[8];  /* Battery chemistry type (e.g., "LiPo", "Li-Ion") */
    float battery_capacity_mah; /* Battery capacity in milliamp-hours */
    int battery_cells;          /* Number of battery cells */
-   
+
+   /* New fields for BatteryStatus message */
+   int critical_fault_count;   /* Number of critical faults */
+   int warning_fault_count;    /* Number of warning faults */
+   int info_fault_count;       /* Number of info faults */
+   char critical_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH]; /* Array of critical fault messages */
+   char warning_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH];  /* Array of warning fault messages */
+   char info_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH];     /* Array of info fault messages */
+   char status_reason[64];     /* Reason for current status */
+   int battery_cells_series;   /* Number of battery cells in series */
+   int battery_cells_parallel; /* Number of battery cells in parallel */
+   float battery_nominal_voltage; /* Battery nominal voltage */
+
    /* Timestamp of last update for each metric */
    time_t cpu_update_time;
    time_t memory_update_time;
    time_t fan_update_time;
    time_t power_update_time;
-   
+
    /* Status flags for each metric (true if valid/available) */
    bool cpu_available;
    bool memory_available;

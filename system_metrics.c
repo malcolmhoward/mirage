@@ -45,6 +45,15 @@ system_metrics_t system_metrics = {
    .battery_capacity_mah = 0.0f,
    .battery_cells = 0,
 
+   /* New fields for BatteryStatus message */
+   .critical_fault_count = 0,
+   .warning_fault_count = 0,
+   .info_fault_count = 0,
+   .status_reason = "",
+   .battery_cells_series = 0,
+   .battery_cells_parallel = 0,
+   .battery_nominal_voltage = 0.0f,
+
    .cpu_update_time = 0,
    .memory_update_time = 0,
    .fan_update_time = 0,
@@ -77,20 +86,37 @@ void init_system_metrics(void)
    strcpy(system_metrics.battery_chemistry, "UNKN");
    system_metrics.battery_capacity_mah = 0.0f;
    system_metrics.battery_cells = 0;
-   
+
+   /* Initialize new fields for BatteryStatus message */
+   system_metrics.critical_fault_count = 0;
+   system_metrics.warning_fault_count = 0;
+   system_metrics.info_fault_count = 0;
+
+   /* Clear fault message arrays */
+   for (int i = 0; i < MAX_FAULT_COUNT; i++) {
+      system_metrics.critical_faults[i][0] = '\0';
+      system_metrics.warning_faults[i][0] = '\0';
+      system_metrics.info_faults[i][0] = '\0';
+   }
+
+   strcpy(system_metrics.status_reason, "");
+   system_metrics.battery_cells_series = 0;
+   system_metrics.battery_cells_parallel = 0;
+   system_metrics.battery_nominal_voltage = 0.0f;
+
    /* Reset all timestamps */
    time_t current_time = time(NULL);
    system_metrics.cpu_update_time = current_time;
    system_metrics.memory_update_time = current_time;
    system_metrics.fan_update_time = current_time;
    system_metrics.power_update_time = current_time;
-   
+
    /* Set all metrics as unavailable initially */
    system_metrics.cpu_available = false;
    system_metrics.memory_available = false;
    system_metrics.fan_available = false;
    system_metrics.power_available = false;
-   
+
    LOG_INFO("System metrics initialized");
 }
 
