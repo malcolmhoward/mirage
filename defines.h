@@ -28,7 +28,7 @@
 //#define DISPLAY_TIMING
 //#define OD_PROPER_WAIT
 //#define FPS_STATS
-//#define REFRESH_SYNC
+#define REFRESH_SYNC
 //#define ORIGINAL_RATIO
 
 /* This is per eye/display. */
@@ -145,8 +145,8 @@
 #define DEFAULT_EYE_OUTPUT_HEIGHT   1440
 
 #define DEFAULT_STREAM_DEST_IP      "192.168.10.195"
-#define STREAM_WIDTH                1280
-#define STREAM_HEIGHT                640
+#define STREAM_WIDTH                1920
+#define STREAM_HEIGHT                960
 #define STREAM_BITRATE              4500000
 
 #define DEFAULT_ARMOR_NOTICE_TIMEOUT      5
@@ -331,6 +331,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
                                       "disable-cabac=0 " \
                                       "insert-sps-pps=1 " \
                                       "iframeinterval=60 " \
+                                      "idrinterval=60 " \
                                       "vbv-size=8000000 ! "
 #endif
 #elif defined(PLATFORM_RPI)

@@ -255,6 +255,19 @@ int parse_stat_command(char *command_string)
          system_metrics.battery_cells = json_object_get_int(obj);
       }
 
+      if (json_object_object_get_ex(parsed_json, "charging_state", &obj)) {
+         const char *charge_state_string = json_object_get_string(obj);
+         if (strncmp(charge_state_string, "charging", strlen("charging")) == 0) {
+            system_metrics.charge_state = CHARGE_STATE_CHARGING;
+         } else if (strncmp(charge_state_string, "discharging", strlen("discharging")) == 0) {
+            system_metrics.charge_state = CHARGE_STATE_DISCHARGING;
+         } else if (strncmp(charge_state_string, "idle", strlen("idle")) == 0) {
+            system_metrics.charge_state = CHARGE_STATE_IDLE;
+         } else {
+            system_metrics.charge_state = CHARGE_STATE_UNKNOWN;
+         }
+      }
+
       /* Fields specific to BatteryStatus */
       if (strcmp(device_type, "BatteryStatus") == 0) {
          /* Parse fault counts */

@@ -64,6 +64,9 @@ extern const struct Alert alert_messages[];
 
 extern double averageFrameRate;
 
+#define LINE_BREAK_DELIMITER '\n'  // Using newline character as our delimiter
+#define LINE_SPACING_FACTOR 1.2f   // Multiplier for line spacing (1.2 is standard)
+
 /* Reset alpha values for all textures of an element */
 static void reset_texture_alpha(element *curr_element) {
    if (curr_element->texture)
@@ -417,7 +420,9 @@ void render_text_element(element *curr_element) {
          for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count; i++) {
             if (strlen(system_metrics.critical_faults[i]) > 0) {
                if (i > 0) {
-                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  /* Use a newline character instead of comma-space */
+                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.critical_faults[i],
                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
@@ -433,7 +438,9 @@ void render_text_element(element *curr_element) {
          for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
             if (strlen(system_metrics.warning_faults[i]) > 0) {
                if (i > 0) {
-                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  /* Use a newline character instead of comma-space */
+                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.warning_faults[i],
                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
@@ -449,7 +456,9 @@ void render_text_element(element *curr_element) {
          for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
             if (strlen(system_metrics.info_faults[i]) > 0) {
                if (i > 0) {
-                  strncat(render_text, ", ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  /* Use a newline character instead of comma-space */
+                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.info_faults[i],
                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
@@ -458,9 +467,81 @@ void render_text_element(element *curr_element) {
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "No info faults");
       }
+   } else if (strcmp("*BATTERY_ALL_FAULTS*", curr_element->text) == 0) {
+      if (system_metrics.power_available) {
+         /* Initialize with empty string */
+         render_text[0] = '\0';
+         int has_faults = 0;
+         char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+
+         /* Add critical faults with section header */
+         if (system_metrics.critical_fault_count > 0) {
+            for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count; i++) {
+               if (strlen(system_metrics.critical_faults[i]) > 0) {
+                  /* Add indentation for better readability */
+                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, system_metrics.critical_faults[i],
+                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+            }
+            has_faults = 1;
+         }
+
+         /* Add warning faults with section header */
+         if (system_metrics.warning_fault_count > 0) {
+            /* Add extra line break between sections if needed */
+            if (has_faults) {
+               strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+            }
+
+            for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
+               if (strlen(system_metrics.warning_faults[i]) > 0) {
+                  /* Add indentation for better readability */
+                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, system_metrics.warning_faults[i],
+                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+            }
+            has_faults = 1;
+         }
+
+         /* Add info faults with section header */
+         if (system_metrics.info_fault_count > 0) {
+            /* Add extra line break between sections if needed */
+            if (has_faults) {
+               strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+            }
+
+            for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
+               if (strlen(system_metrics.info_faults[i]) > 0) {
+                  /* Add indentation for better readability */
+                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, system_metrics.info_faults[i],
+                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+               }
+            }
+            has_faults = 1;
+         }
+
+         /* If no faults were found, display a message */
+         if (!has_faults) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "No battery faults");
+         }
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "Battery not available");
+      }
    } else if (strcmp("*BATTERY_TIME*", curr_element->text) == 0) {
       if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);
+         if (system_metrics.charge_state == CHARGE_STATE_CHARGING) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "CHARGING");
+         } else if (system_metrics.charge_state == CHARGE_STATE_IDLE) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "IDLE");
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);
+         }
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--:--");
       }
@@ -652,9 +733,29 @@ void render_text_element(element *curr_element) {
          curr_element->surface = NULL;
       }
 
-      /* Create new text surface and texture */
-      curr_element->surface = TTF_RenderText_Blended(
-         curr_element->ttf_font, render_text, curr_element->font_color);
+      /* Check if text contains line break delimiters */
+      if (strchr(render_text, LINE_BREAK_DELIMITER) != NULL) {
+         /* Create wrapped text surface using newline handling */
+         curr_element->surface = TTF_RenderText_Blended_Wrapped(
+            curr_element->ttf_font, render_text, curr_element->font_color, 0);
+
+         /* Note: wrapLength=0 means only wrap on explicit newlines */
+
+         /* This is a place holder. */
+         /* TTF_SetFontLineSkip() function is available since SDL_ttf 2.22.0. */
+#if 0
+         /* Calculate line height for proper vertical spacing */
+         int line_height = TTF_FontHeight(curr_element->ttf_font);
+         int line_spacing = (int)(line_height * LINE_SPACING_FACTOR);
+
+         /* Set the line spacing for better readability */
+         TTF_SetFontLineSkip(curr_element->ttf_font, line_spacing);
+#endif
+      } else {
+         /* Standard single-line text rendering */
+         curr_element->surface = TTF_RenderText_Blended(
+            curr_element->ttf_font, render_text, curr_element->font_color);
+      }
 
       if (curr_element->surface != NULL) {
          curr_element->dst_rect.w = curr_element->surface->w;

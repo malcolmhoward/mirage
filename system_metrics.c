@@ -54,6 +54,7 @@ system_metrics_t system_metrics = {
    .battery_cells_series = 0,
    .battery_cells_parallel = 0,
    .battery_nominal_voltage = 0.0f,
+   .charge_state = CHARGE_STATE_DISCHARGING,
 
    .cpu_update_time = 0,
    .memory_update_time = 0,
@@ -107,6 +108,7 @@ void init_system_metrics(void)
    system_metrics.battery_cells_series = 0;
    system_metrics.battery_cells_parallel = 0;
    system_metrics.battery_nominal_voltage = 0.0f;
+   system_metrics.charge_state = CHARGE_STATE_DISCHARGING;
 
    /* Reset all timestamps */
    time_t current_time = time(NULL);

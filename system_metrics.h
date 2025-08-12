@@ -30,6 +30,8 @@
 /* Maximum length for fault message strings */
 #define MAX_FAULT_MSG_LENGTH 64
 
+typedef enum {CHARGE_STATE_CHARGING, CHARGE_STATE_DISCHARGING, CHARGE_STATE_IDLE, CHARGE_STATE_UNKNOWN} charge_state_t;
+
 /* Structure for system metrics received from STAT */
 typedef struct {
    float cpu_usage;            /* CPU usage percentage (0-100) */
@@ -60,6 +62,7 @@ typedef struct {
    int battery_cells_series;   /* Number of battery cells in series */
    int battery_cells_parallel; /* Number of battery cells in parallel */
    float battery_nominal_voltage; /* Battery nominal voltage */
+   charge_state_t charge_state;   /* State of charge if available. */
 
    /* Timestamp of last update for each metric */
    time_t cpu_update_time;

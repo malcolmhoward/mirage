@@ -897,7 +897,7 @@
       },
       {
          "type": "text",
-         "string": "*BATTERY_INFO_FAULTS*",
+         "string": "*BATTERY_ALL_FAULTS*",
          "font": "Aldrich-Regular.ttf",
          "color": "0xFF, 0xFF, 0xFF, 0xFF",
          "size": 28,
@@ -908,33 +908,6 @@
          "layer": 1,
          "huds": ["armor"]
       },
-      {
-         "type": "text",
-         "string": "*BATTERY_WARNING_FAULTS*",
-         "font": "Aldrich-Regular.ttf",
-         "color": "0xFF, 0xFF, 0xFF, 0xFF",
-         "size": 28,
-         "dest_x": 1077,
-         "dest_y": 1240,
-         "halign": "left",
-         "angle": 0,
-         "layer": 1,
-         "huds": ["armor"]
-      },
-      {
-         "type": "text",
-         "string": "*BATTERY_CRITICAL_FAULTS*",
-         "font": "Aldrich-Regular.ttf",
-         "color": "0xFF, 0xFF, 0xFF, 0xFF",
-         "size": 28,
-         "dest_x": 1077,
-         "dest_y": 1270,
-         "halign": "left",
-         "angle": 0,
-         "layer": 1,
-         "huds": ["armor"]
-      },
-
       {
          "type": "special",
          "name": "armor_display",
