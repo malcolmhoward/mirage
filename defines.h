@@ -155,7 +155,6 @@
 #define TARGET_RECORDING_FPS                 30
 #define TARGET_RECORDING_FRAME_DURATION_US   (1000000 / TARGET_RECORDING_FPS)
 
-#define RECORD_AUDIO
 #define RECORD_PULSE_AUDIO_DEVICE   "alsa_output.usb-KTMicro_TX_96Khz_USB_Audio_2022-08-08-0000-0000-0000--00.analog-stereo.monitor"
 
 // New York City, NY
@@ -327,9 +326,9 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
                                       "profile=4 " \
                                       "maxperf-enable=1 " \
                                       "EnableTwopassCBR=1 " \
-                                      "num-B-Frames=2 " \
                                       "disable-cabac=0 " \
                                       "insert-sps-pps=1 " \
+                                      "insert-vui=1 " \
                                       "iframeinterval=60 " \
                                       "idrinterval=60 " \
                                       "vbv-size=8000000 ! "
@@ -369,13 +368,13 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #define GST_PIPE_PARSE_CONFIG   "h264parse config-interval=1 ! "
 
 /* === AUDIO COMPONENTS === */
-#define GST_PIPE_AUDIO         "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
+#define GST_PIPE_AUDIO         "pulsesrc device=%s do-timestamp=true provide-clock=false ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
-                               "audioconvert ! voaacenc bitrate=128000 ! queue ! mux."
+                               "audioconvert ! voaacenc bitrate=128000 ! queue ! mux. "
 
 #define GST_PIPE_AUDIO_YOUTUBE "pulsesrc device=%s do-timestamp=true provide-clock=true ! " \
                                "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
-                               "audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux."
+                               "audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux. "
 
 /* === MUXER COMPONENTS === */
 #ifdef MKV_OUT
@@ -390,20 +389,18 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #define GST_PIPE_HLS_OUT        "mux. hlssink2 name=mux playlist-root=http://%s/hls/ " \
                                "location=/var/www/html/hls/segment%%d.ts " \
                                "playlist-location=/var/www/html/hls/playlist.m3u8"
-#define GST_PIPE_RTMP_OUT       "flvmux name=mux streamable=true latency=100000000 " \
-                               "! rtmpsink location='rtmp://a.rtmp.youtube.com/live2/%s live=1'"
+#define GST_PIPE_RTMP_OUT       "flvmux name=mux streamable=true latency=100000000 ! " \
+                               "queue name=mux_queue max-size-buffers=50 max-size-time=0 max-size-bytes=0 ! " \
+                               "rtmpsink location='rtmp://a.rtmp.youtube.com/live2/%s live=1' sync=false async=false"
 
 /* === UTILITY COMPONENTS === */
-#define GST_PIPE_TEE            "tee name=split ! "
-#define GST_PIPE_TEE_BRANCH     "split. ! "
 #define GST_PIPE_QUEUE          "queue ! mux."
-#define GST_PIPE_QUEUE_LEAKY    "queue max-size-buffers=10 leaky=2 ! mux."
-#define GST_PIPE_INPUT_QUEUE_LEAKY "queue name=stream_queue max-size-buffers=5 leaky=downstream ! "
+#define GST_PIPE_QUEUE_VIDEO    "queue name=video_queue max-size-buffers=30 max-size-time=0 max-size-bytes=0 ! mux. "
+#define GST_PIPE_INPUT_QUEUE_LEAKY "queue name=input_queue max-size-buffers=10 max-size-time=0 max-size-bytes=0 leaky=downstream ! "
 
 /* === COMPLETE PIPELINE DEFINITIONS === */
 
 /* Recording pipeline */
-#ifdef RECORD_AUDIO
 #define GST_ENC_PIPELINE        GST_PIPE_INPUT \
                                GST_PIPE_VIDEO_MAIN \
                                GST_PIPE_PARSE \
@@ -412,42 +409,41 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
                                GST_PIPE_MUXER \
                                GST_PIPE_FILE_OUT
 
-#else
-#define GST_ENC_PIPELINE        GST_PIPE_INPUT \
-                               GST_PIPE_VIDEO_MAIN \
-                               GST_PIPE_PARSE \
-                               GST_PIPE_MUXER \
-                               GST_PIPE_FILE_OUT
-#endif
-
 /* Recording + Streaming pipeline */
+#define GST_PIPE_AUDIO_TEE      "pulsesrc device=%s do-timestamp=true ! " \
+                               "audio/x-raw, format=(string)S16LE, rate=(int)44100, channels=(int)2 ! " \
+                               "audioconvert ! voaacenc bitrate=128000 ! " \
+                               "tee name=audio_tee ! " \
+                               "queue ! filemux. " \
+                               "audio_tee. ! " \
+                               "queue ! aacparse ! streammux. "
+
 #define GST_ENCSTR_PIPELINE     GST_PIPE_INPUT \
-                               GST_PIPE_TEE \
+                               "tee name=raw_split ! " \
+                               "queue name=record_queue max-size-buffers=10 max-size-time=0 max-size-bytes=0 ! " \
                                GST_PIPE_VIDEO_MAIN \
                                GST_PIPE_PARSE \
-                               GST_PIPE_MUXER \
-                               GST_PIPE_FILE_OUT " " \
-                               GST_PIPE_TEE_BRANCH \
-                               GST_PIPE_VIDEO_STREAM \
-                               GST_PIPE_PARSE_CONFIG \
-                               GST_PIPE_UDP_OUT
+                               "queue ! filemux. " \
+                               "raw_split. ! " \
+                               "queue name=stream_queue max-size-buffers=10 max-size-time=0 max-size-bytes=0 leaky=downstream ! " \
+                               GST_PIPE_VIDEO_YOUTUBE \
+                               "h264parse config-interval=1 ! " \
+                               "queue ! streammux. " \
+                               GST_PIPE_AUDIO_TEE \
+                               "matroskamux name=filemux ! " \
+                               "filesink location=%s " \
+                               "flvmux name=streammux streamable=true latency=100000000 ! " \
+                               "queue name=rtmp_queue max-size-buffers=50 max-size-time=0 max-size-bytes=0 ! " \
+                               "rtmpsink location='rtmp://a.rtmp.youtube.com/live2/%s live=1' sync=false async=false"
 
 /* Streaming-only pipeline */
-#ifdef RECORD_AUDIO
 #define GST_STR_PIPELINE        GST_PIPE_INPUT \
                                GST_PIPE_INPUT_QUEUE_LEAKY \
                                GST_PIPE_VIDEO_YOUTUBE \
                                GST_PIPE_PARSE \
-                               GST_PIPE_QUEUE_LEAKY " " \
-                               GST_PIPE_AUDIO_YOUTUBE " " \
+                               GST_PIPE_QUEUE_VIDEO \
+                               GST_PIPE_AUDIO_YOUTUBE \
                                GST_PIPE_RTMP_OUT
-#else
-#define GST_STR_PIPELINE        GST_PIPE_INPUT \
-                               GST_PIPE_INPUT_QUEUE_LEAKY \
-                               GST_PIPE_VIDEO_YOUTUBE \
-                               GST_PIPE_PARSE \
-                               GST_PIPE_RTMP_OUT
-#endif
 
 #endif // DEFINES_H
 

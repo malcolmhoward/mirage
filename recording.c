@@ -19,6 +19,7 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -166,44 +167,45 @@ void cleanup_pipeline(GstElement *pipeline, GstElement *srcEncode, GstBus *bus) 
 /**
  * Sets the recording/streaming state of the application.
  */
-void set_recording_state(DestinationType state) {
-   char announce[35] = "";
+void set_recording_state(DestinationType state)
+{
+   video_out_data *this_vod = get_video_out_data();
 
-   if (this_vod.output == state) {
-      LOG_INFO("Recording state unchanged.");
+   if (state == DISABLED && this_vod->output != DISABLED) {
+      LOG_INFO("Stopping recording/streaming...");
 
-      return;
-   }
+      /* Signal thread to stop */
+      this_vod->output = DISABLED;
 
-   switch (state) {
-      case DISABLED:
-         if (this_vod.output == RECORD) {
-            snprintf(announce, sizeof(announce), "Stopping recording.");
-         } else if (this_vod.output == STREAM) {
-            snprintf(announce, sizeof(announce), "Stopping streaming.");
-         } else if (this_vod.output == RECORD_STREAM) {
-            snprintf(announce, sizeof(announce), "Stopping recording and streaming.");
-         } else {
-            snprintf(announce, sizeof(announce), "Disabling from unknown state.");
+      /* Give thread time to exit cleanly */
+      pthread_t thread = get_video_out_thread();
+      if (thread != 0) {
+         struct timespec timeout;
+         clock_gettime(CLOCK_REALTIME, &timeout);
+         timeout.tv_sec += 5;  /* 5 second timeout */
+
+         int result = pthread_timedjoin_np(thread, NULL, &timeout);
+         if (result == ETIMEDOUT) {
+            LOG_ERROR("Thread didn't exit cleanly, forcing termination");
+            pthread_cancel(thread);
+            pthread_join(thread, NULL);
          }
-         break;
-      case RECORD:
-         snprintf(announce, sizeof(announce), "Starting recording.");
-         break;
-      case STREAM:
-         snprintf(announce, sizeof(announce), "Starting streaming.");
-         break;
-      case RECORD_STREAM:
-         snprintf(announce, sizeof(announce), "Starting recording and streaming.");
-         break;
-      default:
-         snprintf(announce, sizeof(announce), "Unknown recording state requested.");
-         break;
+
+         set_video_out_thread(0);
+      }
+
+      /* Clear buffers */
+      pthread_mutex_lock(&this_vod->p_mutex);
+      for (int i = 0; i < 3; i++) {
+         if (this_vod->rgb_out_pixels[i] != NULL) {
+            free(this_vod->rgb_out_pixels[i]);
+            this_vod->rgb_out_pixels[i] = NULL;
+         }
+      }
+      pthread_mutex_unlock(&this_vod->p_mutex);
+   } else {
+      this_vod->output = state;
    }
-
-   mqttTextToSpeech(announce);
-
-   this_vod.output = state;
 }
 
 /**
@@ -339,17 +341,17 @@ void *video_next_thread(void *arg) {
     * used parameters. This "volatile" trick to prevent them from being optimized out is a new
     * one for me but it works. */
    GstClock *pipeline_clock = NULL;
-   volatile GstClockTime running_time;
    volatile GstClockTime base_time;
    volatile guint64 count = 0;
-   volatile GstClockTime current_time;
 
    struct timespec start_time, end_time;
+   struct timespec ts_delay;
    long processing_time_ns = 0L, delay_time_ns = 0L;
 
    int window_width = 0, window_height = 0;
 
-   stream_settings *this_ss = get_stream_settings();
+   time_t last_successful_push = time(NULL);
+   int frames_pushed = 0;
 
    /* Get window dimensions */
    get_window_size(&window_width, &window_height);
@@ -369,32 +371,22 @@ void *video_next_thread(void *arg) {
    if (this_vod.output == RECORD_STREAM) {
       LOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE,
-                 window_width, window_height,
-                 TARGET_RECORDING_FPS, this_vod.filename,
-                 this_ss->stream_width, this_ss->stream_height, this_ss->stream_dest_ip);
+                 window_width, window_height, TARGET_RECORDING_FPS,
+                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
+                 RECORD_PULSE_AUDIO_DEVICE,
+                 this_vod.filename,
+                 YOUTUBE_STREAM_KEY);
    } else if (this_vod.output == RECORD) {
       LOG_INFO("New recording: %s", this_vod.filename);
-#ifdef RECORD_AUDIO
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, RECORD_PULSE_AUDIO_DEVICE, this_vod.filename);
-#else
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, window_width, window_height,
-                 TARGET_RECORDING_FPS, this_vod.filename);
-#endif
       LOG_INFO("descr: %s", descr);
    } else if (this_vod.output == STREAM) {
-#ifdef RECORD_AUDIO
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
                  window_width, window_height, TARGET_RECORDING_FPS,
                  STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
                  RECORD_PULSE_AUDIO_DEVICE,
                  YOUTUBE_STREAM_KEY);
-#else
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
-                 window_width, window_height, TARGET_RECORDING_FPS,
-                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 YOUTUBE_STREAM_KEY);
-#endif
    } else {
       LOG_ERROR("Invalid destination passed.");
       this_vod.output = DISABLED;
@@ -409,7 +401,7 @@ void *video_next_thread(void *arg) {
    }
 
    // Log pipeline string for debugging
-   LOG_INFO("Creating pipeline: %s", descr);
+   printf("Creating pipeline: %s", descr);
 
    pipeline = gst_parse_launch(descr, &error);
    if (error != NULL) {
@@ -505,65 +497,77 @@ void *video_next_thread(void *arg) {
 
    while (this_vod.output) {
       if (feed_me) {
-         pthread_mutex_lock(&this_vod.p_mutex);
-
          clock_gettime(CLOCK_MONOTONIC, &start_time);
 
-         if (this_vod.rgb_out_pixels[this_vod.read_index] != NULL) {
-            // Verify buffer integrity before using
-            if (this_vod.read_index == this_vod.write_index) {
-               LOG_WARNING("Read caught up to write - skipping frame");
-               pthread_mutex_unlock(&this_vod.p_mutex);
-               continue;
-            }
-            buffer = gst_buffer_new_wrapped(this_vod.rgb_out_pixels[this_vod.read_index],
-                                           window_width * RGB_OUT_SIZE * window_height);
-            if (buffer == NULL) {
-               LOG_ERROR("Failure to allocate new buffer for encoding.");
-               pthread_mutex_unlock(&this_vod.p_mutex);
-               break;
-            }
+         pthread_mutex_lock(&this_vod.p_mutex);
 
-            current_time = gst_clock_get_time(pipeline_clock);
-            running_time = current_time - base_time;
+         /* Use buffer_num - that's what your triple buffer system provides */
+         if (this_vod.rgb_out_pixels[this_vod.buffer_num] != NULL) {
+            /* CRITICAL FIX: Make a copy for GStreamer so no ownership conflict */
+            size_t buffer_size = window_width * RGB_OUT_SIZE * window_height;
+            void *buffer_copy = malloc(buffer_size);
 
-            GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND, 30);
-            GST_BUFFER_OFFSET(buffer)   = count++;
-            GST_BUFFER_PTS(buffer)      = running_time;
-            GST_BUFFER_DTS(buffer)      = GST_CLOCK_TIME_NONE;
+            if (buffer_copy) {
+               memcpy(buffer_copy, this_vod.rgb_out_pixels[this_vod.buffer_num], buffer_size);
 
-            /* Get the preroll buffer from appsink */
-            ret = gst_app_src_push_buffer(GST_APP_SRC(srcEncode), buffer);
+               /* Give the copy to GStreamer - it will free it */
+               buffer = gst_buffer_new_wrapped(buffer_copy, buffer_size);
 
-            /* Mark as processed */
-            this_vod.rgb_out_pixels[this_vod.read_index] = NULL;
+               /* Set timestamps */
+               GstClockTime pts = gst_clock_get_time(pipeline_clock) - base_time;
 
-            if (ret != GST_FLOW_OK) {
-               LOG_ERROR("GST_FLOW error while pushing buffer: %d", ret);
-               pthread_mutex_unlock(&this_vod.p_mutex);
-               break;
+               GST_BUFFER_PTS(buffer) = pts;
+               GST_BUFFER_DTS(buffer) = pts;  /* Set DTS same as PTS */
+               GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND, TARGET_RECORDING_FPS);
+               GST_BUFFER_OFFSET(buffer) = count++;
+
+               /* Push buffer */
+               ret = gst_app_src_push_buffer(GST_APP_SRC(srcEncode), buffer);
+
+               if (ret != GST_FLOW_OK) {
+                  LOG_ERROR("GST_FLOW error while pushing buffer: %d", ret);
+                  pthread_mutex_unlock(&this_vod.p_mutex);
+                  break;
+               }
+
+               frames_pushed++;
+               last_successful_push = time(NULL);
             }
          }
 
-         clock_gettime(CLOCK_MONOTONIC, &end_time);
          pthread_mutex_unlock(&this_vod.p_mutex);
       }
 
-      /* Calculate processing time in nanoseconds */
-      struct timespec ts_delay;
+      /* Keep your existing timing code */
+      clock_gettime(CLOCK_MONOTONIC, &end_time);
       processing_time_ns = (end_time.tv_sec - start_time.tv_sec) * NSEC_PER_SEC +
-                           (end_time.tv_nsec - start_time.tv_nsec);
-
-      /* Calculate how long to delay to maintain the target frame rate */
+                          (end_time.tv_nsec - start_time.tv_nsec);
       delay_time_ns = TARGET_RECORDING_FRAME_DURATION_US * 1000L - processing_time_ns;
 
-      /* Apply the calculated delay, if positive, using high-precision timer */
       if (delay_time_ns > 0) {
          ts_delay.tv_sec = delay_time_ns / NSEC_PER_SEC;
          ts_delay.tv_nsec = delay_time_ns % NSEC_PER_SEC;
-
-         // Use CLOCK_MONOTONIC for consistency with recording timing
          clock_nanosleep(CLOCK_MONOTONIC, 0, &ts_delay, NULL);
+      }
+
+      if (time(NULL) - last_successful_push > 30) {
+         LOG_ERROR("Stream frozen - attempting restart...");
+
+         /* Clean shutdown */
+         if (srcEncode) {
+            gst_app_src_end_of_stream(GST_APP_SRC(srcEncode));
+         }
+         gst_element_set_state(pipeline, GST_STATE_NULL);
+
+         /* Clear and restart */
+         DestinationType orig_output = this_vod.output;
+         this_vod.output = DISABLED;
+         sleep(2);
+
+         /* Signal main thread to restart */
+         set_recording_state(orig_output);
+
+         break;  /* Exit this thread, new one will be created */
       }
    }
 

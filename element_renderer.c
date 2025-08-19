@@ -341,7 +341,7 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f F", this_enviro->temp * 9/5 + 32.0);
    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f%%", this_enviro->humidity);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%02.0f%%", this_enviro->humidity);
 
    } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
@@ -490,11 +490,6 @@ void render_text_element(element *curr_element) {
 
          /* Add warning faults with section header */
          if (system_metrics.warning_fault_count > 0) {
-            /* Add extra line break between sections if needed */
-            if (has_faults) {
-               strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
-            }
-
             for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
                if (strlen(system_metrics.warning_faults[i]) > 0) {
                   /* Add indentation for better readability */
@@ -509,11 +504,6 @@ void render_text_element(element *curr_element) {
 
          /* Add info faults with section header */
          if (system_metrics.info_fault_count > 0) {
-            /* Add extra line break between sections if needed */
-            if (has_faults) {
-               strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
-            }
-
             for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
                if (strlen(system_metrics.info_faults[i]) > 0) {
                   /* Add indentation for better readability */
