@@ -389,6 +389,93 @@ int parse_stat_command(char *command_string)
    return SUCCESS;
 }
 
+/**
+ * Process color correction commands
+ * @param cmd Command string starting with "CCM_"
+ */
+#ifdef USE_CUDA
+void process_color_correction_command(const char *cmd) {
+   int color_correction_enabled;
+   cuda_color_matrix_t active_ccm;
+
+   get_color_correction(&color_correction_enabled, &active_ccm);
+
+   if (strncmp(cmd, "CCM_ENABLE", 10) == 0) {
+      color_correction_enabled = 1;
+      LOG_INFO("Color correction enabled");
+      mqttTextToSpeech("Color correction enabled");
+   } else if (strncmp(cmd, "CCM_DISABLE", 11) == 0) {
+      color_correction_enabled = 0;
+      LOG_INFO("Color correction disabled");
+      mqttTextToSpeech("Color correction disabled");
+   } else if (strncmp(cmd, "CCM_ALT", 7) == 0) {
+      active_ccm = CCM_NOIR_DAYLIGHT_ALT;
+      LOG_INFO("Switched to alternative color matrix");
+      mqttTextToSpeech("Alternative color matrix activated");
+   } else if (strncmp(cmd, "CCM_DEFAULT", 11) == 0) {
+      active_ccm = CCM_NOIR_DAYLIGHT;
+      LOG_INFO("Switched to default color matrix");
+      mqttTextToSpeech("Default color matrix activated");
+   } else if (strncmp(cmd, "CCM_TEST_BLUE", 13) == 0) {
+      active_ccm = CCM_TEST_BLUE;
+      LOG_INFO("TEST: Blue filter activated");
+      mqttTextToSpeech("Test blue filter activated");
+   } else if (strncmp(cmd, "CCM_TEST_INVERT", 15) == 0) {
+      active_ccm = CCM_TEST_INVERT;
+      LOG_INFO("TEST: Inverted colors activated");
+      mqttTextToSpeech("Test inverted colors activated");
+   } else if (strncmp(cmd, "CCM_TEST_SEPIA", 14) == 0) {
+      active_ccm = CCM_TEST_SEPIA;
+      LOG_INFO("TEST: Sepia tone activated");
+      mqttTextToSpeech("Test sepia tone activated");
+   } else if (strncmp(cmd, "CCM_STATUS", 10) == 0) {
+      if (color_correction_enabled) {
+         LOG_INFO("Color correction is enabled");
+         mqttTextToSpeech("Color correction is currently enabled");
+      } else {
+         LOG_INFO("Color correction is disabled");
+         mqttTextToSpeech("Color correction is currently disabled");
+      }
+   } else if (strncmp(cmd, "CCM_CUSTOM", 10) == 0) {
+      /* Parse custom matrix values: CCM_CUSTOM:r00,r01,r02,g10,g11,g12,b20,b21,b22,or,og,ob */
+      char *params = strchr(cmd, ':');
+      if (params) {
+         params++; /* Skip the colon */
+         float values[12] = {0};
+         int count = sscanf(params, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f",
+                           &values[0], &values[1], &values[2],
+                           &values[3], &values[4], &values[5],
+                           &values[6], &values[7], &values[8],
+                           &values[9], &values[10], &values[11]);
+         if (count >= 9) {
+            active_ccm.m[0][0] = values[0];
+            active_ccm.m[0][1] = values[1];
+            active_ccm.m[0][2] = values[2];
+            active_ccm.m[1][0] = values[3];
+            active_ccm.m[1][1] = values[4];
+            active_ccm.m[1][2] = values[5];
+            active_ccm.m[2][0] = values[6];
+            active_ccm.m[2][1] = values[7];
+            active_ccm.m[2][2] = values[8];
+            if (count >= 12) {
+               active_ccm.off[0] = values[9];
+               active_ccm.off[1] = values[10];
+               active_ccm.off[2] = values[11];
+            }
+            LOG_INFO("Custom color matrix loaded");
+            mqttTextToSpeech("Custom color matrix loaded");
+         } else {
+            LOG_ERROR("Invalid custom matrix format");
+         }
+      }
+   } else {
+      LOG_WARNING("Unknown color correction command: %s", cmd);
+   }
+
+   set_color_correction(color_correction_enabled, active_ccm);
+}
+#endif
+
 /* Parse the JSON "commands" that come over serial/USB or MQTT. */
 int parse_json_command(char *command_string, char *topic)
 {

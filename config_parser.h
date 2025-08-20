@@ -222,6 +222,9 @@ int parse_animated_json(element * curr_element);
 int parse_color(char *string, unsigned char *r, unsigned char *g, unsigned char *b,
                 unsigned char *a);
 int parse_json_config(char *filename);
+#ifdef USE_CUDA
+void process_color_correction_command(const char *cmd);
+#endif
 
 #endif // CONFIG_PARSER_H
 

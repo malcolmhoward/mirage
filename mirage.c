@@ -93,10 +93,12 @@
 #ifdef USE_CUDA
 #include <cuda_runtime.h>
 //#include <nvbuf_utils.h>
+#include "cuda_color_correction.h"
 #endif
 
 #include <GL/glew.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 
 /* Local */
 #include "defines.h" /* Out of order due to dependencies */
@@ -126,7 +128,7 @@ static GstMapInfo mapL[2], mapR[2];        /* Video memory maps. */
 #ifdef DISPLAY_TIMING
 struct timespec ts_cap[2];          /* Store the display latency. */
 #endif
-static int video_posted = 0;               /* Notify that the new video frames are ready. */
+static atomic_int video_posted = ATOMIC_VAR_INIT(0);  /* Notify that the new video frames are ready. */
 static int buffer_num = 0;                 /* Video is double buffered. This swaps between them. */
 
 static int window_width = 0;
@@ -144,6 +146,15 @@ int detect_enabled = 0;                      /* Is object detection enabled? */
 
 double averageFrameRate = 0.0;
 static int curr_fps = 60;
+
+#ifdef USE_CUDA
+static int color_correction_enabled = 1;    /* Enable by default for NoIR cameras (not static for extern access) */
+static cuda_color_matrix_t active_ccm;      /* Active color matrix (not static for extern access) */
+static unsigned char *d_ccm_bufferL = NULL; /* Device buffer for color correction */
+static unsigned char *d_ccm_bufferR = NULL; /* Device buffer for color correction */
+static cudaStream_t cuda_streamL = 0;       /* CUDA stream for left eye */
+static cudaStream_t cuda_streamR = 0;       /* CUDA stream for right eye */
+#endif
 
 /* Right now we only support one instance of each. These are their objects. */
 motion this_motion = {
@@ -466,6 +477,24 @@ const char *get_ai_state(void) {
 int get_curr_fps(void) {
    return curr_fps;
 }
+
+#ifdef USE_CUDA
+/*
+ * Returns the current color correction settings.
+ */
+void get_color_correction(int *cc_enabled, cuda_color_matrix_t *a_ccm) {
+   *cc_enabled = color_correction_enabled;
+   *a_ccm = active_ccm;
+}
+
+/*
+ * Sets the color correction settings.
+ */
+void set_color_correction(int cc_enabled, cuda_color_matrix_t a_ccm) {
+   color_correction_enabled = cc_enabled;
+   active_ccm = a_ccm;
+}
+#endif
 
 /* Free the UI element list. */
 void free_elements(element *start_element)
@@ -807,6 +836,7 @@ int play_intro(int frames, int clear, int *finished)
    return 0;
 }
 
+#ifdef USE_JETSON_INFERENCE
 /* Pthread function to background object detection. Runs to completion once per frame. */
 void *object_detection_thread(void *arg)
 {
@@ -821,6 +851,7 @@ void *object_detection_thread(void *arg)
 
    return NULL;
 }
+#endif
 
 /**
  * Builds a complete GStreamer pipeline string for stereo camera setup
@@ -923,16 +954,20 @@ void *video_processing_thread(void *arg)
       // Unmap buffers and unref the samples
       if (bufferL[!buffer_num] != NULL) {
          gst_buffer_unmap(bufferL[!buffer_num], &mapL[!buffer_num]);
+         bufferL[!buffer_num] = NULL;
       }
       if (sampleL[!buffer_num] != NULL) {
          gst_sample_unref(sampleL[!buffer_num]);
+         sampleL[!buffer_num] = NULL;
       }
       if (sinkR) {
          if (bufferR[!buffer_num] != NULL) {
             gst_buffer_unmap(bufferR[!buffer_num], &mapR[!buffer_num]);
+            bufferR[!buffer_num] = NULL;
          }
          if (sampleR[!buffer_num] != NULL) {
             gst_sample_unref(sampleR[!buffer_num]);
+            sampleR[!buffer_num] = NULL;
          }
       }
 
@@ -1026,8 +1061,9 @@ void *video_processing_thread(void *arg)
             gst_buffer_map(bufferR[!buffer_num], &mapR[!buffer_num], GST_MAP_READ);
 
             pthread_mutex_lock(&v_mutex);
-            video_posted = 1;
+            atomic_store(&video_posted, 0);
             buffer_num = !buffer_num;
+            atomic_store(&video_posted, 1);
             pthread_mutex_unlock(&v_mutex);
          } else {
             g_print("could not make snapshot\n");
@@ -1040,8 +1076,9 @@ void *video_processing_thread(void *arg)
             gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
 
             pthread_mutex_lock(&v_mutex);
-            video_posted = 1;
+            atomic_store(&video_posted, 0);
             buffer_num = !buffer_num;
+            atomic_store(&video_posted, 1);
             pthread_mutex_unlock(&v_mutex);
          } else {
             g_print("could not make snapshot\n");
@@ -1112,16 +1149,22 @@ TTF_Font *get_local_font(char *font_name, int font_size)
 void *grab_latest_camera_frame(void *temp_buffer) {
    hud_display_settings *this_hds = get_hud_display_settings();
 
-   /* Use camera frame buffer if available */
-   pthread_mutex_lock(&v_mutex); // Lock the video mutex to safely access mapL
-   if (video_posted && mapL[buffer_num].data != NULL) {
-      /* Allocate temporary buffer for the screenshot */
+   int is_frame_available = atomic_load(&video_posted);
+   pthread_mutex_lock(&v_mutex);
+   if (!is_frame_available || mapL[buffer_num].data == NULL) {
+      pthread_mutex_unlock(&v_mutex);
+      return NULL;  // Indicate no valid frame is available
+   }
+
+   /* Allocate buffer if not provided */
+   if (temp_buffer == NULL) {
       temp_buffer = malloc(this_hds->cam_input_width * this_hds->cam_input_height * 4);
-      if (temp_buffer != NULL) {
-         /* Copy camera data */
-         memcpy(temp_buffer, mapL[buffer_num].data,
-               this_hds->cam_input_width * this_hds->cam_input_height * 4);
-      }
+   }
+
+   if (temp_buffer != NULL) {
+      /* Copy camera data */
+      memcpy(temp_buffer, mapL[buffer_num].data,
+            this_hds->cam_input_width * this_hds->cam_input_height * 4);
    }
    pthread_mutex_unlock(&v_mutex);
 
@@ -1722,6 +1765,41 @@ int main(int argc, char **argv)
    set_video_recording_path(record_path);
    init_video_out_data();
 
+#ifdef USE_CUDA
+   /* Initialize with default matrix */
+   active_ccm = CCM_TEST_BLUE;
+
+   if (color_correction_enabled) {
+      if (cuda_color_init() != 0) {
+         LOG_ERROR("Failed to initialize CUDA color correction");
+         color_correction_enabled = 0;
+      } else {
+         /* Allocate device memory for color correction */
+         size_t imageSize = this_hds->cam_input_width * this_hds->cam_input_height * 4;
+         if (cudaMalloc((void**)&d_ccm_bufferL, imageSize) != cudaSuccess ||
+             (!single_cam && cudaMalloc((void**)&d_ccm_bufferR, imageSize) != cudaSuccess)) {
+            LOG_ERROR("Failed to allocate CUDA memory for color correction");
+            color_correction_enabled = 0;
+            if (d_ccm_bufferL) {
+               cudaFree(d_ccm_bufferL);
+               d_ccm_bufferL = NULL;
+            }
+            cuda_color_cleanup();
+         } else {
+            /* Create CUDA streams for async processing */
+            if (cudaStreamCreate(&cuda_streamL) != cudaSuccess ||
+                (!single_cam && cudaStreamCreate(&cuda_streamR) != cudaSuccess)) {
+               LOG_ERROR("Failed to create CUDA streams");
+               /* Fall back to default stream (0) */
+               cuda_streamL = 0;
+               cuda_streamR = 0;
+            }
+            LOG_INFO("CUDA color correction enabled for NoIR camera");
+         }
+      }
+   }
+#endif
+
    /* Init detect array */
    for (int j = 0; j < MAX_DETECT; j++) {
       this_detect[0][j].active = 0;
@@ -1822,6 +1900,7 @@ int main(int argc, char **argv)
    oddataR.processed = 1;
    oddataR.pix_data = NULL;
    detect_enabled = 0;     /* Disabling due to bug. */
+#ifdef USE_JETSON_INFERENCE
    if (detect_enabled) {
       if (init_detect(&oddataL.detect_obj, argc, argv, this_hds->cam_input_width, this_hds->cam_input_height))
       {
@@ -1841,6 +1920,7 @@ int main(int argc, char **argv)
          }
       }
    }
+#endif
 
    if (!no_camera_mode) {
       if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
@@ -2064,65 +2144,97 @@ int main(int argc, char **argv)
 
       /* Video Processing */
       if (!no_camera_mode) {
-      pthread_mutex_lock(&v_mutex);
-      if (video_posted) {
-         if (detect_enabled) {
+         pthread_mutex_lock(&v_mutex);
+         if (atomic_load(&video_posted)) {
+#ifdef USE_JETSON_INFERENCE
+            if (detect_enabled) {
 #if defined(OD_PROPER_WAIT) && defined(USE_CUDA)
-            oddataL.pix_data = mapL[buffer_num].data;
-            oddataL.eye = 0;
-            cudaMemcpy(oddataL.detect_obj.d_image, oddataL.pix_data,
-                       oddataL.detect_obj.l_width * oddataL.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
-            detect_image(&oddataL.detect_obj, oddataL.pix_data, this_detect[oddataL.eye], MAX_DETECT);
+               oddataL.pix_data = mapL[buffer_num].data;
+               oddataL.eye = 0;
+               cudaMemcpy(oddataL.detect_obj.d_image, oddataL.pix_data,
+                          oddataL.detect_obj.l_width * oddataL.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
+               detect_image(&oddataL.detect_obj, oddataL.pix_data, this_detect[oddataL.eye], MAX_DETECT);
 
-            if (!single_cam) {
-               oddataR.pix_data = mapR[buffer_num].data;
-               oddataR.eye = 1;
-               cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
-                          oddataR.detect_obj.l_width * oddataR.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
-               detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye], MAX_DETECT);
-            }
-#else
-            if (single_cam) {
-               if (oddataL.processed == 1) {
-                  oddataL.pix_data = mapL[buffer_num].data;
-                  oddataL.eye = 0;
-                  oddataL.complete = 0;
-                  oddataL.processed = 0;
-                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
-               }
-            } else {
-               if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
-                  oddataL.pix_data = mapL[buffer_num].data;
-                  oddataL.eye = 0;
-                  oddataL.complete = 0;
-                  oddataL.processed = 0;
-                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
-
+               if (!single_cam) {
                   oddataR.pix_data = mapR[buffer_num].data;
                   oddataR.eye = 1;
-                  oddataR.complete = 0;
-                  oddataR.processed = 0;
-                  pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+                  cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
+                             oddataR.detect_obj.l_width * oddataR.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
+                  detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye], MAX_DETECT);
+               }
+#else
+               if (single_cam) {
+                  if (oddataL.processed == 1) {
+                     oddataL.pix_data = mapL[buffer_num].data;
+                     oddataL.eye = 0;
+                     oddataL.complete = 0;
+                     oddataL.processed = 0;
+                     pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+                  }
+               } else {
+                  if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
+                     oddataL.pix_data = mapL[buffer_num].data;
+                     oddataL.eye = 0;
+                     oddataL.complete = 0;
+                     oddataL.processed = 0;
+                     pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+
+                     oddataR.pix_data = mapR[buffer_num].data;
+                     oddataR.eye = 1;
+                     oddataR.complete = 0;
+                     oddataR.processed = 0;
+                     pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+                  }
+               }
+#endif
+            }
+#endif
+
+#ifdef USE_CUDA
+            if (color_correction_enabled && d_ccm_bufferL) {
+               /* Apply color correction to left eye using pre-allocated buffer */
+               if (cuda_apply_color_correction_optimized(
+                     mapL[buffer_num].data,
+                     mapL[buffer_num].data,  /* In-place correction */
+                     d_ccm_bufferL,
+                     this_hds->cam_input_width,
+                     this_hds->cam_input_height,
+                     &active_ccm,
+                     cuda_streamL) != 0) {
+                  LOG_ERROR("Color correction failed for left eye");
+               }
+
+               /* Apply color correction to right eye if stereo */
+               if (!single_cam && d_ccm_bufferR) {
+                  if (cuda_apply_color_correction_optimized(
+                        mapR[buffer_num].data,
+                        mapR[buffer_num].data,  /* In-place correction */
+                        d_ccm_bufferR,
+                        this_hds->cam_input_width,
+                        this_hds->cam_input_height,
+                        &active_ccm,
+                        cuda_streamR) != 0) {
+                     LOG_ERROR("Color correction failed for right eye");
+                  }
                }
             }
 #endif
-         }
 
-         SDL_UpdateTexture(textureL, NULL, mapL[buffer_num].data, this_hds->cam_input_width * 4);
-         SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectL);
+            SDL_UpdateTexture(textureL, NULL, mapL[buffer_num].data, this_hds->cam_input_width * 4);
+            SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectL);
 
-         if (single_cam) {
-            SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectR);
-         } else {
-            SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data, this_hds->cam_input_width * 4);
-            SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
-         }
+            if (single_cam) {
+               SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectR);
+            } else {
+               SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data, this_hds->cam_input_width * 4);
+               SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
+            }
 
 #ifdef DISPLAY_TIMING
-         last_ts_cap = (unsigned long) ts_cap[buffer_num].tv_sec * 1000000000 + ts_cap[buffer_num].tv_nsec;
+            last_ts_cap = (unsigned long) ts_cap[buffer_num].tv_sec * 1000000000 + ts_cap[buffer_num].tv_nsec;
 #endif
-      }
-      pthread_mutex_unlock(&v_mutex);
+         }
+         pthread_mutex_unlock(&v_mutex);
       } else {
          /* When in black background mode, simply render black rectangles as backgrounds */
          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -2334,6 +2446,21 @@ int main(int argc, char **argv)
       textureR = NULL;
    }
 
+#ifdef USE_CUDA
+   if (color_correction_enabled) {
+      /* Destroy CUDA streams */
+      if (cuda_streamL) cudaStreamDestroy(cuda_streamL);
+      if (cuda_streamR) cudaStreamDestroy(cuda_streamR);
+
+      /* Free device memory */
+      if (d_ccm_bufferL) cudaFree(d_ccm_bufferL);
+      if (d_ccm_bufferR) cudaFree(d_ccm_bufferR);
+
+      cuda_color_cleanup();
+      LOG_INFO("CUDA color correction cleaned up");
+   }
+#endif
+
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Delete GL buffers.");
 #endif
@@ -2363,6 +2490,7 @@ int main(int argc, char **argv)
    LOG_INFO("Done.");
 #endif
 
+#ifdef USE_JETSON_INFERENCE
    if (detect_enabled)
    {
 #ifdef DEBUG_SHUTDOWN
@@ -2374,6 +2502,7 @@ int main(int argc, char **argv)
       LOG_INFO("Done.");
 #endif
    }
+#endif
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting for other library clean up.");

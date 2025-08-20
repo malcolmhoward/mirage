@@ -28,7 +28,7 @@
 //#define DISPLAY_TIMING
 //#define OD_PROPER_WAIT
 //#define FPS_STATS
-#define REFRESH_SYNC
+//#define REFRESH_SYNC
 //#define ORIGINAL_RATIO
 
 /* This is per eye/display. */
@@ -247,8 +247,8 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #define GSTREAMER_PIPELINE_LENGTH   2048
 #define DEFAULT_CSI_CAM1            0
 #define DEFAULT_CSI_CAM2            1
-#define DEFAULT_USB_CAM1            0
-#define DEFAULT_USB_CAM2            2
+#define DEFAULT_USB_CAM1            2
+#define DEFAULT_USB_CAM2            4
 
 /*
  * GStreamer Pipeline Components
@@ -266,7 +266,7 @@ enum { ANGLE_ROLL = 1000, ANGLE_OPPOSITE_ROLL = 1001 };  /* For the roll indicat
 #ifdef PLATFORM_JETSON
 // Input pipeline portions for CSI cameras
 #define GST_CAM_PIPELINE_CSI_INPUT \
-    "nvarguscamerasrc exposurecompensation=0 tnr-mode=0 sensor_id=%d ! " \
+    "nvarguscamerasrc exposurecompensation=0 tnr-mode=2 sensor_id=%d ! " \
     "video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! " \
     "nvvidconv flip-method=0 ! "
 

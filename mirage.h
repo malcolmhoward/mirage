@@ -28,6 +28,9 @@
 #include <SDL2/SDL_ttf.h>
 
 #include "config_parser.h"
+#ifdef USE_CUDA
+#include "cuda_color_correction.h"
+#endif
 #include "detect.h"
 #include "devices.h"
 #include "recording.h"
@@ -57,7 +60,19 @@ struct Alert {
     const char* message;
 };
 
-// Device gets
+// Device gets and sets
+
+#ifdef USE_CUDA
+/*
+ * Returns the current color correction settings.
+ */
+void get_color_correction(int *cc_enabled, cuda_color_matrix_t *a_ccm);
+
+/*
+ * Sets the current color correction settings.
+ */
+void set_color_correction(int cc_enabled, cuda_color_matrix_t a_ccm);
+#endif
 
 /**
  * @brief Returns a pointer to the global motion data structure.

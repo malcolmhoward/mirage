@@ -143,7 +143,7 @@
          "angle": 0,
          "layer": 1,
          "enabled": 1,
-         "download_count": 0,
+         "download_count": 1,
          "maptype": "hybrid",
          "zoom": 18,
          "update_interval": 30,
@@ -1119,5 +1119,25 @@
        "metrics_x_offset": 0.35,
        "metrics_y_offset": 0.95
      }
-   ]
+   ],
+   "color_correction": {
+      "enabled": true,
+      "comment": "Enable CUDA color correction for NoIR cameras",
+
+      "matrix_preset": "alternative",
+      "comment2": "Options: 'default', 'alternative', 'custom'",
+
+      "custom_matrix": {
+         "comment": "Custom 3x3 color correction matrix (if matrix_preset is 'custom')",
+         "red":   [0.2, 0.0, 0.0],
+         "green": [0.0, 0.3, 0.0],
+         "blue":  [0.0, 0.0, 1.5]
+      },
+
+      "rgb_offset": [0.0, 0.0, 0.0],
+      "comment3": "RGB offset values to add after matrix multiplication",
+
+      "auto_adjust": false,
+      "comment4": "Enable automatic adjustment based on ambient light (future feature)"
+   }
 }

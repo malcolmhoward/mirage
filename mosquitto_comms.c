@@ -55,6 +55,14 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code)
       LOG_ERROR("Error subscribing to hud: %s", mosquitto_strerror(rc));
    }
 
+#ifdef USE_CUDA
+   // Subscribe to the main hud service
+   rc = mosquitto_subscribe(mosq, NULL, "hud/ccm", 1);
+   if(rc != MOSQ_ERR_SUCCESS){
+      LOG_ERROR("Error subscribing to hud/ccm: %s", mosquitto_strerror(rc));
+   }
+#endif
+
    // Subscribe to the helmet topic for faceplate control
    rc = mosquitto_subscribe(mosq, NULL, "helmet", 1);
    if(rc != MOSQ_ERR_SUCCESS){
@@ -107,6 +115,13 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
       LOG_INFO("Received 'helmet' message to forward.");
       forward_helmet_command_to_serial((char *)msg->payload);
    }
+
+#ifdef USE_CUDA
+   if (strcmp(msg->topic, "hud/ccm") == 0) {
+      LOG_INFO("Received 'hud/ccm' message.");
+      process_color_correction_command((const char *)msg->payload);
+   }
+#endif
 
    if (strcmp(msg->topic, "hud") != 0) {
       /* FIXME: Right now if it's not for "hud," I'm assuming it's from an armor component.

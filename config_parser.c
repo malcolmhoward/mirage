@@ -25,10 +25,14 @@
 #include "SDL2/SDL_image.h"
 
 #include "mirage.h"
+#ifdef USE_CUDA
+#include "cuda_color_correction.h"
+#endif
 #include "config_manager.h"
 #include "config_parser.h"
 #include "hud_manager.h"
 #include "logging.h"
+#include "mirage.h"
 
 /* Map type string representations */
 const char* MAP_TYPE_STRINGS[] = {
@@ -362,6 +366,121 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
 
    return SUCCESS;
 }
+
+#ifdef USE_CUDA
+void parse_color_correction_config(struct json_object *cc_obj) {
+   int color_correction_enabled;
+   cuda_color_matrix_t active_ccm;
+
+   get_color_correction(&color_correction_enabled, &active_ccm);
+
+   /* Look for color_correction section */
+   struct json_object *temp_obj = NULL;
+
+   /* Parse enabled flag */
+   if (json_object_object_get_ex(cc_obj, "enabled", &temp_obj)) {
+      color_correction_enabled = json_object_get_boolean(temp_obj) ? 1 : 0;
+      LOG_INFO("Color correction enabled: %s",
+               color_correction_enabled ? "true" : "false");
+   }
+
+   /* Parse matrix preset */
+   if (json_object_object_get_ex(cc_obj, "matrix_preset", &temp_obj)) {
+      const char *preset = json_object_get_string(temp_obj);
+      if (strcmp(preset, "alternative") == 0) {
+         active_ccm = CCM_NOIR_DAYLIGHT_ALT;
+         LOG_INFO("Using alternative color matrix preset");
+      } else if (strcmp(preset, "custom") == 0) {
+         /* Will load custom matrix below */
+         LOG_INFO("Using custom color matrix");
+      } else {
+         active_ccm = CCM_NOIR_DAYLIGHT;
+         LOG_INFO("Using default color matrix preset");
+      }
+
+      /* Parse custom matrix if specified */
+      if (strcmp(preset, "custom") == 0) {
+         struct json_object *custom_obj = NULL;
+         if (json_object_object_get_ex(cc_obj, "custom_matrix", &custom_obj)) {
+            struct json_object *row_obj = NULL;
+
+            /* Parse red row */
+            if (json_object_object_get_ex(custom_obj, "red", &row_obj)) {
+               if (json_object_is_type(row_obj, json_type_array)) {
+                  int len = json_object_array_length(row_obj);
+                  if (len >= 3) {
+                     active_ccm.m[0][0] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 0));
+                     active_ccm.m[0][1] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 1));
+                     active_ccm.m[0][2] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 2));
+                  }
+               }
+            }
+
+            /* Parse green row */
+            if (json_object_object_get_ex(custom_obj, "green", &row_obj)) {
+               if (json_object_is_type(row_obj, json_type_array)) {
+                  int len = json_object_array_length(row_obj);
+                  if (len >= 3) {
+                     active_ccm.m[1][0] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 0));
+                     active_ccm.m[1][1] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 1));
+                     active_ccm.m[1][2] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 2));
+                  }
+               }
+            }
+
+            /* Parse blue row */
+            if (json_object_object_get_ex(custom_obj, "blue", &row_obj)) {
+               if (json_object_is_type(row_obj, json_type_array)) {
+                  int len = json_object_array_length(row_obj);
+                  if (len >= 3) {
+                     active_ccm.m[2][0] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 0));
+                     active_ccm.m[2][1] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 1));
+                     active_ccm.m[2][2] = (float)json_object_get_double(
+                        json_object_array_get_idx(row_obj, 2));
+                  }
+               }
+            }
+
+            LOG_INFO("Custom color matrix loaded from config:");
+            LOG_INFO("  Red:   [%.2f, %.2f, %.2f]",
+                     active_ccm.m[0][0], active_ccm.m[0][1], active_ccm.m[0][2]);
+            LOG_INFO("  Green: [%.2f, %.2f, %.2f]",
+                     active_ccm.m[1][0], active_ccm.m[1][1], active_ccm.m[1][2]);
+            LOG_INFO("  Blue:  [%.2f, %.2f, %.2f]",
+                     active_ccm.m[2][0], active_ccm.m[2][1], active_ccm.m[2][2]);
+         }
+      }
+   }
+
+   /* Parse RGB offset */
+   if (json_object_object_get_ex(cc_obj, "rgb_offset", &temp_obj)) {
+      if (json_object_is_type(temp_obj, json_type_array)) {
+         int len = json_object_array_length(temp_obj);
+         if (len >= 3) {
+            active_ccm.off[0] = (float)json_object_get_double(
+               json_object_array_get_idx(temp_obj, 0));
+            active_ccm.off[1] = (float)json_object_get_double(
+               json_object_array_get_idx(temp_obj, 1));
+            active_ccm.off[2] = (float)json_object_get_double(
+               json_object_array_get_idx(temp_obj, 2));
+            LOG_INFO("RGB offset: [%.1f, %.1f, %.1f]",
+                     active_ccm.off[0], active_ccm.off[1], active_ccm.off[2]);
+         }
+      }
+   }
+
+   set_color_correction(color_correction_enabled, active_ccm);
+}
+#endif
+
 
 /* Parse the primary json config file to configure the UI. */
 int parse_json_config(char *filename)
@@ -1272,6 +1391,15 @@ int parse_json_config(char *filename)
                }
             }
          }
+
+#ifdef USE_CUDA
+         /* Parse Color Configuration */
+         if (strcmp(json_object_iter_peek_name(&it), "color_correction") == 0) {
+            tmpobj = json_object_iter_peek_value(&it);
+
+            parse_color_correction_config(tmpobj);
+         }
+#endif
 
          json_object_iter_next(&it);
       }
