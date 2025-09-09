@@ -99,6 +99,16 @@ void on_subscribe(struct mosquitto *mosq, void *obj, int mid, int qos_count, con
 /* Callback called when the client receives a message. */
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
 {
+   // Properly null-terminate the payload to pass around.
+   char *payload = malloc(msg->payloadlen + 1);
+   if (!payload) {
+      LOG_ERROR("Failed to allocate memory for MQTT payload");
+      return;
+   }
+
+   memcpy(payload, msg->payload, msg->payloadlen);
+   payload[msg->payloadlen] = '\0';
+
    //LOG_INFO("%s %d %s", msg->topic, msg->qos, (char *)msg->payload);
 
    // Check if this is a helmet command that needs to be forwarded to serial
@@ -116,6 +126,8 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    }
 
    parse_json_command((char *)msg->payload, (char *)msg->topic);
+
+   free(payload);
 }
 /* End Mosquitto Stuff */
 

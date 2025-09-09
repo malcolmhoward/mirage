@@ -1362,10 +1362,33 @@ int serial_port_send(const char *command) {
  * @return 0 on success, -1 on failure
  */
 int forward_helmet_command_to_serial(char *command_string) {
+   static int first_transmission = 1;
+
    // Only forward if serial is enabled
    if (!serial_is_enabled()) {
       LOG_WARNING("Serial not enabled. Not forwarding helmet message.");
       return -1;
+   }
+
+   // On first transmission, clear any stale buffer data
+   if (first_transmission) {
+      LOG_INFO("First transmission detected, clearing stale buffer...");
+
+      int fd = serial_get_fd();
+      if (fd >= 0) {
+         // Send a simple newline to trigger garbage flush
+         const char flush_char[] = "\n";
+         write(fd, flush_char, 1);
+
+         // Give aura time to process and flush the garbage
+         usleep(200000);  // 200ms
+
+         // Optional: flush any response from our side too
+         tcflush(fd, TCIFLUSH);
+      }
+
+      first_transmission = 0;
+      LOG_INFO("Stale buffer cleared, proceeding with real command...");
    }
 
    LOG_INFO("Forwarding helmet command to serial: %s", command_string);
