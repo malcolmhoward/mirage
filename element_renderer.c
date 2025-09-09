@@ -360,7 +360,11 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*CO2SOURCEANALYSIS*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_source_analysis);
    } else if (strcmp("*HEATINDEX_C*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
+      if (this_enviro->heat_index_c > 0) {
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
+      } else {
+         snprintf(render_text, MAX_TEXT_LENGTH, "N/A");
+      }
    } else if (strcmp("*DEWPOINT*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
    } else if (strcmp("*FAN*", curr_element->text) == 0) {
