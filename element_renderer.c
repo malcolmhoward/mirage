@@ -1927,6 +1927,11 @@ void render_hud_elements(void) {
       Uint32 elapsed = SDL_GetTicks() - hud_mgr->transition_start_time;
       hud_mgr->transition_progress = (float)elapsed / hud_mgr->transition_duration_ms;
 
+      /* Ensure minimum progress to avoid full opacity flash */
+      if (hud_mgr->transition_progress < 0.02f) {
+         hud_mgr->transition_progress = 0.02f;  /* Start at 2% progress minimum */
+      }
+
       if (hud_mgr->transition_progress >= 1.0) {
          /* Transition finished */
          hud_mgr->transition_from = NULL;
