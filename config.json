@@ -286,7 +286,6 @@
          "layer": 2,
          "huds": ["default"]
       },
-
       {
          "type": "text",
          "string": "*CPU*",
@@ -428,6 +427,21 @@
          "dest_y": 895,
          "angle": 0,
          "layer": 0,
+         "hotkey": "i",
+         "enabled": 0,
+         "huds": ["default"]
+      },
+      {
+         "type": "text",
+         "string": "USB Serial Stream",
+         "font": "Aldrich-Regular.ttf",
+         "color": "0x00, 0xF5, 0xFC, 0xFF",
+         "size": 30,
+         "dest_x": 255,
+         "dest_y": 952,
+         "halign": "left",
+         "angle": 0,
+         "layer": 1,
          "hotkey": "i",
          "enabled": 0,
          "huds": ["default"]

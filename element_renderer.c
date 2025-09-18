@@ -67,29 +67,6 @@ extern double averageFrameRate;
 #define LINE_BREAK_DELIMITER '\n'  // Using newline character as our delimiter
 #define LINE_SPACING_FACTOR 1.2f   // Multiplier for line spacing (1.2 is standard)
 
-/* Reset alpha values for all textures of an element */
-static void reset_texture_alpha(element *curr_element) {
-   if (curr_element->texture)
-      SDL_SetTextureAlphaMod(curr_element->texture, 255);
-   if (curr_element->texture_r)
-      SDL_SetTextureAlphaMod(curr_element->texture_r, 255);
-   if (curr_element->texture_s)
-      SDL_SetTextureAlphaMod(curr_element->texture_s, 255);
-   if (curr_element->texture_rs)
-      SDL_SetTextureAlphaMod(curr_element->texture_rs, 255);
-   if (curr_element->texture_l)
-      SDL_SetTextureAlphaMod(curr_element->texture_l, 255);
-   if (curr_element->texture_w)
-      SDL_SetTextureAlphaMod(curr_element->texture_w, 255);
-   if (curr_element->texture_p)
-      SDL_SetTextureAlphaMod(curr_element->texture_p, 255);
-
-   /* For text elements, also reset the font color alpha */
-   if (curr_element->type == TEXT) {
-      curr_element->font_color.a = 255;
-   }
-}
-
 static void calculate_zoom_rect(SDL_Rect *dst_rect_l, SDL_Rect *dst_rect_r, float scale) {
    int center_x_l = dst_rect_l->x + (dst_rect_l->w / 2);
    int center_y_l = dst_rect_l->y + (dst_rect_l->h / 2);
@@ -121,6 +98,7 @@ void render_static_element(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
    const char *aiState = get_ai_state();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
    dst_rect_l.x = dst_rect_r.x = curr_element->dst_rect.x;
    dst_rect_l.y = dst_rect_r.y = curr_element->dst_rect.y;
@@ -157,8 +135,19 @@ void render_static_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the element */
    if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -166,6 +155,8 @@ void render_static_element(element *curr_element) {
       } else {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
    }
 }
 
@@ -177,6 +168,7 @@ void render_animated_element(element *curr_element) {
    double ratio = 0.0;
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
    /* Set up source rectangle from animation frame */
    src_rect.x = curr_element->this_anim.current_frame->source_x;
@@ -251,8 +243,19 @@ void render_animated_element(element *curr_element) {
    /* Select the appropriate texture */
    this_texture = curr_element->texture; /* For animated, we usually only have one texture option */
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the element */
    if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -260,6 +263,8 @@ void render_animated_element(element *curr_element) {
       } else {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
    }
 
    /* Animation frame update logic */
@@ -293,6 +298,7 @@ void render_text_element(element *curr_element) {
    motion *this_motion = get_motion_dev();
    enviro *this_enviro = get_enviro_dev();
    gps *this_gps = get_gps_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
    // Initialize first pass.
    if (last_log == 0) {
@@ -667,7 +673,6 @@ void render_text_element(element *curr_element) {
          }
 
          /* Create texture from the prepared surface */
-         SDL_Renderer *renderer = get_sdl_renderer();
          curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
          if (curr_element->texture == NULL) {
             LOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
@@ -760,7 +765,7 @@ void render_text_element(element *curr_element) {
             curr_element->font_color.a = (Uint8)(alpha_override * 255);
          }
 
-         curr_element->texture = SDL_CreateTextureFromSurface(get_sdl_renderer(), curr_element->surface);
+         curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
 
          /* Set alpha on new texture if needed */
          if (curr_element->texture != NULL && alpha_override > 0.0f) {
@@ -798,8 +803,19 @@ void render_text_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the text */
    if (curr_element->texture != NULL) {
+      SDL_SetTextureAlphaMod(curr_element->texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -807,6 +823,8 @@ void render_text_element(element *curr_element) {
       } else {
          renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(curr_element->texture, 255);
    }
 }
 
@@ -973,9 +991,20 @@ void render_map_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the map */
    this_texture = curr_element->texture;
    if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -983,6 +1012,8 @@ void render_map_element(element *curr_element) {
       } else {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
    }
 }
 
@@ -992,6 +1023,7 @@ void render_pitch_element(element *curr_element) {
     SDL_Texture *this_texture = NULL;
     hud_display_settings *this_hds = get_hud_display_settings();
     motion *this_motion = get_motion_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
     /* Select animation frame based on pitch value */
     int frame_index = (int)round((this_motion->pitch + 90.0 + this_hds->pitch_offset) * 2.0);
@@ -1027,17 +1059,30 @@ void render_pitch_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
-    /* Render the pitch element */
-    this_texture = curr_element->texture;
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
-        } else {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+   /* Render the pitch element */
+   this_texture = curr_element->texture;
+   if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
+   }
 }
 
 void render_heading_element(element *curr_element) {
@@ -1046,6 +1091,7 @@ void render_heading_element(element *curr_element) {
     SDL_Texture *this_texture = NULL;
     hud_display_settings *this_hds = get_hud_display_settings();
     motion *this_motion = get_motion_dev();
+    SDL_Renderer *renderer = get_sdl_renderer();
 
     /* Select animation frame based on heading value */
     int frame_index = (int)this_motion->heading;
@@ -1082,17 +1128,30 @@ void render_heading_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
-    /* Render the heading element */
-    this_texture = curr_element->texture;
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
-        } else {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+   /* Render the heading element */
+   this_texture = curr_element->texture;
+   if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
+   }
 }
 
 void render_altitude_element(element *curr_element) {
@@ -1102,6 +1161,7 @@ void render_altitude_element(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
    gps *this_gps = get_gps_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
     /* Select animation frame based on altitude value (in multiples of 10) */
     int altitude = (int)this_gps->altitude;
@@ -1140,17 +1200,30 @@ void render_altitude_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
-    /* Render the altitude element */
-    this_texture = curr_element->texture;
-    if (this_texture != NULL) {
-        if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
-        } else if (curr_element->angle == ANGLE_ROLL) {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
-        } else {
-            renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
-        }
-    }
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+   /* Render the altitude element */
+   this_texture = curr_element->texture;
+   if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
+      if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+      } else if (curr_element->angle == ANGLE_ROLL) {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, this_motion->roll);
+      } else {
+         renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
+      }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
+   }
 }
 
 void render_wifi_element(element *curr_element) {
@@ -1159,6 +1232,7 @@ void render_wifi_element(element *curr_element) {
    SDL_Texture *this_texture = NULL;
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
    /* Get wifi signal level (0-9) */
    int signal_level = get_wifi_signal_level();
@@ -1192,9 +1266,20 @@ void render_wifi_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the wifi element */
    this_texture = curr_element->texture;
    if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -1202,6 +1287,8 @@ void render_wifi_element(element *curr_element) {
       } else {
          renderStereo(this_texture, &src_rect, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
    }
 }
 
@@ -1210,6 +1297,7 @@ void render_battery_element(element *curr_element) {
    SDL_Texture *this_texture = NULL;
    hud_display_settings *this_hds = get_hud_display_settings();
    motion *this_motion = get_motion_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
    /* Get battery level (0-100) */
    float battery_level = system_metrics.battery_level;
@@ -1241,8 +1329,19 @@ void render_battery_element(element *curr_element) {
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
 
+   /* Calculate alpha value */
+   Uint8 render_alpha = 255;
+   if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
+      render_alpha = (Uint8)(curr_element->transition_alpha * 255);
+   }
+
+   /* Set alpha on renderer (affects next render call only) */
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
    /* Render the element */
    if (this_texture != NULL) {
+      SDL_SetTextureAlphaMod(this_texture, render_alpha);
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
@@ -1250,6 +1349,8 @@ void render_battery_element(element *curr_element) {
       } else {
          renderStereo(this_texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
       }
+
+      SDL_SetTextureAlphaMod(this_texture, 255);
    }
 }
 
@@ -1604,21 +1705,19 @@ void validate_detection(void)
 void render_detect_element(element *curr_element) {
     SDL_Rect detect_src_l, detect_src_r;
     SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *detect_texture = NULL;
     SDL_Texture *detect_text_texture = NULL;
     int r_offset = 0, l_offset = 0;
     hud_display_settings *this_hds = get_hud_display_settings();
     SDL_Renderer *renderer = get_sdl_renderer();
 
-    /* Lazily create detection texture if needed */
-    if (detect_texture == NULL) {
+    if (curr_element->texture == NULL) {
         LOG_INFO("Loading animation source: %s", curr_element->this_anim.image);
-        detect_texture = IMG_LoadTexture(renderer, curr_element->this_anim.image);
-        if (!detect_texture) {
+        curr_element->texture = get_cached_texture(curr_element->this_anim.image);
+        if (!curr_element->texture) {
             SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image, SDL_GetError());
             return;
         }
-        SDL_SetTextureAlphaMod(detect_texture, 255);
+        SDL_SetTextureAlphaMod(curr_element->texture, 255);
     }
 
     /* Check for valid detection data */
@@ -1697,8 +1796,8 @@ void render_detect_element(element *curr_element) {
             }
 
             /* Render detection boxes */
-            SDL_RenderCopy(renderer, detect_texture, &detect_src_l, &dst_rect_l);
-            SDL_RenderCopy(renderer, detect_texture, &detect_src_r, &dst_rect_r);
+            SDL_RenderCopy(renderer, curr_element->texture, &detect_src_l, &dst_rect_l);
+            SDL_RenderCopy(renderer, curr_element->texture, &detect_src_r, &dst_rect_r);
 
             /* Render text labels for detections */
             curr_element->surface =
@@ -1811,21 +1910,11 @@ void render_element_with_alpha(element *curr_element, float alpha) {
    curr_element->transition_alpha = alpha;
    curr_element->in_transition = 1;
 
-   /* Save original alpha values */
-   Uint8 original_alpha_main = 255;
-   if (curr_element->texture != NULL) {
-      SDL_GetTextureAlphaMod(curr_element->texture, &original_alpha_main);
-   }
-
-   /* Set new alpha value */
-   if (curr_element->texture != NULL) {
-      SDL_SetTextureAlphaMod(curr_element->texture, (Uint8)(alpha * 255));
-   }
-
    render_element(curr_element);
 
-   /* Restore original alpha */
-   SDL_SetTextureAlphaMod(curr_element->texture, original_alpha_main);
+   /* Clear transition state */
+   curr_element->in_transition = 0;
+   curr_element->transition_alpha = 0.0f;
 }
 
 /* Apply a slide offset to an element during rendering */
@@ -1836,7 +1925,7 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
 
    /* Set transition state */
    curr_element->in_transition = 1;
-   curr_element->transition_alpha = 0.0f; // Not using alpha
+   curr_element->transition_alpha = 1.0f; // Not using alpha
 
    /* Save original position */
    int original_x = curr_element->dst_rect.x;
@@ -2103,7 +2192,6 @@ void render_hud_elements(void) {
           /* Reset all texture alphas after transition rendering */
           curr_element = first_element;
           while (curr_element != NULL) {
-             reset_texture_alpha(curr_element);
              curr_element->in_transition = 0;
              curr_element->transition_alpha = 0.0f;
              curr_element = curr_element->next;

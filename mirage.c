@@ -145,6 +145,8 @@ int detect_enabled = 0;                      /* Is object detection enabled? */
 double averageFrameRate = 0.0;
 static int curr_fps = 60;
 
+static unsigned int config_check_interval = 5000;  /* Check every 5000ms (5s) */
+
 /* Right now we only support one instance of each. These are their objects. */
 motion this_motion = {
    .format = 0,
@@ -201,8 +203,12 @@ mqd_t qd_server;
 extern mqd_t qd_clients[NUM_AUDIO_THREADS];
 
 const struct Alert alert_messages[ALERT_MAX] = {
-   {ALERT_RECORDING, "ERROR: Recording failed!"}
+   {ALERT_RECORDING, "ERROR: Recording failed!"},
+   {ALERT_CONFIG_RELOADED, "Configuration reloaded successfully"}
 };
+
+static unsigned int config_alert_start_time = 0;
+static const unsigned int config_alert_duration = 5000; // 5 seconds
 
 alert_t active_alerts = ALERT_NONE;
 
@@ -319,6 +325,16 @@ typedef struct _local_fonts {
    struct _local_fonts *next;
 } local_font;
 local_font *font_list = NULL;
+
+/* Local texture cache to store each loaded texture */
+typedef struct _texture_cache {
+   SDL_Texture *texture;
+   char filename[MAX_FILENAME_LENGTH * 2];
+   time_t file_mtime;     /* File modification time for cache validation */
+
+   struct _texture_cache *next;
+} texture_cache;
+texture_cache *texture_list = NULL;
 
 /* Detected Objects */
 detect this_detect[2][MAX_DETECT];
@@ -493,85 +509,10 @@ void free_elements(element *start_element)
          SDL_FreeSurface(this_element->surface);
       }
 
-      if (this_element->texture != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture.");
-#endif
-         SDL_DestroyTexture(this_element->texture);
-      }
-
-      if (this_element->texture_r != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (r).");
-#endif
-         SDL_DestroyTexture(this_element->texture_r);
-      }
-
-      if (this_element->texture_s != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (s).");
-#endif
-         SDL_DestroyTexture(this_element->texture_s);
-      }
-
-      if (this_element->texture_rs != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (rs).");
-#endif
-         SDL_DestroyTexture(this_element->texture_rs);
-      }
-
-      if (this_element->texture_l != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (l).");
-#endif
-         SDL_DestroyTexture(this_element->texture_l);
-      }
-
-      if (this_element->texture_w != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (w).");
-#endif
-         SDL_DestroyTexture(this_element->texture_w);
-      }
-
-      if (this_element->texture_p != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (p).");
-#endif
-         SDL_DestroyTexture(this_element->texture_p);
-      }
-
-      if (this_element->texture_base != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (base).");
-#endif
-         SDL_DestroyTexture(this_element->texture_base);
-      }
-
-      if (this_element->texture_online != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (online).");
-#endif
-         SDL_DestroyTexture(this_element->texture_online);
-      }
-
-      if (this_element->texture_warning != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (warning).");
-#endif
-         SDL_DestroyTexture(this_element->texture_warning);
-      }
-
-      if (this_element->texture_offline != NULL) {
-#ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing texture (offline).");
-#endif
-         SDL_DestroyTexture(this_element->texture_offline);
-      }
-
       if (this_element->metrics_textures != NULL) {
          for (int i = 0; i < this_element->metrics_texture_count; i++) {
+            /* NOTE: metrics_textures are dynamically created text textures,
+             * not from files, so they still need to be destroyed */
             if (this_element->metrics_textures[i] != NULL) {
 #ifdef DEBUG_SHUTDOWN
                LOG_INFO("Freeing texture (metrics_textures).");
@@ -705,7 +646,7 @@ int play_intro(int frames, int clear, int *finished)
 #endif
 
    if (intro_element.texture == NULL) {
-      intro_element.texture = IMG_LoadTexture(renderer, intro_element.this_anim.image);
+      intro_element.texture = get_cached_texture(intro_element.this_anim.image);
       if (!intro_element.texture) {
          SDL_Log("Couldn't load %s: %s\n", intro_element.filename, SDL_GetError());
          return 1;
@@ -1063,9 +1004,16 @@ TTF_Font *get_local_font(char *font_name, int font_size)
 {
    local_font *this_font = NULL;
 
+   if (font_name == NULL || font_size <= 0) {
+      LOG_WARNING("Invalid font parameters: name=%s, size=%d",
+                  font_name ? font_name : "NULL", font_size);
+      return NULL;
+   }
+
    if (font_list == NULL) {
       font_list = malloc(sizeof(local_font));
       if (font_list == NULL) {
+         LOG_ERROR("Unable to malloc initial font cache entry");
          return NULL;
       }
       this_font = font_list;
@@ -1087,6 +1035,7 @@ TTF_Font *get_local_font(char *font_name, int font_size)
       /* None found. Create new one. */
       this_font->next = malloc(sizeof(local_font));
       if (this_font->next == NULL) {
+         LOG_ERROR("Unable to malloc font cache entry");
          return NULL;
       }
       this_font = this_font->next;
@@ -1096,14 +1045,124 @@ TTF_Font *get_local_font(char *font_name, int font_size)
    if (!this_font->ttf_font) {
       SDL_Log("Error loading font: %s\n", TTF_GetError());
       free(this_font);
+      this_font = NULL;
       return NULL;
    }
 
-   strncpy(this_font->font, font_name, MAX_FILENAME_LENGTH * 2);
+   strncpy(this_font->font, font_name, MAX_FILENAME_LENGTH * 2 - 1);
+   font_list->font[MAX_FILENAME_LENGTH * 2 - 1] = '\0';
    this_font->font_size = font_size;
    this_font->next = NULL;
 
    return this_font->ttf_font;
+}
+
+/**
+ * Retrieves a texture from the texture cache or loads it if not present.
+ */
+SDL_Texture *get_cached_texture(const char *filename) {
+   texture_cache *this_texture = NULL;
+   struct stat file_stat;
+   SDL_Renderer *renderer = get_sdl_renderer();
+
+   if (filename == NULL || filename[0] == '\0') {
+      LOG_WARNING("Invalid texture filename: NULL or empty");
+      return NULL;
+   }
+
+   if (renderer == NULL) {
+      LOG_ERROR("No SDL renderer available for texture loading");
+      return NULL;
+   }
+
+   /* Get file modification time for cache validation */
+   if (stat(filename, &file_stat) != 0) {
+      LOG_WARNING("Cannot stat texture file: %s", filename);
+      /* Continue anyway - file might be accessible for reading */
+      file_stat.st_mtime = 0;
+   }
+
+   /* Initialize texture list if this is the first texture request */
+   if (texture_list == NULL) {
+      texture_list = malloc(sizeof(texture_cache));
+      if (texture_list == NULL) {
+         LOG_ERROR("Unable to malloc initial texture cache entry");
+         return NULL;
+      }
+
+      texture_list->texture = IMG_LoadTexture(renderer, filename);
+      if (!texture_list->texture) {
+         LOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
+         free(texture_list);
+         texture_list = NULL;
+         return NULL;
+      }
+
+      strncpy(texture_list->filename, filename, MAX_FILENAME_LENGTH * 2 - 1);
+      texture_list->filename[MAX_FILENAME_LENGTH * 2 - 1] = '\0';
+      texture_list->file_mtime = file_stat.st_mtime;
+      texture_list->next = NULL;
+
+      return texture_list->texture;
+   }
+
+   /* Search for existing texture in cache */
+   this_texture = texture_list;
+   while (this_texture != NULL) {
+      if (strcmp(filename, this_texture->filename) == 0) {
+         /* Found in cache - check if file has been modified */
+         if (file_stat.st_mtime > this_texture->file_mtime) {
+            LOG_INFO("Texture file modified, reloading: %s", filename);
+
+            /* Destroy old texture and reload */
+            SDL_DestroyTexture(this_texture->texture);
+            this_texture->texture = IMG_LoadTexture(renderer, filename);
+
+            if (!this_texture->texture) {
+               LOG_ERROR("Error reloading modified texture: %s - %s", filename, SDL_GetError());
+               return NULL;
+            }
+
+            this_texture->file_mtime = file_stat.st_mtime;
+         }
+
+         return this_texture->texture;
+      }
+
+      if (this_texture->next == NULL) {
+         break;
+      } else {
+         this_texture = this_texture->next;
+      }
+   }
+
+   /* Texture not found in cache, create new cache entry */
+   this_texture->next = malloc(sizeof(texture_cache));
+   if (this_texture->next == NULL) {
+      LOG_ERROR("Unable to malloc texture cache entry");
+      return NULL;
+   }
+
+   this_texture = this_texture->next;
+   this_texture->texture = IMG_LoadTexture(renderer, filename);
+   if (!this_texture->texture) {
+      LOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
+      free(this_texture);
+      /* Fix the linked list - find previous node */
+      texture_cache *prev = texture_list;
+      while (prev && prev->next != this_texture) {
+         prev = prev->next;
+      }
+      if (prev) prev->next = NULL;
+      return NULL;
+   }
+
+   strncpy(this_texture->filename, filename, MAX_FILENAME_LENGTH * 2 - 1);
+   this_texture->filename[MAX_FILENAME_LENGTH * 2 - 1] = '\0';
+   this_texture->file_mtime = file_stat.st_mtime;
+   this_texture->next = NULL;
+
+   return this_texture->texture;
 }
 
 /*
@@ -1403,7 +1462,7 @@ int main(int argc, char **argv)
 
    unsigned int totalFrames = 0;
    unsigned int currTime = SDL_GetTicks();
-   unsigned int last_file_check = 0;
+   unsigned int last_file_check = 0;         /* when was the recording last checked */
 
    Uint64 thisPTime, lastPTime;
    double elapsed = 0.0;
@@ -1416,7 +1475,7 @@ int main(int argc, char **argv)
    FrameRateTracker tracker;
    initializeFrameRateTracker(&tracker);
 
-   char config_file[] = "config.json";
+   const char config_file[] = "config.json";
 
    int intro_finished = 0;
 
@@ -1732,10 +1791,13 @@ int main(int argc, char **argv)
 
    intro_element.enabled = 0;
 
-   if (parse_json_config(config_file) == FAILURE) {
+   if (check_and_reload_config(config_file) == FAILURE) {
       LOG_ERROR("Failed to parse config file. Exiting.");
       return EXIT_FAILURE;
    }
+
+   LOG_INFO("Initial configuration loaded successfully");
+   last_file_check = currTime;
 
 #ifndef ORIGINAL_RATIO
    SDL_Rect v_src_rect = { this_hds->cam_crop_x, 0, this_hds->cam_crop_width, this_hds->cam_input_height };
@@ -1876,6 +1938,22 @@ int main(int argc, char **argv)
 
    while (!quit) {
       totalFrames++;
+
+      currTime = SDL_GetTicks();
+
+      if (active_alerts & ALERT_CONFIG_RELOADED) {
+         if (config_alert_start_time == 0) {
+            config_alert_start_time = currTime;
+         } else if (currTime - config_alert_start_time > config_alert_duration) {
+            active_alerts &= ~ALERT_CONFIG_RELOADED;
+            config_alert_start_time = 0;
+         }
+      }
+
+      if (currTime - last_file_check > config_check_interval) {
+         check_and_reload_config(config_file);
+         last_file_check = currTime;
+      }
 
       while (SDL_PollEvent(&event)) {
          switch (event.type) {
@@ -2039,8 +2117,6 @@ int main(int argc, char **argv)
 
       SDL_RenderClear(renderer);
 
-      currTime = SDL_GetTicks();
-
       thisPTime = SDL_GetPerformanceCounter();
 
       elapsed = (thisPTime - lastPTime) / (float)SDL_GetPerformanceFrequency();
@@ -2181,7 +2257,13 @@ int main(int argc, char **argv)
             start = SDL_GetTicks();
 #endif
 
-            if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
+            /* CRITICAL FIX: Ensure GPU has finished rendering before reading pixels
+             * Without this sync, we read partially rendered frames causing corruption.
+             * glFlush() just sends commands, glFinish() waits for completion.
+             */
+            glFinish();
+
+            if (OpenGL_RenderReadPixelsSync(renderer, NULL, PIXEL_FORMAT_OUT,
                                      this_vod->rgb_out_pixels[this_vod->write_index],
                                      window_width * RGB_OUT_SIZE) != 0 ) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
@@ -2278,6 +2360,24 @@ int main(int argc, char **argv)
       free(this_font);
       this_font = next_font;
    }
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Done.");
+#endif
+
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Freeing texture cache.");
+#endif
+   /* Free texture cache */
+   texture_cache *this_tex = texture_list;
+   while (this_tex != NULL) {
+      texture_cache *next_tex = this_tex->next;
+      if (this_tex->texture) {
+         SDL_DestroyTexture(this_tex->texture);
+      }
+      free(this_tex);
+      this_tex = next_tex;
+   }
+   texture_list = NULL;
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
 #endif

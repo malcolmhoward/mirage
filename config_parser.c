@@ -19,8 +19,9 @@
  * part of the project and are adopted by the project author(s).
  */
 
-#include <stdio.h>
 #include <json-c/json.h>
+#include <stdio.h>
+#include <sys/stat.h>
 
 #include "SDL2/SDL_image.h"
 
@@ -37,6 +38,173 @@ const char* MAP_TYPE_STRINGS[] = {
    "roadmap",
    "terrain"
 };
+
+static time_t config_last_modified = 0;   /* When was the config file last checked? */
+
+extern alert_t active_alerts;
+
+/**
+ * @brief Validates that a JSON config file is parseable without applying changes.
+ *
+ * @param config_filename Path to the configuration file to validate
+ * @return SUCCESS if config is valid, FAILURE if invalid or unreadable
+ */
+static int validate_json_config(const char *config_filename) {
+   FILE *config_file = NULL;
+   struct json_object *parsed_json = NULL;
+   char *config_string = NULL;
+   int string_size = 0;
+   int bytes_read = 0;
+   char tmpstr[1024];
+
+   /* Try to open and read the file */
+   config_file = fopen(config_filename, "r");
+   if (config_file == NULL) {
+      LOG_ERROR("Cannot open config file for validation: %s", config_filename);
+      return FAILURE;
+   }
+
+   /* Read entire file into memory */
+   string_size = 0;
+   while ((bytes_read = fread(tmpstr, 1, 1024, config_file)) > 0) {
+      string_size += bytes_read;
+      config_string = realloc(config_string, string_size + 1);
+      if (string_size <= 1024) {
+         strncpy(config_string, tmpstr, bytes_read);
+      } else {
+         strncat(config_string, tmpstr, bytes_read);
+      }
+      config_string[string_size] = '\0';
+   }
+   fclose(config_file);
+
+   /* Try to parse JSON */
+   parsed_json = json_tokener_parse(config_string);
+   if (parsed_json == NULL) {
+      LOG_ERROR("Invalid JSON in config file: %s", config_filename);
+      free(config_string);
+      return FAILURE;
+   }
+
+   /* Basic structure validation - check for required sections */
+   struct json_object *tmpobj = NULL;
+
+   /* Validate HUDs section exists */
+   if (!json_object_object_get_ex(parsed_json, "HUDs", &tmpobj)) {
+      LOG_ERROR("Missing 'HUDs' section in config file");
+      json_object_put(parsed_json);
+      free(config_string);
+      return FAILURE;
+   }
+
+   /* Validate Elements section exists */
+   if (!json_object_object_get_ex(parsed_json, "Elements", &tmpobj)) {
+      LOG_ERROR("Missing 'Elements' section in config file");
+      json_object_put(parsed_json);
+      free(config_string);
+      return FAILURE;
+   }
+
+   /* Could add more validation here if needed */
+
+   json_object_put(parsed_json);
+   free(config_string);
+   return SUCCESS;
+}
+
+int reload_config(const char *config_filename) {
+   // Save current HUD state for restoration
+   hud_manager *hud_mgr = get_hud_manager();
+   hud_screen *current_hud = hud_mgr->current_screen;
+   char current_hud_name[MAX_TEXT_LENGTH] = {0};
+
+   if (current_hud != NULL) {
+      strncpy(current_hud_name, current_hud->name, MAX_TEXT_LENGTH - 1);
+   }
+
+   /* Validate new config before touching existing state */
+   if (validate_json_config(config_filename) != SUCCESS) {
+      LOG_ERROR("New config file is invalid, keeping current configuration");
+      return FAILURE;
+   }
+
+   /* Config is valid, proceed with reload */
+
+   // Free old elements
+   element *old_first_element = get_first_element();
+   armor_settings *this_as = get_armor_settings();
+
+   if (old_first_element != NULL) {
+      free_elements(old_first_element);
+   }
+
+   if (this_as->armor_elements != NULL) {
+      free_elements(this_as->armor_elements);
+   }
+
+   // Clear pointers
+   set_first_element(NULL);
+   this_as->armor_elements = NULL;
+
+   // Clean up existing HUD registry
+   cleanup_hud_manager();
+
+   // Re-initialize HUD manager
+   init_hud_manager();
+
+   /* Parse new config (should succeed since we validated) */
+   if (parse_json_config(config_filename) != SUCCESS) {
+      LOG_ERROR("Config parsing failed after validation - file may have changed during reload");
+      LOG_ERROR("Application restart required");
+      exit(EXIT_FAILURE);  // Just exit - system is in inconsistent state
+   }
+
+   /* Success - restore HUD state if possible */
+   if (current_hud_name[0] != '\0') {
+      hud_screen *restored_hud = find_hud_by_name(current_hud_name);
+      if (restored_hud != NULL) {
+         switch_to_hud(restored_hud, restored_hud->transition_type);
+      } else {
+         LOG_WARNING("Previous HUD '%s' not found in new config, using default", current_hud_name);
+      }
+   }
+
+   // Trigger config reload notification alert
+   active_alerts |= ALERT_CONFIG_RELOADED;
+
+   return SUCCESS;
+}
+
+int check_and_reload_config(const char *config_filename) {
+   struct stat file_stat;
+
+   if (stat(config_filename, &file_stat) != 0) {
+      LOG_WARNING("Cannot stat config file: %s", config_filename);
+      return FAILURE;
+   }
+
+   // For initial load (config_last_modified == 0), always load
+   if (config_last_modified == 0 || file_stat.st_mtime > config_last_modified) {
+      if (config_last_modified == 0) {
+         LOG_INFO("Loading initial config file: %s", config_filename);
+      } else {
+         LOG_INFO("Config file changed, reloading...");
+      }
+
+      if (reload_config(config_filename) == SUCCESS) {
+         config_last_modified = file_stat.st_mtime;
+         if (config_last_modified > 0) {
+            LOG_INFO("Config successfully reloaded");
+         }
+         return SUCCESS;
+      } else {
+         LOG_ERROR("Config reload failed, keeping current config");
+         return FAILURE;
+      }
+   }
+
+   return SUCCESS; // No change needed
+}
 
 /* Parse json animation files. */
 int parse_animated_json(element * curr_element)
@@ -364,7 +532,7 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
 }
 
 /* Parse the primary json config file to configure the UI. */
-int parse_json_config(char *filename)
+int parse_json_config(const char *filename)
 {
    FILE *config_file = NULL;
    struct json_object *parsed_json = NULL;
@@ -382,8 +550,6 @@ int parse_json_config(char *filename)
    char *config_string = NULL;
    int string_size = 0;
    int bytes_read = 0;
-
-   SDL_Renderer *renderer = get_sdl_renderer();
 
    element *default_element = get_default_element();
    element *intro_element = get_intro_element();
@@ -598,7 +764,7 @@ int parse_json_config(char *filename)
                         }
 
                         /* Load texture */
-                        curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
+                        curr_element->texture = get_cached_texture(curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
@@ -652,7 +818,7 @@ int parse_json_config(char *filename)
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         /* Load textures */
-                        curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
+                        curr_element->texture = get_cached_texture(curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
@@ -661,7 +827,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_r = IMG_LoadTexture(renderer, curr_element->filename_r);
+                        curr_element->texture_r = get_cached_texture(curr_element->filename_r);
                         if (!curr_element->texture_r) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_r,
                                    SDL_GetError());
@@ -670,7 +836,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_s = IMG_LoadTexture(renderer, curr_element->filename_s);
+                        curr_element->texture_s = get_cached_texture(curr_element->filename_s);
                         if (!curr_element->texture_s) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_s,
                                    SDL_GetError());
@@ -679,7 +845,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_rs = IMG_LoadTexture(renderer, curr_element->filename_rs);
+                        curr_element->texture_rs = get_cached_texture(curr_element->filename_rs);
                         if (!curr_element->texture_rs) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_rs,
                                    SDL_GetError());
@@ -718,7 +884,7 @@ int parse_json_config(char *filename)
                                  "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                         /* Load textures */
-                        curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
+                        curr_element->texture = get_cached_texture(curr_element->filename);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                    SDL_GetError());
@@ -727,7 +893,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_l = IMG_LoadTexture(renderer, curr_element->filename_l);
+                        curr_element->texture_l = get_cached_texture(curr_element->filename_l);
                         if (!curr_element->texture_l) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_l,
                                    SDL_GetError());
@@ -736,7 +902,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_w = IMG_LoadTexture(renderer, curr_element->filename_w);
+                        curr_element->texture_w = get_cached_texture(curr_element->filename_w);
                         if (!curr_element->texture_w) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_w,
                                    SDL_GetError());
@@ -745,7 +911,7 @@ int parse_json_config(char *filename)
                            return FAILURE;
                         }
 
-                        curr_element->texture_p = IMG_LoadTexture(renderer, curr_element->filename_p);
+                        curr_element->texture_p = get_cached_texture(curr_element->filename_p);
                         if (!curr_element->texture_p) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->filename_p,
                                    SDL_GetError());
@@ -782,7 +948,7 @@ int parse_json_config(char *filename)
                         parse_animated_json(curr_element);
 
                         /* Load texture */
-                        curr_element->texture = IMG_LoadTexture(renderer, curr_element->this_anim.image);
+                        curr_element->texture = get_cached_texture(curr_element->this_anim.image);
                         if (!curr_element->texture) {
                            SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image,
                                    SDL_GetError());
@@ -943,9 +1109,7 @@ int parse_json_config(char *filename)
                            parse_animated_json(curr_element);
 
                            if (strcmp("detect", curr_element->special_name) != 0) {
-                              curr_element->texture = IMG_LoadTexture(renderer,
-                                                                    curr_element->this_anim.
-                                                                    image);
+                              curr_element->texture = get_cached_texture(curr_element->this_anim.image);
                               if (!curr_element->texture) {
                                  SDL_Log("Couldn't load %s: %s\n",
                                          curr_element->filename, SDL_GetError());
@@ -983,6 +1147,9 @@ int parse_json_config(char *filename)
                            if (tmpobj3 != NULL) {
                               curr_element->update_interval_sec = json_object_get_int(tmpobj3);
                            }
+
+                           /* If we're parsing a config file, we should immediately refesh. */
+                           curr_element->force_refresh = 1;
                         }
 
                         /* Battery display elements */
@@ -1009,7 +1176,7 @@ int parse_json_config(char *filename)
                                     "%s/%s", image_path, json_object_get_string(tmpobj3));
 
                            /* Load textures */
-                           curr_element->texture = IMG_LoadTexture(renderer, curr_element->filename);
+                           curr_element->texture = get_cached_texture(curr_element->filename);
                            if (!curr_element->texture) {
                               SDL_Log("Couldn't load %s: %s\n", curr_element->filename,
                                       SDL_GetError());
@@ -1018,7 +1185,7 @@ int parse_json_config(char *filename)
                               return FAILURE;
                            }
 
-                           curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename_base);
+                           curr_element->texture_base = get_cached_texture(curr_element->filename_base);
                            if (!curr_element->texture_base) {
                               SDL_Log("Couldn't load %s: %s\n", curr_element->filename_base,
                                       SDL_GetError());
@@ -1027,7 +1194,7 @@ int parse_json_config(char *filename)
                               return FAILURE;
                            }
 
-                           curr_element->texture_online = IMG_LoadTexture(renderer, curr_element->filename_online);
+                           curr_element->texture_online = get_cached_texture(curr_element->filename_online);
                            if (!curr_element->texture_online) {
                               SDL_Log("Couldn't load %s: %s\n", curr_element->filename_online,
                                       SDL_GetError());
@@ -1036,7 +1203,7 @@ int parse_json_config(char *filename)
                               return FAILURE;
                            }
 
-                           curr_element->texture_warning = IMG_LoadTexture(renderer, curr_element->filename_warning);
+                           curr_element->texture_warning = get_cached_texture(curr_element->filename_warning);
                            if (!curr_element->texture_warning) {
                               SDL_Log("Couldn't load %s: %s\n", curr_element->filename_warning,
                                       SDL_GetError());
@@ -1045,7 +1212,7 @@ int parse_json_config(char *filename)
                               return FAILURE;
                            }
 
-                           curr_element->texture_offline = IMG_LoadTexture(renderer, curr_element->filename_offline);
+                           curr_element->texture_offline = get_cached_texture(curr_element->filename_offline);
                            if (!curr_element->texture_offline) {
                               SDL_Log("Couldn't load %s: %s\n", curr_element->filename_offline,
                                       SDL_GetError());
@@ -1202,7 +1369,7 @@ int parse_json_config(char *filename)
                      }
                   }
 
-                  curr_element->texture_base = IMG_LoadTexture(renderer, curr_element->filename_base);
+                  curr_element->texture_base = get_cached_texture(curr_element->filename_base);
                   if (!curr_element->texture_base) {
                      LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename, SDL_GetError());
@@ -1211,7 +1378,7 @@ int parse_json_config(char *filename)
                      return FAILURE;
                   }
 
-                  curr_element->texture_online = IMG_LoadTexture(renderer, curr_element->filename_online);
+                  curr_element->texture_online = get_cached_texture(curr_element->filename_online);
                   if (!curr_element->texture_online) {
                      LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_online, SDL_GetError());
@@ -1220,7 +1387,7 @@ int parse_json_config(char *filename)
                      return FAILURE;
                   }
 
-                  curr_element->texture_warning = IMG_LoadTexture(renderer, curr_element->filename_warning);
+                  curr_element->texture_warning = get_cached_texture(curr_element->filename_warning);
                   if (!curr_element->texture_warning) {
                      LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_warning, SDL_GetError());
@@ -1229,7 +1396,7 @@ int parse_json_config(char *filename)
                      return FAILURE;
                   }
 
-                  curr_element->texture_offline = IMG_LoadTexture(renderer, curr_element->filename_offline);
+                  curr_element->texture_offline = get_cached_texture(curr_element->filename_offline);
                   if (!curr_element->texture_offline) {
                      LOG_ERROR("Couldn't load %s: %s\n",
                              curr_element->filename_offline, SDL_GetError());

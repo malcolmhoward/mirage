@@ -49,7 +49,8 @@ typedef struct _od_data {
 typedef enum {
    ALERT_NONE        = 0,
    ALERT_RECORDING   = 1 << 0,
-   ALERT_MAX         = 1 << 1
+   ALERT_CONFIG_RELOADED = 1 << 1,
+   ALERT_MAX         = 1 << 2
 } alert_t;
 
 struct Alert {
@@ -218,6 +219,20 @@ int get_window_size(int *width, int *height);
 TTF_Font *get_local_font(char *font_name, int font_size);
 
 /**
+ * @brief Retrieves a texture from the texture cache or loads it if not present.
+ *
+ * This function manages a cache of loaded SDL textures to avoid repeatedly loading
+ * the same texture resources. If the requested texture is already in the cache and
+ * the file hasn't been modified, it is returned; otherwise, it is loaded from disk,
+ * added to the cache, and returned. This dramatically improves performance during
+ * configuration reloads.
+ *
+ * @param filename Path to the image file.
+ * @return Pointer to the loaded SDL_Texture, or NULL if loading failed.
+ */
+SDL_Texture *get_cached_texture(const char *filename);
+
+/**
  * @brief Checks if the application is in the process of shutting down.
  *
  * This function returns the state of the global quit flag to determine
@@ -274,6 +289,21 @@ void mqttTextToSpeech(const char *text);
  * @param text The text string to send to the topic. Should already be JSON formatted.
  */
 void mqttSendMessage(const char *topic, const char *text);
+
+/**
+ * @brief Frees all elements in a UI element linked list and their associated resources.
+ *
+ * This function recursively traverses a linked list of UI elements, freeing all
+ * allocated memory including SDL textures, surfaces, animation frames, and the
+ * element structures themselves. Each element's resources are properly cleaned up
+ * including all texture variants (regular, recording, streaming, AI states, armor
+ * states), metrics textures, and animation frame data. The function safely handles
+ * NULL pointers and logs the cleanup process when DEBUG_SHUTDOWN is enabled.
+ *
+ * @param start_element Pointer to the first element in the linked list to free,
+ *                      or NULL if the list is empty
+ */
+void free_elements(element *start_element);
 
 #endif // MIRAGE_H
 

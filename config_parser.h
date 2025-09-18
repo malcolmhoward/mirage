@@ -217,11 +217,39 @@ typedef struct _element {
    struct _element *next;
 } element;
 
+/**
+ * @brief Checks if the configuration file has been modified and reloads it if necessary.
+ *
+ * This function monitors the configuration file's modification time and automatically
+ * reloads the UI layout when changes are detected. The check is performed at regular
+ * intervals defined by the config_check_interval. If the file has been modified since
+ * the last check, it will attempt to reload the configuration while preserving the
+ * current HUD state and providing appropriate user feedback via the alert system.
+ *
+ * @param config_filename Path to the configuration file to monitor
+ * @return SUCCESS if no reload was needed or reload was successful, FAILURE on error
+ */
+int check_and_reload_config(const char *config_filename);
+
+/**
+ * @brief Safely reloads the configuration file and updates the UI layout.
+ *
+ * This function performs a complete reload of the configuration file, including
+ * validation of the new configuration before applying changes. It preserves the
+ * current HUD state when possible and properly cleans up old resources. The reload
+ * process is atomic - if the new configuration is invalid, the current configuration
+ * remains unchanged and an error is logged.
+ *
+ * @param config_filename Path to the configuration file to reload
+ * @return SUCCESS if reload was successful, FAILURE if new config was invalid
+ */
+int reload_config(const char *config_filename);
+
 // Function prototypes for parsing functions
 int parse_animated_json(element * curr_element);
 int parse_color(char *string, unsigned char *r, unsigned char *g, unsigned char *b,
                 unsigned char *a);
-int parse_json_config(char *filename);
+int parse_json_config(const char *filename);
 
 #endif // CONFIG_PARSER_H
 
