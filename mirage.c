@@ -117,6 +117,7 @@
 #include "recording.h"
 #include "screenshot.h"
 #include "secrets.h"
+#include "sim_data.h"
 #include "system_metrics.h"
 #include "utils.h"
 #include "version.h"
@@ -304,6 +305,35 @@ element default_element =
    .metrics_texture_count = 0,
 
    .warn_state = WARN_NORMAL,
+
+   /* Gauge-specific property defaults */
+   .gauge_type = "",
+   .gauge_min_value = 0.0f,
+   .gauge_max_value = 100.0f,
+   .gauge_value_source = "",
+   .gauge_current_value = 0.0f,
+   .gauge_warning_threshold = -1.0f,  /* -1 means no warning threshold */
+   .gauge_primary_color = {0x00, 0xF5, 0xFC, 0xFF},  /* Cyan by default */
+   .gauge_warning_color = {0xFF, 0x00, 0x00, 0xFF},  /* Red by default */
+   .gauge_orientation = 0,  /* 0 = horizontal */
+   .gauge_arc_start = 0.0f,
+   .gauge_arc_sweep = 360.0f,
+   .gauge_thickness = 10,
+   .gauge_ticks = 0,
+   .gauge_smooth = 0,
+   .gauge_glow = 0,
+   .gauge_display_value = 0.0f,
+   .gauge_show_value = 0,
+   .gauge_value_format[0] = '\0',
+   .gauge_value_color = (SDL_Color){255, 255, 255, 255},
+   .gauge_value_size = 24,
+
+   .gauge_cache_texture = NULL,
+   .gauge_cache_dirty = 1,
+   .gauge_last_rendered_value = -999999.0f,  /* Force initial render */
+   .gauge_value_label_texture = NULL,
+   .gauge_value_label_width = 0,
+   .gauge_value_label_height = 0,
 
    .transition_alpha = 0.0f,
    .in_transition = 0,
@@ -522,6 +552,14 @@ void free_elements(element *start_element)
          }
          free(this_element->metrics_textures);
          this_element->metrics_textures = NULL;
+      }
+
+      if (this_element->gauge_cache_texture != NULL) {
+#ifdef DEBUG_SHUTDOWN
+         LOG_INFO("Freeing gauge cache texture.");
+#endif
+         SDL_DestroyTexture(this_element->gauge_cache_texture);
+         this_element->gauge_cache_texture = NULL;
       }
 
       if (this_element->last_metrics_text != NULL) {
@@ -1789,6 +1827,8 @@ int main(int argc, char **argv)
 
    init_hud_manager();
 
+   init_sim_data();
+
    intro_element.enabled = 0;
 
    if (check_and_reload_config(config_file) == FAILURE) {
@@ -2137,6 +2177,8 @@ int main(int argc, char **argv)
       printf("FPS Stats: %03d, avg: %03.0f, min: %03.0f, max: %03.0f\n",
              curr_fps, averageFrameRate, tracker.minFrameRate, tracker.maxFrameRate);
 #endif
+
+      update_sim_data();
 
       /* Video Processing */
       if (!no_camera_mode) {

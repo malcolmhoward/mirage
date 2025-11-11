@@ -1021,15 +1021,21 @@ int parse_json_config(const char *filename)
                         /* Parse special-specific properties */
                         json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
                         if (tmpobj3 != NULL) {
-                           strncpy(curr_element->special_name, json_object_get_string(tmpobj3),
-                                   MAX_TEXT_LENGTH - 1);
-                           curr_element->special_name[MAX_TEXT_LENGTH - 1] = '\0';
                            strncpy(curr_element->name, json_object_get_string(tmpobj3), MAX_TEXT_LENGTH - 1);
                            curr_element->name[MAX_TEXT_LENGTH - 1] = '\0';
 
-                           if (strncmp(curr_element->special_name, "detect", 6) == 0) {
-                              set_detect_enabled(1);
-                           }
+                           /* Default special_name to same as name for backward compatibility */
+                           strncpy(curr_element->special_name, json_object_get_string(tmpobj3),
+                                   MAX_TEXT_LENGTH - 1);
+                           curr_element->special_name[MAX_TEXT_LENGTH - 1] = '\0';
+                        }
+
+                        /* ADD THIS: Check for explicit special_name field */
+                        json_object_object_get_ex(tmpobj2, "special_name", &tmpobj3);
+                        if (tmpobj3 != NULL) {
+                           strncpy(curr_element->special_name, json_object_get_string(tmpobj3),
+                                   MAX_TEXT_LENGTH - 1);
+                           curr_element->special_name[MAX_TEXT_LENGTH - 1] = '\0';
                         }
 
                         json_object_object_get_ex(tmpobj2, "file", &tmpobj3);
@@ -1223,6 +1229,135 @@ int parse_json_config(const char *filename)
 
                            SDL_QueryTexture(curr_element->texture, NULL, NULL,
                                             &curr_element->dst_rect.w, &curr_element->dst_rect.h);
+                        }
+
+                        /* Gauge elements - parse gauge-specific properties */
+                        if (strcmp("gauge", curr_element->special_name) == 0) {
+                           /* Parse gauge type */
+                           json_object_object_get_ex(tmpobj2, "gauge_type", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(curr_element->gauge_type, json_object_get_string(tmpobj3),
+                                      MAX_TEXT_LENGTH - 1);
+                              curr_element->gauge_type[MAX_TEXT_LENGTH - 1] = '\0';
+                           }
+
+                           /* Parse min/max values */
+                           json_object_object_get_ex(tmpobj2, "gauge_min", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_min_value = (float)json_object_get_double(tmpobj3);
+                           }
+
+                           json_object_object_get_ex(tmpobj2, "gauge_max", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_max_value = (float)json_object_get_double(tmpobj3);
+                           }
+
+                           /* Parse value source */
+                           json_object_object_get_ex(tmpobj2, "gauge_value", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(curr_element->gauge_value_source, json_object_get_string(tmpobj3),
+                                      MAX_TEXT_LENGTH - 1);
+                              curr_element->gauge_value_source[MAX_TEXT_LENGTH - 1] = '\0';
+                           }
+
+                           /* Parse warning threshold */
+                           json_object_object_get_ex(tmpobj2, "gauge_warning", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_warning_threshold = (float)json_object_get_double(tmpobj3);
+                           }
+
+                           /* Parse primary color */
+                           json_object_object_get_ex(tmpobj2, "gauge_color", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
+                              parse_color(tmpstr, &curr_element->gauge_primary_color.r,
+                                          &curr_element->gauge_primary_color.g,
+                                          &curr_element->gauge_primary_color.b,
+                                          &curr_element->gauge_primary_color.a);
+                           }
+
+                           /* Parse warning color */
+                           json_object_object_get_ex(tmpobj2, "gauge_warning_color", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
+                              parse_color(tmpstr, &curr_element->gauge_warning_color.r,
+                                          &curr_element->gauge_warning_color.g,
+                                          &curr_element->gauge_warning_color.b,
+                                          &curr_element->gauge_warning_color.a);
+                           }
+
+                           /* Parse orientation (linear gauges only) */
+                           json_object_object_get_ex(tmpobj2, "gauge_orientation", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_orientation = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse arc start angle (arc/ring gauges) */
+                           json_object_object_get_ex(tmpobj2, "gauge_arc_start", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_arc_start = (float)json_object_get_double(tmpobj3);
+                           }
+
+                           /* Parse arc sweep angle (arc/ring gauges) */
+                           json_object_object_get_ex(tmpobj2, "gauge_arc_sweep", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_arc_sweep = (float)json_object_get_double(tmpobj3);
+                           }
+
+                           /* Parse thickness (ring gauges) */
+                           json_object_object_get_ex(tmpobj2, "gauge_thickness", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_thickness = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse tick marks (arc gauges) */
+                           json_object_object_get_ex(tmpobj2, "gauge_ticks", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_ticks = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse smooth interpolation flag */
+                           json_object_object_get_ex(tmpobj2, "gauge_smooth", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_smooth = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse glow effect flag */
+                           json_object_object_get_ex(tmpobj2, "gauge_glow", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_glow = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse value label display */
+                           json_object_object_get_ex(tmpobj2, "gauge_show_value", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_show_value = json_object_get_int(tmpobj3);
+                           }
+
+                           /* Parse value label format */
+                           json_object_object_get_ex(tmpobj2, "gauge_value_format", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(curr_element->gauge_value_format,
+                                      json_object_get_string(tmpobj3),
+                                      sizeof(curr_element->gauge_value_format) - 1);
+                              curr_element->gauge_value_format[sizeof(curr_element->gauge_value_format) - 1] = '\0';
+                           }
+
+                           /* Parse value label color */
+                           json_object_object_get_ex(tmpobj2, "gauge_value_color", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              strncpy(tmpstr, json_object_get_string(tmpobj3), 1024);
+                              parse_color(tmpstr, &curr_element->gauge_value_color.r,
+                                          &curr_element->gauge_value_color.g,
+                                          &curr_element->gauge_value_color.b,
+                                          &curr_element->gauge_value_color.a);
+                           }
+
+                           /* Parse value label size */
+                           json_object_object_get_ex(tmpobj2, "gauge_value_size", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_value_size = json_object_get_int(tmpobj3);
+                           }
                         }
 
                         /* Check if this is an armor display element */
