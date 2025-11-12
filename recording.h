@@ -24,15 +24,16 @@
 
 #include <glib-2.0/glib.h>
 #include <gst/gst.h>
+
 #include "defines.h"
 #include "mirage.h"
 
 // Supported recoding and streaming states
 typedef enum {
-   DISABLED=0,
-   RECORD=1,
-   STREAM=2,
-   RECORD_STREAM=4
+   DISABLED = 0,
+   RECORD = 1,
+   STREAM = 2,
+   RECORD_STREAM = 4
 } DestinationType;
 
 typedef struct _video_out_data {
@@ -40,16 +41,16 @@ typedef struct _video_out_data {
    pthread_mutex_t p_mutex;
 
    /* Triple buffer indices */
-   int buffer_num;      /* Index for the buffer currently being used */
-   int read_index;      /* Index for the buffer being read from */
-   int write_index;     /* Index for the buffer being written to */
+   int buffer_num;  /* Index for the buffer currently being used */
+   int read_index;  /* Index for the buffer being read from */
+   int write_index; /* Index for the buffer being written to */
 
    void *rgb_out_pixels[3];
 
    GstElement *pipeline;
 
-   char filename[PATH_MAX+64];
-   int started;   /* Flag indicating whether the video output pipeline is active and ready. */
+   char filename[PATH_MAX + 64];
+   int started; /* Flag indicating whether the video output pipeline is active and ready. */
    FILE *outfile;
 } video_out_data;
 
@@ -104,7 +105,7 @@ void init_video_out_data(void);
 
 /* Cleanup the p_mutex in video_out_data at program exit */
 void cleanup_video_out_data(void);
- 
+
 void rotate_triple_buffer_indices(video_out_data *vod);
 
 #endif /* RECORDING_H */

@@ -22,15 +22,20 @@
 #ifndef SYSTEM_METRICS_H
 #define SYSTEM_METRICS_H
 
-#include <time.h>
 #include <stdbool.h>
+#include <time.h>
 
 /* Maximum number of fault entries to store */
 #define MAX_FAULT_COUNT 10
 /* Maximum length for fault message strings */
 #define MAX_FAULT_MSG_LENGTH 64
 
-typedef enum {CHARGE_STATE_CHARGING, CHARGE_STATE_DISCHARGING, CHARGE_STATE_IDLE, CHARGE_STATE_UNKNOWN} charge_state_t;
+typedef enum {
+   CHARGE_STATE_CHARGING,
+   CHARGE_STATE_DISCHARGING,
+   CHARGE_STATE_IDLE,
+   CHARGE_STATE_UNKNOWN
+} charge_state_t;
 
 /* Structure for system metrics received from STAT */
 typedef struct {
@@ -52,15 +57,16 @@ typedef struct {
    int battery_cells;          /* Number of battery cells */
 
    /* New fields for BatteryStatus message */
-   int critical_fault_count;   /* Number of critical faults */
-   int warning_fault_count;    /* Number of warning faults */
-   int info_fault_count;       /* Number of info faults */
-   char critical_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH]; /* Array of critical fault messages */
-   char warning_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH];  /* Array of warning fault messages */
-   char info_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH];     /* Array of info fault messages */
-   char status_reason[64];     /* Reason for current status */
-   int battery_cells_series;   /* Number of battery cells in series */
-   int battery_cells_parallel; /* Number of battery cells in parallel */
+   int critical_fault_count; /* Number of critical faults */
+   int warning_fault_count;  /* Number of warning faults */
+   int info_fault_count;     /* Number of info faults */
+   char critical_faults[MAX_FAULT_COUNT]
+                       [MAX_FAULT_MSG_LENGTH]; /* Array of critical fault messages */
+   char warning_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH]; /* Array of warning fault messages */
+   char info_faults[MAX_FAULT_COUNT][MAX_FAULT_MSG_LENGTH];    /* Array of info fault messages */
+   char status_reason[64];                                     /* Reason for current status */
+   int battery_cells_series;      /* Number of battery cells in series */
+   int battery_cells_parallel;    /* Number of battery cells in parallel */
    float battery_nominal_voltage; /* Battery nominal voltage */
    charge_state_t charge_state;   /* State of charge if available. */
 
@@ -93,4 +99,3 @@ int get_fan_rpm(void);
 int get_fan_load_percent(void);
 
 #endif /* SYSTEM_METRICS_H */
-

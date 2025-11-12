@@ -1,8 +1,8 @@
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <semaphore.h>
 
 #ifdef USE_JETSON_INFERENCE
 #include <detectNet.h>
@@ -10,8 +10,7 @@
 #include "detect.h"
 
 /* Initialize detection struct. */
-int init_detect(detect_net * new_detect, int argc, char **argv, int width, int height)
-{
+int init_detect(detect_net *new_detect, int argc, char **argv, int width, int height) {
 #ifdef USE_JETSON_INFERENCE
    detectNet *net = NULL;
 
@@ -49,16 +48,16 @@ int init_detect(detect_net * new_detect, int argc, char **argv, int width, int h
  * At this time it just takes the first ones. I'd like to sort by confidence
  * in the future to pick the best ones.
  */
-int detect_image(detect_net * new_detect, void *image, detect * my_detects, int max_detections)
-{
+int detect_image(detect_net *new_detect, void *image, detect *my_detects, int max_detections) {
 #ifdef USE_JETSON_INFERENCE
    int n = 0;
    int a = 0;
-   detectNet *net = (detectNet *) new_detect->detectNet_net;
-   detectNet::Detection * detections = (detectNet::Detection *) new_detect->detections;
+   detectNet *net = (detectNet *)new_detect->detectNet_net;
+   detectNet::Detection *detections = (detectNet::Detection *)new_detect->detections;
    int numDetections = 0;
 
-   //const uint32_t overlayFlags = detectNet::OVERLAY_BOX | detectNet::OVERLAY_LABEL | detectNet::OVERLAY_CONFIDENCE;
+   //const uint32_t overlayFlags = detectNet::OVERLAY_BOX | detectNet::OVERLAY_LABEL |
+   //detectNet::OVERLAY_CONFIDENCE;
    const uint32_t overlayFlags = 0;
 
 #if 0
@@ -70,9 +69,8 @@ int detect_image(detect_net * new_detect, void *image, detect * my_detects, int 
 #endif
 
    /* Detect */
-   numDetections =
-       net->Detect((uchar4 *) new_detect->d_image, new_detect->l_width, new_detect->l_height,
-                   &detections, overlayFlags);
+   numDetections = net->Detect((uchar4 *)new_detect->d_image, new_detect->l_width,
+                               new_detect->l_height, &detections, overlayFlags);
    if (numDetections > 0) {
       for (n = 0; n < numDetections; n++) {
          /*printf("%d, %s(%d), %f\n",
@@ -88,14 +86,14 @@ int detect_image(detect_net * new_detect, void *image, detect * my_detects, int 
             my_detects[a].width = detections[n].Width();
             my_detects[a].height = detections[n].Height();
             a++;
-            if (a >= max_detections)
-            {
+            if (a >= max_detections) {
                break;
             }
          }
       }
    }
-   //cudaMemcpy(image, new_detect->d_image, new_detect->l_width * new_detect->l_height * sizeof(uchar4), cudaMemcpyDeviceToHost);
+   //cudaMemcpy(image, new_detect->d_image, new_detect->l_width * new_detect->l_height *
+   //sizeof(uchar4), cudaMemcpyDeviceToHost);
 
    return numDetections;
 #else
@@ -104,10 +102,9 @@ int detect_image(detect_net * new_detect, void *image, detect * my_detects, int 
 }
 
 /* Clean up detection struct. */
-void free_detect(detect_net * new_detect)
-{
+void free_detect(detect_net *new_detect) {
 #ifdef USE_JETSON_INFERENCE
-   detectNet *net = (detectNet *) new_detect->detectNet_net;
+   detectNet *net = (detectNet *)new_detect->detectNet_net;
 
    cudaFree(new_detect->d_image);
    new_detect->d_image = NULL;

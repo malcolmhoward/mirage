@@ -20,11 +20,11 @@
  */
 
 #include <errno.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <time.h>
 
 /* SDL Libraries */
@@ -35,8 +35,8 @@
 /* Local Headers */
 #include "armor.h"
 #include "command_processing.h"
-#include "config_parser.h"
 #include "config_manager.h"
+#include "config_parser.h"
 #include "curl_download.h"
 #include "defines.h"
 #include "devices.h"
@@ -85,7 +85,7 @@ static void calculate_zoom_rect(SDL_Rect *dst_rect_l, SDL_Rect *dst_rect_r, floa
 
 /**
  * Element renderer implementation
- * 
+ *
  * This file contains the implementation of all element rendering functions.
  * The functions handle the rendering of different element types (static, animated,
  * text, special) with various effects (alpha blending, sliding, scaling) for
@@ -113,11 +113,14 @@ void render_static_element(element *curr_element) {
    }
 
    /* Select appropriate texture based on state */
-   if (get_recording_started() && (get_recording_state() == RECORD_STREAM) && curr_element->texture_rs) {
+   if (get_recording_started() && (get_recording_state() == RECORD_STREAM) &&
+       curr_element->texture_rs) {
       this_texture = curr_element->texture_rs;
-   } else if (get_recording_started() && (get_recording_state() == RECORD) && curr_element->texture_r) {
+   } else if (get_recording_started() && (get_recording_state() == RECORD) &&
+              curr_element->texture_r) {
       this_texture = curr_element->texture_r;
-   } else if (get_recording_started() && (get_recording_state() == STREAM) && curr_element->texture_s) {
+   } else if (get_recording_started() && (get_recording_state() == STREAM) &&
+              curr_element->texture_s) {
       this_texture = curr_element->texture_s;
    } else if (curr_element->texture_l && strcmp("SILENCE", aiState) == 0) {
       this_texture = curr_element->texture_l;
@@ -179,57 +182,55 @@ void render_animated_element(element *curr_element) {
 
    /* Set up destination rectangle based on animation properties */
    if ((curr_element->width == 0) && (curr_element->height == 0)) {
-      dst_rect_l.x = dst_rect_r.x =
-         curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-      dst_rect_l.y = dst_rect_r.y =
-         curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
+      dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                    curr_element->this_anim.current_frame->dest_x;
+      dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                    curr_element->this_anim.current_frame->dest_y;
       dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
       dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
    } else if ((curr_element->width == 0) && (curr_element->height != 0)) {
-      ratio = (double) curr_element->height /
-              (double) curr_element->this_anim.current_frame->source_size_h;
+      ratio = (double)curr_element->height /
+              (double)curr_element->this_anim.current_frame->source_size_h;
 
-      dst_rect_l.x = dst_rect_r.x =
-         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-      dst_rect_l.y = dst_rect_r.y =
-         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                    (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                    (curr_element->this_anim.current_frame->dest_y * ratio);
 
-      dst_rect_l.w = dst_rect_r.w =
-         curr_element->this_anim.current_frame->source_w * ratio;
-      dst_rect_l.h = dst_rect_r.h =
-         curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w * ratio;
+      dst_rect_l.h = dst_rect_r.h = curr_element->height -
+                                    (curr_element->this_anim.current_frame->dest_y * ratio);
    } else if ((curr_element->width != 0) && (curr_element->height == 0)) {
-      ratio = (double) curr_element->width /
-              (double) curr_element->this_anim.current_frame->source_size_w;
+      ratio = (double)curr_element->width /
+              (double)curr_element->this_anim.current_frame->source_size_w;
 
-      dst_rect_l.x = dst_rect_r.x =
-         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-      dst_rect_l.y = dst_rect_r.y =
-         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                    (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                    (curr_element->this_anim.current_frame->dest_y * ratio);
 
-      dst_rect_l.w = dst_rect_r.w =
-         curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
-      dst_rect_l.h = dst_rect_r.h =
-         curr_element->this_anim.current_frame->source_h * ratio;
+      dst_rect_l.w = dst_rect_r.w = curr_element->width -
+                                    (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h * ratio;
    } else {
       /* Both width and height specified */
       /* Width Ratio */
-      ratio = (double) curr_element->width /
-              (double) curr_element->this_anim.current_frame->source_size_w;
+      ratio = (double)curr_element->width /
+              (double)curr_element->this_anim.current_frame->source_size_w;
 
-      dst_rect_l.x = dst_rect_r.x =
-         curr_element->dest_x + (curr_element->this_anim.current_frame->dest_x * ratio);
-      dst_rect_l.w = dst_rect_r.w =
-         curr_element->width - (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                    (curr_element->this_anim.current_frame->dest_x * ratio);
+      dst_rect_l.w = dst_rect_r.w = curr_element->width -
+                                    (curr_element->this_anim.current_frame->dest_x * ratio);
 
       /* Height Ratio */
-      ratio = (double) curr_element->height /
-              (double) curr_element->this_anim.current_frame->source_size_h;
+      ratio = (double)curr_element->height /
+              (double)curr_element->this_anim.current_frame->source_size_h;
 
-      dst_rect_l.y = dst_rect_r.y =
-         curr_element->dest_y + (curr_element->this_anim.current_frame->dest_y * ratio);
-      dst_rect_l.h = dst_rect_r.h =
-         curr_element->height - (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                    (curr_element->this_anim.current_frame->dest_y * ratio);
+      dst_rect_l.h = dst_rect_r.h = curr_element->height -
+                                    (curr_element->this_anim.current_frame->dest_y * ratio);
    }
 
    /* Apply fixed/stereo offset */
@@ -274,13 +275,11 @@ void render_animated_element(element *curr_element) {
    int curr_fps = get_curr_fps();
    int framesToUpdate = floor(dT / (1.0f / curr_fps));
    if (framesToUpdate > 0) {
-      if ((currTime %
-         (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
+      if ((currTime % (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
          if (curr_element->this_anim.current_frame->next != NULL) {
-             curr_element->this_anim.current_frame =
-                curr_element->this_anim.current_frame->next;
+            curr_element->this_anim.current_frame = curr_element->this_anim.current_frame->next;
          } else {
-             curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
+            curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
          }
       }
       curr_element->this_anim.last_update = currTime;
@@ -295,7 +294,7 @@ void render_text_element(element *curr_element) {
    unsigned int currTime = SDL_GetTicks();
    float alpha_override = curr_element->transition_alpha;
    static unsigned int last_log = 0;
-   char (*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
+   char(*raw_log)[LOG_LINE_LENGTH] = get_raw_log();
    motion *this_motion = get_motion_dev();
    enviro *this_enviro = get_enviro_dev();
    gps *this_gps = get_gps_dev();
@@ -315,15 +314,16 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s %s", this_gps->date, this_gps->time);
    } else if (strcmp("*GPSTIME*", curr_element->text) == 0) {
       /* TODO: Use Google API to convert GPS location into correct local time. */
-      /* https://maps.googleapis.com/maps/api/timezone/json?language=es&location=39.6034810%2C-119.6822510&timestamp=1331766000&key=GoogleAPIKey */
+      /* https://maps.googleapis.com/maps/api/timezone/json?language=es&location=39.6034810%2C-119.6822510&timestamp=1331766000&key=GoogleAPIKey
+       */
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_gps->time);
    } else if (strcmp("*SYSTIME*", curr_element->text) == 0) {
       time_t stime;
       struct tm *ltime;
       stime = time(NULL);
       ltime = localtime(&stime);
-      snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d",
-              ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d", ltime->tm_hour, ltime->tm_min,
+               ltime->tm_sec);
    } else if (strcmp("*AINAME*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
    } else if (strcmp("*CPU*", curr_element->text) == 0) {
@@ -337,7 +337,7 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*SYSTEM_TEMP_F*", curr_element->text) == 0) {
       if (system_metrics.system_temp_available) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°F",
-                 system_metrics.system_temperature * 9/5 + 32.0);
+                  system_metrics.system_temperature * 9 / 5 + 32.0);
       } else {
          snprintf(render_text, MAX_TEXT_LENGTH, "--.-°F");
       }
@@ -346,7 +346,7 @@ void render_text_element(element *curr_element) {
    } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°C", this_enviro->temp);
    } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f°F", this_enviro->temp * 9/5 + 32.0);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f°F", this_enviro->temp * 9 / 5 + 32.0);
    } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%02.0f%%", this_enviro->humidity);
 
@@ -397,9 +397,9 @@ void render_text_element(element *curr_element) {
       }
    } else if (strcmp("*BATTERY_CELLS_CONFIG*", curr_element->text) == 0) {
       if (system_metrics.power_available && system_metrics.battery_cells_series > 0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%dS%dP",
-                 system_metrics.battery_cells_series,
-                 system_metrics.battery_cells_parallel > 0 ? system_metrics.battery_cells_parallel : 1);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%dS%dP", system_metrics.battery_cells_series,
+                  system_metrics.battery_cells_parallel > 0 ? system_metrics.battery_cells_parallel
+                                                            : 1);
       } else if (system_metrics.power_available && system_metrics.battery_cells > 0) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
       } else {
@@ -409,13 +409,11 @@ void render_text_element(element *curr_element) {
       if (system_metrics.power_available) {
          if (system_metrics.critical_fault_count > 0) {
             snprintf(render_text, MAX_TEXT_LENGTH, "CRIT:%d WARN:%d INFO:%d",
-                    system_metrics.critical_fault_count,
-                    system_metrics.warning_fault_count,
-                    system_metrics.info_fault_count);
+                     system_metrics.critical_fault_count, system_metrics.warning_fault_count,
+                     system_metrics.info_fault_count);
          } else if (system_metrics.warning_fault_count > 0) {
             snprintf(render_text, MAX_TEXT_LENGTH, "WARN:%d INFO:%d",
-                    system_metrics.warning_fault_count,
-                    system_metrics.info_fault_count);
+                     system_metrics.warning_fault_count, system_metrics.info_fault_count);
          } else if (system_metrics.info_fault_count > 0) {
             snprintf(render_text, MAX_TEXT_LENGTH, "INFO:%d", system_metrics.info_fault_count);
          } else {
@@ -432,11 +430,11 @@ void render_text_element(element *curr_element) {
             if (strlen(system_metrics.critical_faults[i]) > 0) {
                if (i > 0) {
                   /* Use a newline character instead of comma-space */
-                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.critical_faults[i],
-                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
             }
          }
       } else {
@@ -450,11 +448,11 @@ void render_text_element(element *curr_element) {
             if (strlen(system_metrics.warning_faults[i]) > 0) {
                if (i > 0) {
                   /* Use a newline character instead of comma-space */
-                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.warning_faults[i],
-                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
             }
          }
       } else {
@@ -468,11 +466,11 @@ void render_text_element(element *curr_element) {
             if (strlen(system_metrics.info_faults[i]) > 0) {
                if (i > 0) {
                   /* Use a newline character instead of comma-space */
-                  char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
                strncat(render_text, system_metrics.info_faults[i],
-                      MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
             }
          }
       } else {
@@ -483,7 +481,7 @@ void render_text_element(element *curr_element) {
          /* Initialize with empty string */
          render_text[0] = '\0';
          int has_faults = 0;
-         char delimiter[2] = {LINE_BREAK_DELIMITER, '\0'};
+         char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
 
          /* Add critical faults with section header */
          if (system_metrics.critical_fault_count > 0) {
@@ -492,7 +490,7 @@ void render_text_element(element *curr_element) {
                   /* Add indentation for better readability */
                   strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, system_metrics.critical_faults[i],
-                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                          MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
@@ -506,7 +504,7 @@ void render_text_element(element *curr_element) {
                   /* Add indentation for better readability */
                   strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, system_metrics.warning_faults[i],
-                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                          MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
@@ -520,7 +518,7 @@ void render_text_element(element *curr_element) {
                   /* Add indentation for better readability */
                   strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, system_metrics.info_faults[i],
-                         MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                          MAX_TEXT_LENGTH - strlen(render_text) - 1);
                   strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
@@ -596,14 +594,15 @@ void render_text_element(element *curr_element) {
       }
    } else if (strcmp("*LATLON*", curr_element->text) == 0) {
       if (this_gps->latitudeDegrees != 0.0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f",
-                 this_gps->latitudeDegrees, this_gps->longitudeDegrees);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f", this_gps->latitudeDegrees,
+                  this_gps->longitudeDegrees);
       } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s",
-                 this_gps->latitude, this_gps->lat, this_gps->longitude, this_gps->lon);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s", this_gps->latitude,
+                  this_gps->lat, this_gps->longitude, this_gps->lon);
       }
    } else if (strcmp("*PITCH*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%d", (int)this_motion->pitch + (int)this_hds->pitch_offset);
+      snprintf(render_text, MAX_TEXT_LENGTH, "%d",
+               (int)this_motion->pitch + (int)this_hds->pitch_offset);
    } else if (strcmp("*COMPASS*", curr_element->text) == 0) {
       if ((this_motion->heading > 337.5) || (this_motion->heading <= 22.5)) {
          snprintf(render_text, MAX_TEXT_LENGTH, "%s", "N");
@@ -646,8 +645,7 @@ void render_text_element(element *curr_element) {
 
          curr_element->surface = SDL_CreateRGBSurface(0, log_width, log_height, 32, 0, 0, 0, 0);
          SDL_SetColorKey(curr_element->surface, SDL_TRUE,
-            SDL_MapRGB(curr_element->surface->format, 0, 0,
-            SDL_ALPHA_TRANSPARENT));
+                         SDL_MapRGB(curr_element->surface->format, 0, 0, SDL_ALPHA_TRANSPARENT));
 
          // Get the index of the oldest entry
          int start_idx = get_next_log_row();
@@ -708,8 +706,8 @@ void render_text_element(element *curr_element) {
       snprintf(render_text, MAX_TEXT_LENGTH, "%s", alert_text);
       alert_text[0] = '\0';
    } else {
-      strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH-1);
-      render_text[MAX_TEXT_LENGTH-1] = '\0';
+      strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH - 1);
+      render_text[MAX_TEXT_LENGTH - 1] = '\0';
    }
 
    /* Prevent empty text */
@@ -719,9 +717,8 @@ void render_text_element(element *curr_element) {
 
    /* Recreate texture if needed */
    if (((curr_element->texture == NULL) ||
-         (strncmp(render_text, curr_element->last_rendered_text, MAX_TEXT_LENGTH) != 0)) &&
-         (strcmp("*LOG*", curr_element->text) != 0)) {
-
+        (strncmp(render_text, curr_element->last_rendered_text, MAX_TEXT_LENGTH) != 0)) &&
+       (strcmp("*LOG*", curr_element->text) != 0)) {
       /* Clean up old texture and surface if they exist */
       if (curr_element->texture != NULL) {
          SDL_DestroyTexture(curr_element->texture);
@@ -736,8 +733,8 @@ void render_text_element(element *curr_element) {
       /* Check if text contains line break delimiters */
       if (strchr(render_text, LINE_BREAK_DELIMITER) != NULL) {
          /* Create wrapped text surface using newline handling */
-         curr_element->surface = TTF_RenderUTF8_Blended_Wrapped(
-            curr_element->ttf_font, render_text, curr_element->font_color, 0);
+         curr_element->surface = TTF_RenderUTF8_Blended_Wrapped(curr_element->ttf_font, render_text,
+                                                                curr_element->font_color, 0);
 
          /* Note: wrapLength=0 means only wrap on explicit newlines */
 
@@ -753,8 +750,8 @@ void render_text_element(element *curr_element) {
 #endif
       } else {
          /* Standard single-line text rendering */
-         curr_element->surface = TTF_RenderUTF8_Blended(
-            curr_element->ttf_font, render_text, curr_element->font_color);
+         curr_element->surface = TTF_RenderUTF8_Blended(curr_element->ttf_font, render_text,
+                                                        curr_element->font_color);
       }
 
       if (curr_element->surface != NULL) {
@@ -818,7 +815,8 @@ void render_text_element(element *curr_element) {
       SDL_SetTextureAlphaMod(curr_element->texture, render_alpha);
 
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, -1.0 * this_motion->roll);
+         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r,
+                      -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
          renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
       } else {
@@ -852,22 +850,22 @@ void render_special_element(element *curr_element) {
    } else if (strcmp("battery", curr_element->special_name) == 0) {
       render_battery_element(curr_element);
    } else if (strcmp("detect", curr_element->special_name) == 0) {
-     if (detect_enabled) {
-        render_detect_element(curr_element);
-     }
+      if (detect_enabled) {
+         render_detect_element(curr_element);
+      }
    } else if (strcmp("gauge", curr_element->special_name) == 0) {
       render_gauge_element(curr_element);
    } else if (strcmp("armor_display", curr_element->name) == 0) {
       render_armor_display_element(curr_element);
    } else {
-     LOG_ERROR("Unknown special element type: %s", curr_element->special_name);
+      LOG_ERROR("Unknown special element type: %s", curr_element->special_name);
    }
 }
 
 void render_map_element(element *curr_element) {
    static pthread_t map_download_thread;
    static int map_thread_started = 0;
-   static struct curl_data map_data = {0};
+   static struct curl_data map_data = { 0 };
 
    SDL_Rect dst_rect_l, dst_rect_r;
    SDL_Texture *this_texture = NULL;
@@ -911,15 +909,14 @@ void render_map_element(element *curr_element) {
       pthread_mutex_init(&map_data.mutex, NULL);
    }
 
-   snprintf(map_data.url, 512, GOOGLE_MAPS_API, lat, lon,
-         curr_element->width, curr_element->height,
-         MAP_TYPE_STRINGS[curr_element->map_type],
-         curr_element->map_zoom,
-         lat, lon, GOOGLE_API_KEY);
+   snprintf(map_data.url, 512, GOOGLE_MAPS_API, lat, lon, curr_element->width, curr_element->height,
+            MAP_TYPE_STRINGS[curr_element->map_type], curr_element->map_zoom, lat, lon,
+            GOOGLE_API_KEY);
 
    if (map_thread_started == 0) {
-      map_data.update_interval_sec = curr_element->update_interval_sec > 0 ?
-                                    curr_element->update_interval_sec : MAP_UPDATE_SEC;
+      map_data.update_interval_sec = curr_element->update_interval_sec > 0
+                                         ? curr_element->update_interval_sec
+                                         : MAP_UPDATE_SEC;
       map_data.download_count = curr_element->download_count;
       map_data.updated = 0;
       map_data.size = 0;
@@ -1021,43 +1018,44 @@ void render_map_element(element *curr_element) {
 }
 
 void render_pitch_element(element *curr_element) {
-    SDL_Rect src_rect;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    motion *this_motion = get_motion_dev();
+   SDL_Rect src_rect;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
    SDL_Renderer *renderer = get_sdl_renderer();
 
-    /* Select animation frame based on pitch value */
-    int frame_index = (int)round((this_motion->pitch + 90.0 + this_hds->pitch_offset) * 2.0);
+   /* Select animation frame based on pitch value */
+   int frame_index = (int)round((this_motion->pitch + 90.0 + this_hds->pitch_offset) * 2.0);
 
-    /* Clamp frame index to valid range */
-    if (frame_index < 0) frame_index = 0;
-    if (frame_index >= curr_element->this_anim.frame_count)
-        frame_index = curr_element->this_anim.frame_count - 1;
+   /* Clamp frame index to valid range */
+   if (frame_index < 0)
+      frame_index = 0;
+   if (frame_index >= curr_element->this_anim.frame_count)
+      frame_index = curr_element->this_anim.frame_count - 1;
 
-    /* Get the frame */
-    curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
+   /* Get the frame */
+   curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
 
-    /* Set up source rectangle */
-    src_rect.x = curr_element->this_anim.current_frame->source_x;
-    src_rect.y = curr_element->this_anim.current_frame->source_y;
-    src_rect.w = curr_element->this_anim.current_frame->source_w;
-    src_rect.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up source rectangle */
+   src_rect.x = curr_element->this_anim.current_frame->source_x;
+   src_rect.y = curr_element->this_anim.current_frame->source_y;
+   src_rect.w = curr_element->this_anim.current_frame->source_w;
+   src_rect.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Set up destination rectangles */
-    dst_rect_l.x = dst_rect_r.x =
-        curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-    dst_rect_l.y = dst_rect_r.y =
-        curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up destination rectangles */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                 curr_element->this_anim.current_frame->dest_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                 curr_element->this_anim.current_frame->dest_y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Apply stereo offset if not fixed */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
@@ -1089,44 +1087,46 @@ void render_pitch_element(element *curr_element) {
 }
 
 void render_heading_element(element *curr_element) {
-    SDL_Rect src_rect;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *this_texture = NULL;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    motion *this_motion = get_motion_dev();
-    SDL_Renderer *renderer = get_sdl_renderer();
+   SDL_Rect src_rect;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *this_texture = NULL;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   motion *this_motion = get_motion_dev();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
-    /* Select animation frame based on heading value */
-    int frame_index = (int)this_motion->heading;
+   /* Select animation frame based on heading value */
+   int frame_index = (int)this_motion->heading;
 
-    /* Clamp frame index to valid range */
-    if (frame_index < 0) frame_index = 0;
-    if (frame_index >= 360) frame_index = 359;
-    if (frame_index >= curr_element->this_anim.frame_count)
-        frame_index = curr_element->this_anim.frame_count - 1;
+   /* Clamp frame index to valid range */
+   if (frame_index < 0)
+      frame_index = 0;
+   if (frame_index >= 360)
+      frame_index = 359;
+   if (frame_index >= curr_element->this_anim.frame_count)
+      frame_index = curr_element->this_anim.frame_count - 1;
 
-    /* Get the frame */
-    curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
+   /* Get the frame */
+   curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
 
-    /* Set up source rectangle */
-    src_rect.x = curr_element->this_anim.current_frame->source_x;
-    src_rect.y = curr_element->this_anim.current_frame->source_y;
-    src_rect.w = curr_element->this_anim.current_frame->source_w;
-    src_rect.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up source rectangle */
+   src_rect.x = curr_element->this_anim.current_frame->source_x;
+   src_rect.y = curr_element->this_anim.current_frame->source_y;
+   src_rect.w = curr_element->this_anim.current_frame->source_w;
+   src_rect.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Set up destination rectangles */
-    dst_rect_l.x = dst_rect_r.x =
-        curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-    dst_rect_l.y = dst_rect_r.y =
-        curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up destination rectangles */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                 curr_element->this_anim.current_frame->dest_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                 curr_element->this_anim.current_frame->dest_y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Apply stereo offset if not fixed */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
@@ -1166,39 +1166,40 @@ void render_altitude_element(element *curr_element) {
    gps *this_gps = get_gps_dev();
    SDL_Renderer *renderer = get_sdl_renderer();
 
-    /* Select animation frame based on altitude value (in multiples of 10) */
-    int altitude = (int)this_gps->altitude;
+   /* Select animation frame based on altitude value (in multiples of 10) */
+   int altitude = (int)this_gps->altitude;
 
-    /* Clamp altitude to valid range */
-    if (altitude < 0) altitude = 0;
-    if (altitude >= curr_element->this_anim.frame_count * 10)
-        altitude = (curr_element->this_anim.frame_count * 10) - 1;
+   /* Clamp altitude to valid range */
+   if (altitude < 0)
+      altitude = 0;
+   if (altitude >= curr_element->this_anim.frame_count * 10)
+      altitude = (curr_element->this_anim.frame_count * 10) - 1;
 
-    /* Calculate frame index (altitude is in multiples of 10) */
-    int frame_index = altitude / 10;
+   /* Calculate frame index (altitude is in multiples of 10) */
+   int frame_index = altitude / 10;
 
-    /* Get the frame */
-    curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
+   /* Get the frame */
+   curr_element->this_anim.current_frame = curr_element->this_anim.frame_lookup[frame_index];
 
-    /* Set up source rectangle */
-    src_rect.x = curr_element->this_anim.current_frame->source_x;
-    src_rect.y = curr_element->this_anim.current_frame->source_y;
-    src_rect.w = curr_element->this_anim.current_frame->source_w;
-    src_rect.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up source rectangle */
+   src_rect.x = curr_element->this_anim.current_frame->source_x;
+   src_rect.y = curr_element->this_anim.current_frame->source_y;
+   src_rect.w = curr_element->this_anim.current_frame->source_w;
+   src_rect.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Set up destination rectangles */
-    dst_rect_l.x = dst_rect_r.x =
-        curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-    dst_rect_l.y = dst_rect_r.y =
-        curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
-    dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-    dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+   /* Set up destination rectangles */
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                 curr_element->this_anim.current_frame->dest_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                 curr_element->this_anim.current_frame->dest_y;
+   dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+   dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
-    /* Apply stereo offset if not fixed */
-    if (!curr_element->fixed) {
-        dst_rect_l.x -= this_hds->stereo_offset;
-        dst_rect_r.x += this_hds->stereo_offset;
-    }
+   /* Apply stereo offset if not fixed */
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
 
    /* Apply scale, currently used for zoom effect */
    calculate_zoom_rect(&dst_rect_l, &dst_rect_r, curr_element->scale);
@@ -1241,7 +1242,8 @@ void render_wifi_element(element *curr_element) {
    int signal_level = get_wifi_signal_level();
 
    /* Clamp signal level to valid range for animation frames */
-   if (signal_level < 0) signal_level = 0;
+   if (signal_level < 0)
+      signal_level = 0;
    if (signal_level >= curr_element->this_anim.frame_count)
       signal_level = curr_element->this_anim.frame_count - 1;
 
@@ -1255,8 +1257,10 @@ void render_wifi_element(element *curr_element) {
    src_rect.h = curr_element->this_anim.current_frame->source_h;
 
    /* Normal rendering, calculate from original position */
-   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x + curr_element->this_anim.current_frame->dest_x;
-   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y + curr_element->this_anim.current_frame->dest_y;
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x +
+                                 curr_element->this_anim.current_frame->dest_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y +
+                                 curr_element->this_anim.current_frame->dest_y;
    dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
    dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
@@ -1376,7 +1380,7 @@ void render_armor_display_element(element *curr_element) {
    /* Check for external timeout trigger from registerArmor */
    if (armor_timeout_trigger > 0) {
       armor_timeout = armor_timeout_trigger;
-      armor_timeout_trigger = 0;  /* Clear the trigger */
+      armor_timeout_trigger = 0; /* Clear the trigger */
    }
 
    /* Timeout checking and reset logic */
@@ -1425,8 +1429,8 @@ void render_armor_display_element(element *curr_element) {
 
       if (component_count > 0) {
          /* Allocate arrays for texture caching */
-         curr_element->metrics_textures = calloc(component_count, sizeof(SDL_Texture*));
-         curr_element->last_metrics_text = calloc(component_count, sizeof(char*));
+         curr_element->metrics_textures = calloc(component_count, sizeof(SDL_Texture *));
+         curr_element->last_metrics_text = calloc(component_count, sizeof(char *));
 
          if (curr_element->metrics_textures && curr_element->last_metrics_text) {
             for (int i = 0; i < component_count; i++) {
@@ -1536,11 +1540,9 @@ void render_armor_display_element(element *curr_element) {
       }
 
       /* Render metrics if enabled and component is active */
-      if (curr_element->show_metrics &&
-          armor_element->mqtt_registered &&
+      if (curr_element->show_metrics && armor_element->mqtt_registered &&
           (current_time - armor_element->mqtt_last_time) < this_as->armor_deregister &&
           component_index < curr_element->metrics_texture_count) {
-
          char metrics_text[64] = "";
 
          // Check if temperature is valid
@@ -1566,11 +1568,9 @@ void render_armor_display_element(element *curr_element) {
          /* Check if we need to update the texture */
          if (curr_element->last_metrics_text[component_index] == NULL ||
              strcmp(metrics_text, curr_element->last_metrics_text[component_index]) != 0) {
-
             /* Update cached text */
             if (curr_element->last_metrics_text[component_index]) {
-               strncpy(curr_element->last_metrics_text[component_index],
-                      metrics_text, 63);
+               strncpy(curr_element->last_metrics_text[component_index], metrics_text, 63);
                curr_element->last_metrics_text[component_index][63] = '\0';
             }
 
@@ -1581,19 +1581,19 @@ void render_armor_display_element(element *curr_element) {
             }
 
             /* Create new texture */
-            SDL_Color text_color = {255, 255, 255, 255}; /* White text */
+            SDL_Color text_color = { 255, 255, 255, 255 }; /* White text */
             TTF_Font *metrics_font = get_local_font(
-               curr_element->metrics_font[0] ? curr_element->metrics_font : "ui_assets/fonts/Aldrich-Regular.ttf",
-               curr_element->metrics_font_size > 0 ? curr_element->metrics_font_size : 20
-            );
+                curr_element->metrics_font[0] ? curr_element->metrics_font
+                                              : "ui_assets/fonts/Aldrich-Regular.ttf",
+                curr_element->metrics_font_size > 0 ? curr_element->metrics_font_size : 20);
 
             if (metrics_font) {
-               SDL_Surface *metrics_surface = TTF_RenderUTF8_Blended(
-                  metrics_font, metrics_text, text_color);
+               SDL_Surface *metrics_surface = TTF_RenderUTF8_Blended(metrics_font, metrics_text,
+                                                                     text_color);
 
                if (metrics_surface) {
-                  curr_element->metrics_textures[component_index] =
-                     SDL_CreateTextureFromSurface(renderer, metrics_surface);
+                  curr_element->metrics_textures[component_index] = SDL_CreateTextureFromSurface(
+                      renderer, metrics_surface);
                   SDL_FreeSurface(metrics_surface);
                }
             }
@@ -1603,19 +1603,21 @@ void render_armor_display_element(element *curr_element) {
          if (curr_element->metrics_textures[component_index]) {
             /* Get texture dimensions */
             int tex_w, tex_h;
-            SDL_QueryTexture(curr_element->metrics_textures[component_index],
-                           NULL, NULL, &tex_w, &tex_h);
+            SDL_QueryTexture(curr_element->metrics_textures[component_index], NULL, NULL, &tex_w,
+                             &tex_h);
 
             /* Use the component's metrics positioning offsets (with defaults) */
-            float x_offset = 0.5f;  /* Default to center */
-            float y_offset = 0.5f;  /* Default to center */
+            float x_offset = 0.5f; /* Default to center */
+            float y_offset = 0.5f; /* Default to center */
 
             /* Use the component's configured offsets if they're valid */
-            if (armor_element->metrics_x_offset >= 0.0f && armor_element->metrics_x_offset <= 1.0f) {
+            if (armor_element->metrics_x_offset >= 0.0f &&
+                armor_element->metrics_x_offset <= 1.0f) {
                x_offset = armor_element->metrics_x_offset;
             }
 
-            if (armor_element->metrics_y_offset >= 0.0f && armor_element->metrics_y_offset <= 1.0f) {
+            if (armor_element->metrics_y_offset >= 0.0f &&
+                armor_element->metrics_y_offset <= 1.0f) {
                y_offset = armor_element->metrics_y_offset;
             }
 
@@ -1637,8 +1639,8 @@ void render_armor_display_element(element *curr_element) {
             }
 
             /* Render using renderStereo for proper eye handling */
-            renderStereo(curr_element->metrics_textures[component_index],
-                        NULL, &metrics_rect_l, &metrics_rect_r, curr_element->angle);
+            renderStereo(curr_element->metrics_textures[component_index], NULL, &metrics_rect_l,
+                         &metrics_rect_r, curr_element->angle);
 
             /* Reset alpha after rendering */
             if (curr_element->in_transition && curr_element->transition_alpha > 0.0f) {
@@ -1663,8 +1665,7 @@ void trigger_armor_notification_timeout(int timeout_seconds) {
  * This function takes the arrays from the left and right eyes and validates the
  * detections to insure you get graphics in both eyes.
  */
-void validate_detection(void)
-{
+void validate_detection(void) {
    int i = 0, j = 0;
    int next_valid = 0;
 
@@ -1706,176 +1707,169 @@ void validate_detection(void)
 }
 
 void render_detect_element(element *curr_element) {
-    SDL_Rect detect_src_l, detect_src_r;
-    SDL_Rect dst_rect_l, dst_rect_r;
-    SDL_Texture *detect_text_texture = NULL;
-    int r_offset = 0, l_offset = 0;
-    hud_display_settings *this_hds = get_hud_display_settings();
-    SDL_Renderer *renderer = get_sdl_renderer();
+   SDL_Rect detect_src_l, detect_src_r;
+   SDL_Rect dst_rect_l, dst_rect_r;
+   SDL_Texture *detect_text_texture = NULL;
+   int r_offset = 0, l_offset = 0;
+   hud_display_settings *this_hds = get_hud_display_settings();
+   SDL_Renderer *renderer = get_sdl_renderer();
 
-    if (curr_element->texture == NULL) {
-        LOG_INFO("Loading animation source: %s", curr_element->this_anim.image);
-        curr_element->texture = get_cached_texture(curr_element->this_anim.image);
-        if (!curr_element->texture) {
-            SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image, SDL_GetError());
-            return;
-        }
-        SDL_SetTextureAlphaMod(curr_element->texture, 255);
-    }
+   if (curr_element->texture == NULL) {
+      LOG_INFO("Loading animation source: %s", curr_element->this_anim.image);
+      curr_element->texture = get_cached_texture(curr_element->this_anim.image);
+      if (!curr_element->texture) {
+         SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image, SDL_GetError());
+         return;
+      }
+      SDL_SetTextureAlphaMod(curr_element->texture, 255);
+   }
 
-    /* Check for valid detection data */
-    if (oddataL.complete != 1 || oddataL.pix_data == NULL ||
-        oddataR.complete != 1 || oddataR.pix_data == NULL) {
-        return;
-    }
+   /* Check for valid detection data */
+   if (oddataL.complete != 1 || oddataL.pix_data == NULL || oddataR.complete != 1 ||
+       oddataR.pix_data == NULL) {
+      return;
+   }
 
-    /* Update detection data */
-    pthread_join(od_L_thread, NULL);
-    pthread_join(od_R_thread, NULL);
-    validate_detection();
-    oddataL.processed = 1;
-    oddataR.processed = 1;
+   /* Update detection data */
+   pthread_join(od_L_thread, NULL);
+   pthread_join(od_R_thread, NULL);
+   validate_detection();
+   oddataL.processed = 1;
+   oddataR.processed = 1;
 
-    /* Render each detected object */
-    for (int j = 0; j < MAX_DETECT; j++) {
-        /* Setup src rectangle for detection box animation */
-        detect_src_l.x = curr_element->this_anim.current_frame->source_x;
-        detect_src_l.y = curr_element->this_anim.current_frame->source_y;
-        detect_src_l.w = curr_element->this_anim.current_frame->source_w;
-        detect_src_l.h = curr_element->this_anim.current_frame->source_h;
+   /* Render each detected object */
+   for (int j = 0; j < MAX_DETECT; j++) {
+      /* Setup src rectangle for detection box animation */
+      detect_src_l.x = curr_element->this_anim.current_frame->source_x;
+      detect_src_l.y = curr_element->this_anim.current_frame->source_y;
+      detect_src_l.w = curr_element->this_anim.current_frame->source_w;
+      detect_src_l.h = curr_element->this_anim.current_frame->source_h;
 
-        detect_src_r.x = curr_element->this_anim.current_frame->source_x;
-        detect_src_r.y = curr_element->this_anim.current_frame->source_y;
-        detect_src_r.w = curr_element->this_anim.current_frame->source_w;
-        detect_src_r.h = curr_element->this_anim.current_frame->source_h;
+      detect_src_r.x = curr_element->this_anim.current_frame->source_x;
+      detect_src_r.y = curr_element->this_anim.current_frame->source_y;
+      detect_src_r.w = curr_element->this_anim.current_frame->source_w;
+      detect_src_r.h = curr_element->this_anim.current_frame->source_h;
 
-        if (this_detect_sorted[0][j].active && this_detect_sorted[1][j].active) {
-            /* Set up detection box positions */
-            dst_rect_l.x =
-                this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
-                (curr_element->this_anim.current_frame->source_size_w / 2) +
-                curr_element->this_anim.current_frame->dest_x -
-                this_hds->cam_crop_x + curr_element->center_x_offset;
+      if (this_detect_sorted[0][j].active && this_detect_sorted[1][j].active) {
+         /* Set up detection box positions */
+         dst_rect_l.x = this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
+                        (curr_element->this_anim.current_frame->source_size_w / 2) +
+                        curr_element->this_anim.current_frame->dest_x - this_hds->cam_crop_x +
+                        curr_element->center_x_offset;
 
-            dst_rect_l.y =
-                this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
-                (curr_element->this_anim.current_frame->source_size_h / 2) +
-                curr_element->this_anim.current_frame->dest_y +
-                curr_element->center_y_offset;
+         dst_rect_l.y = this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
+                        (curr_element->this_anim.current_frame->source_size_h / 2) +
+                        curr_element->this_anim.current_frame->dest_y +
+                        curr_element->center_y_offset;
 
-            dst_rect_r.x =
-                this_hds->eye_output_width +
-                this_detect_sorted[1][j].left + (this_detect_sorted[1][j].width / 2) -
-                (curr_element->this_anim.current_frame->source_size_w / 2) +
-                curr_element->this_anim.current_frame->dest_x -
-                this_hds->cam_crop_x + curr_element->center_x_offset;
+         dst_rect_r.x = this_hds->eye_output_width + this_detect_sorted[1][j].left +
+                        (this_detect_sorted[1][j].width / 2) -
+                        (curr_element->this_anim.current_frame->source_size_w / 2) +
+                        curr_element->this_anim.current_frame->dest_x - this_hds->cam_crop_x +
+                        curr_element->center_x_offset;
 
-            dst_rect_r.y =
-                this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
-                (curr_element->this_anim.current_frame->source_size_h / 2) +
-                curr_element->this_anim.current_frame->dest_y +
-                curr_element->center_y_offset;
+         dst_rect_r.y = this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
+                        (curr_element->this_anim.current_frame->source_size_h / 2) +
+                        curr_element->this_anim.current_frame->dest_y +
+                        curr_element->center_y_offset;
 
-            dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
-            dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
+         dst_rect_l.w = dst_rect_r.w = curr_element->this_anim.current_frame->source_w;
+         dst_rect_l.h = dst_rect_r.h = curr_element->this_anim.current_frame->source_h;
 
-            /* Handle edge cases for detection boxes */
+         /* Handle edge cases for detection boxes */
+         if ((dst_rect_l.x + dst_rect_l.w) > this_hds->eye_output_width) {
+            l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
+            detect_src_l.w -= l_offset;
+            dst_rect_l.w = detect_src_l.w;
+         } else {
+            l_offset = 0;
+         }
+
+         if (dst_rect_r.x < this_hds->eye_output_width) {
+            r_offset = this_hds->eye_output_width - dst_rect_r.x;
+            detect_src_r.x += r_offset;
+            detect_src_r.w -= r_offset;
+            dst_rect_r.x = this_hds->eye_output_width;
+            dst_rect_r.w = detect_src_r.w;
+         } else {
+            r_offset = 0;
+         }
+
+         /* Render detection boxes */
+         SDL_RenderCopy(renderer, curr_element->texture, &detect_src_l, &dst_rect_l);
+         SDL_RenderCopy(renderer, curr_element->texture, &detect_src_r, &dst_rect_r);
+
+         /* Render text labels for detections */
+         curr_element->surface = TTF_RenderUTF8_Blended(curr_element->ttf_font,
+                                                        this_detect_sorted[0][j].description,
+                                                        curr_element->font_color);
+         if (curr_element->surface != NULL) {
+            detect_text_texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
+
+            detect_src_r.w = detect_src_l.w = curr_element->surface->w;
+            detect_src_r.h = detect_src_l.h = curr_element->surface->h;
+            detect_src_r.x = detect_src_l.x = 0;
+            detect_src_r.y = detect_src_l.y = 0;
+
+            /* Position text labels */
+            dst_rect_l.x = this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
+                           (curr_element->this_anim.current_frame->source_size_w / 2) -
+                           this_hds->cam_crop_x + curr_element->center_x_offset +
+                           curr_element->text_x_offset;
+
+            dst_rect_l.y = this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
+                           (curr_element->this_anim.current_frame->source_size_h / 2) +
+                           curr_element->center_y_offset + curr_element->text_y_offset;
+
+            dst_rect_r.x = this_hds->eye_output_width + this_detect_sorted[1][j].left +
+                           (this_detect_sorted[1][j].width / 2) -
+                           (curr_element->this_anim.current_frame->source_size_w / 2) -
+                           this_hds->cam_crop_x + curr_element->center_x_offset +
+                           curr_element->text_x_offset;
+
+            dst_rect_r.y = this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
+                           (curr_element->this_anim.current_frame->source_size_h / 2) +
+                           curr_element->center_y_offset + curr_element->text_y_offset;
+
+            dst_rect_l.w = dst_rect_r.w = curr_element->surface->w;
+            dst_rect_l.h = dst_rect_r.h = curr_element->surface->h;
+
+            /* Handle text wrapping at screen edges */
             if ((dst_rect_l.x + dst_rect_l.w) > this_hds->eye_output_width) {
-                l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
-                detect_src_l.w -= l_offset;
-                dst_rect_l.w = detect_src_l.w;
-            } else {
-                l_offset = 0;
+               l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
+               detect_src_l.w -= l_offset;
+               dst_rect_l.w = detect_src_l.w;
             }
 
-            if (dst_rect_r.x < this_hds->eye_output_width) {
-                r_offset = this_hds->eye_output_width - dst_rect_r.x;
-                detect_src_r.x += r_offset;
-                detect_src_r.w -= r_offset;
-                dst_rect_r.x = this_hds->eye_output_width;
-                dst_rect_r.w = detect_src_r.w;
-            } else {
-                r_offset = 0;
-            }
+            /* Render detection text labels */
+            SDL_RenderCopy(renderer, detect_text_texture, &detect_src_l, &dst_rect_l);
+            SDL_RenderCopy(renderer, detect_text_texture, &detect_src_r, &dst_rect_r);
 
-            /* Render detection boxes */
-            SDL_RenderCopy(renderer, curr_element->texture, &detect_src_l, &dst_rect_l);
-            SDL_RenderCopy(renderer, curr_element->texture, &detect_src_r, &dst_rect_r);
+            /* Cleanup text textures */
+            SDL_DestroyTexture(detect_text_texture);
+            detect_text_texture = NULL;
+            SDL_FreeSurface(curr_element->surface);
+            curr_element->surface = NULL;
+         }
+      }
+   }
 
-            /* Render text labels for detections */
-            curr_element->surface =
-                TTF_RenderUTF8_Blended(curr_element->ttf_font,
-                                       this_detect_sorted[0][j].description,
-                                       curr_element->font_color);
-            if (curr_element->surface != NULL) {
-                detect_text_texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
+   /* Animation update for detection box graphics */
+   Uint32 currTime = SDL_GetTicks();
+   float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
+   int curr_fps = get_curr_fps();
+   int framesToUpdate = floor(dT / (1.0f / curr_fps));
 
-                detect_src_r.w = detect_src_l.w = curr_element->surface->w;
-                detect_src_r.h = detect_src_l.h = curr_element->surface->h;
-                detect_src_r.x = detect_src_l.x = 0;
-                detect_src_r.y = detect_src_l.y = 0;
-
-                /* Position text labels */
-                dst_rect_l.x =
-                    this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
-                    (curr_element->this_anim.current_frame->source_size_w / 2) -
-                    this_hds->cam_crop_x + curr_element->center_x_offset + curr_element->text_x_offset;
-
-                dst_rect_l.y =
-                    this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
-                    (curr_element->this_anim.current_frame->source_size_h / 2) +
-                    curr_element->center_y_offset + curr_element->text_y_offset;
-
-                dst_rect_r.x =
-                    this_hds->eye_output_width +
-                    this_detect_sorted[1][j].left + (this_detect_sorted[1][j].width / 2) -
-                    (curr_element->this_anim.current_frame->source_size_w / 2) -
-                    this_hds->cam_crop_x + curr_element->center_x_offset + curr_element->text_x_offset;
-
-                dst_rect_r.y =
-                    this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
-                    (curr_element->this_anim.current_frame->source_size_h / 2) +
-                    curr_element->center_y_offset + curr_element->text_y_offset;
-
-                dst_rect_l.w = dst_rect_r.w = curr_element->surface->w;
-                dst_rect_l.h = dst_rect_r.h = curr_element->surface->h;
-
-                /* Handle text wrapping at screen edges */
-                if ((dst_rect_l.x + dst_rect_l.w) > this_hds->eye_output_width) {
-                    l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
-                    detect_src_l.w -= l_offset;
-                    dst_rect_l.w = detect_src_l.w;
-                }
-
-                /* Render detection text labels */
-                SDL_RenderCopy(renderer, detect_text_texture, &detect_src_l, &dst_rect_l);
-                SDL_RenderCopy(renderer, detect_text_texture, &detect_src_r, &dst_rect_r);
-
-                /* Cleanup text textures */
-                SDL_DestroyTexture(detect_text_texture);
-                detect_text_texture = NULL;
-                SDL_FreeSurface(curr_element->surface);
-                curr_element->surface = NULL;
-            }
-        }
-    }
-
-    /* Animation update for detection box graphics */
-    Uint32 currTime = SDL_GetTicks();
-    float dT = (currTime - curr_element->this_anim.last_update) / 1000.0f;
-    int curr_fps = get_curr_fps();
-    int framesToUpdate = floor(dT / (1.0f / curr_fps));
-
-    if (framesToUpdate > 0) {
-        if ((currTime % (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
-            if (curr_element->this_anim.current_frame->next != NULL) {
-                curr_element->this_anim.current_frame = curr_element->this_anim.current_frame->next;
-            } else {
-                curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
-            }
-        }
-        curr_element->this_anim.last_update = currTime;
-    }
+   if (framesToUpdate > 0) {
+      if ((currTime % (int)ceil((double)curr_fps / curr_element->this_anim.frame_count)) == 0) {
+         if (curr_element->this_anim.current_frame->next != NULL) {
+            curr_element->this_anim.current_frame = curr_element->this_anim.current_frame->next;
+         } else {
+            curr_element->this_anim.current_frame = curr_element->this_anim.first_frame;
+         }
+      }
+      curr_element->this_anim.last_update = currTime;
+   }
 }
 
 /* Main element rendering dispatcher */
@@ -1928,7 +1922,7 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
 
    /* Set transition state */
    curr_element->in_transition = 1;
-   curr_element->transition_alpha = 1.0f; // Not using alpha
+   curr_element->transition_alpha = 1.0f;  // Not using alpha
 
    /* Save original position */
    int original_x = curr_element->dst_rect.x;
@@ -1947,11 +1941,12 @@ void render_element_with_slide(element *curr_element, int offset_x, int offset_y
 
    /* Check if element is entirely off-screen in both eyes - don't render if so */
    if ((curr_element->dst_rect.x + curr_element->dst_rect.w < 0 &&
-       curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width < this_hds->eye_output_width) ||
+        curr_element->dst_rect.x + curr_element->dst_rect.w + this_hds->eye_output_width <
+            this_hds->eye_output_width) ||
        (curr_element->dst_rect.x >= 2 * this_hds->eye_output_width) ||
        (curr_element->dst_rect.y + curr_element->dst_rect.h < 0) ||
        (curr_element->dst_rect.y >= this_hds->eye_output_height)) {
-       /* Element is entirely off-screen, don't render */
+      /* Element is entirely off-screen, don't render */
       curr_element->dst_rect.x = original_x;
       curr_element->dst_rect.y = original_y;
       curr_element->dest_x = original_dest_x;
@@ -2021,7 +2016,7 @@ void render_hud_elements(void) {
 
       /* Ensure minimum progress to avoid full opacity flash */
       if (hud_mgr->transition_progress < 0.02f) {
-         hud_mgr->transition_progress = 0.02f;  /* Start at 2% progress minimum */
+         hud_mgr->transition_progress = 0.02f; /* Start at 2% progress minimum */
       }
 
       if (hud_mgr->transition_progress >= 1.0) {
@@ -2046,7 +2041,8 @@ void render_hud_elements(void) {
          switch (hud_mgr->transition_type) {
             case TRANSITION_MAX:
                LOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
-               LOG_ERROR("Changing to valid default transition: %s", get_transition_name(TRANSITION_FADE));
+               LOG_ERROR("Changing to valid default transition: %s",
+                         get_transition_name(TRANSITION_FADE));
                hud_mgr->current_screen->transition_type = TRANSITION_FADE;
 
             case TRANSITION_FADE: {
@@ -2083,8 +2079,10 @@ void render_hud_elements(void) {
             }
 
             case TRANSITION_SLIDE_LEFT: {
-               int from_offset = (int)(-(hud_mgr->transition_progress) * this_hds->eye_output_width);
-               int to_offset = (int)((1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
+               int from_offset = (int)(-(hud_mgr->transition_progress) *
+                                       this_hds->eye_output_width);
+               int to_offset = (int)((1.0f - hud_mgr->transition_progress) *
+                                     this_hds->eye_output_width);
 
                /* First, render the shared elements that appear in both HUDs normally */
                curr_element = first_element;
@@ -2093,7 +2091,7 @@ void render_hud_elements(void) {
                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
                      render_element(curr_element);
                   }
-                     curr_element = curr_element->next;
+                  curr_element = curr_element->next;
                }
 
                /* Then render "from" HUD sliding left (only elements not in new HUD) */
@@ -2114,101 +2112,101 @@ void render_hud_elements(void) {
                      render_element_with_slide(curr_element, to_offset, 0);
                   }
                   curr_element = curr_element->next;
-                }
-                break;
-             }
-
-             case TRANSITION_SLIDE_RIGHT: {
-                int from_offset = (int)((hud_mgr->transition_progress) * this_hds->eye_output_width);
-                int to_offset = (int)(-(1.0f - hud_mgr->transition_progress) * this_hds->eye_output_width);
-
-                /* First, render the shared elements that appear in both HUDs normally */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element(curr_element);
-                   }
-                   curr_element = curr_element->next;
-                }
-
-                /* Then render "from" HUD sliding right (only elements not in new HUD) */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element_with_slide(curr_element, from_offset, 0);
-                   }
-                   curr_element = curr_element->next;
-                }
-
-                /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element_with_slide(curr_element, to_offset, 0);
-                   }
-                   curr_element = curr_element->next;
-                }
-                break;
-             }
-
-             case TRANSITION_ZOOM: {
-                float from_scale = 1.0f + hud_mgr->transition_progress;
-                float to_scale = 2.0f - hud_mgr->transition_progress;
-
-                /* Render elements from previous HUD zooming out */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element_with_scale(curr_element, from_scale, from_alpha);
-                   }
-                   curr_element = curr_element->next;
-                }
-
-                /* Render elements from new HUD zooming in */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element_with_scale(curr_element, to_scale, to_alpha);
-                   }
-                   curr_element = curr_element->next;
-                }
-
-                /* Render elements that are in both HUDs normally */
-                curr_element = first_element;
-                while (curr_element != NULL) {
-                   if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
-                       curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                      render_element(curr_element);
-                   }
-                   curr_element = curr_element->next;
-                }
-                break;
-             }
-          }
-
-          /* Reset transition states in all elements */
-          /* Reset all texture alphas after transition rendering */
-          curr_element = first_element;
-          while (curr_element != NULL) {
-             curr_element->in_transition = 0;
-             curr_element->transition_alpha = 0.0f;
-             curr_element = curr_element->next;
-          }
-       }
-    } else {
-        /* Normal rendering - just the current HUD */
-        curr_element = first_element;
-        while (curr_element != NULL) {
-            if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
-                render_element(curr_element);
+               }
+               break;
             }
-            curr_element = curr_element->next;
-        }
-    }
-}
 
+            case TRANSITION_SLIDE_RIGHT: {
+               int from_offset = (int)((hud_mgr->transition_progress) * this_hds->eye_output_width);
+               int to_offset = (int)(-(1.0f - hud_mgr->transition_progress) *
+                                     this_hds->eye_output_width);
+
+               /* First, render the shared elements that appear in both HUDs normally */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element(curr_element);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Then render "from" HUD sliding right (only elements not in new HUD) */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_slide(curr_element, from_offset, 0);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Finally render "to" HUD sliding in from left (only elements not in old HUD) */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_slide(curr_element, to_offset, 0);
+                  }
+                  curr_element = curr_element->next;
+               }
+               break;
+            }
+
+            case TRANSITION_ZOOM: {
+               float from_scale = 1.0f + hud_mgr->transition_progress;
+               float to_scale = 2.0f - hud_mgr->transition_progress;
+
+               /* Render elements from previous HUD zooming out */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      !curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_scale(curr_element, from_scale, from_alpha);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Render elements from new HUD zooming in */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (!curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element_with_scale(curr_element, to_scale, to_alpha);
+                  }
+                  curr_element = curr_element->next;
+               }
+
+               /* Render elements that are in both HUDs normally */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (curr_element->hud_flags[hud_mgr->transition_from->hud_id] &&
+                      curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+                     render_element(curr_element);
+                  }
+                  curr_element = curr_element->next;
+               }
+               break;
+            }
+         }
+
+         /* Reset transition states in all elements */
+         /* Reset all texture alphas after transition rendering */
+         curr_element = first_element;
+         while (curr_element != NULL) {
+            curr_element->in_transition = 0;
+            curr_element->transition_alpha = 0.0f;
+            curr_element = curr_element->next;
+         }
+      }
+   } else {
+      /* Normal rendering - just the current HUD */
+      curr_element = first_element;
+      while (curr_element != NULL) {
+         if (curr_element->hud_flags[hud_mgr->current_screen->hud_id]) {
+            render_element(curr_element);
+         }
+         curr_element = curr_element->next;
+      }
+   }
+}

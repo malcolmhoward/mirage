@@ -18,62 +18,60 @@
  * enhancements, or additions to the project. These contributions become
  * part of the project and are adopted by the project author(s).
  */
+#include "system_metrics.h"
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <stdbool.h>
 
-#include "system_metrics.h"
 #include "logging.h"
 
 /* Global metrics structure instance */
-system_metrics_t system_metrics = {
-   .cpu_usage = 0.0f,
-   .memory_usage = 0.0f,
-   .system_temperature = 0.0f,
-   .fan_rpm = -1,
-   .fan_load = -1,
-   .battery_voltage = 0.0f,
-   .battery_current = 0.0f,
-   .battery_consumption = 0.0f,
-   .battery_temperature = 0.0f,
-   .battery_level = 0.0f,
-   .battery_status = "UNKNOWN",
-   .time_remaining_min = 0.0f,
-   .time_remaining_fmt = "0:00",
-   .battery_chemistry = "UNKN",
-   .battery_capacity_mah = 0.0f,
-   .battery_cells = 0,
+system_metrics_t system_metrics = { .cpu_usage = 0.0f,
+                                    .memory_usage = 0.0f,
+                                    .system_temperature = 0.0f,
+                                    .fan_rpm = -1,
+                                    .fan_load = -1,
+                                    .battery_voltage = 0.0f,
+                                    .battery_current = 0.0f,
+                                    .battery_consumption = 0.0f,
+                                    .battery_temperature = 0.0f,
+                                    .battery_level = 0.0f,
+                                    .battery_status = "UNKNOWN",
+                                    .time_remaining_min = 0.0f,
+                                    .time_remaining_fmt = "0:00",
+                                    .battery_chemistry = "UNKN",
+                                    .battery_capacity_mah = 0.0f,
+                                    .battery_cells = 0,
 
-   /* New fields for BatteryStatus message */
-   .critical_fault_count = 0,
-   .warning_fault_count = 0,
-   .info_fault_count = 0,
-   .status_reason = "",
-   .battery_cells_series = 0,
-   .battery_cells_parallel = 0,
-   .battery_nominal_voltage = 0.0f,
-   .charge_state = CHARGE_STATE_DISCHARGING,
+                                    /* New fields for BatteryStatus message */
+                                    .critical_fault_count = 0,
+                                    .warning_fault_count = 0,
+                                    .info_fault_count = 0,
+                                    .status_reason = "",
+                                    .battery_cells_series = 0,
+                                    .battery_cells_parallel = 0,
+                                    .battery_nominal_voltage = 0.0f,
+                                    .charge_state = CHARGE_STATE_DISCHARGING,
 
-   .cpu_update_time = 0,
-   .memory_update_time = 0,
-   .system_temp_update_time = 0,
-   .fan_update_time = 0,
-   .power_update_time = 0,
+                                    .cpu_update_time = 0,
+                                    .memory_update_time = 0,
+                                    .system_temp_update_time = 0,
+                                    .fan_update_time = 0,
+                                    .power_update_time = 0,
 
-   .cpu_available = false,
-   .memory_available = false,
-   .system_temp_available = false,
-   .fan_available = false,
-   .power_available = false
-};
+                                    .cpu_available = false,
+                                    .memory_available = false,
+                                    .system_temp_available = false,
+                                    .fan_available = false,
+                                    .power_available = false };
 
 /**
  * @brief Initialize system metrics with default values
  */
-void init_system_metrics(void)
-{
+void init_system_metrics(void) {
    /* Reset all metrics to default values */
    system_metrics.cpu_usage = 0.0f;
    system_metrics.memory_usage = 0.0f;
@@ -130,34 +128,35 @@ void init_system_metrics(void)
 
 /**
  * @brief Check if a metric is stale (not updated recently)
- * 
+ *
  * @param update_time The last update timestamp for the metric
  * @param timeout_seconds The number of seconds after which a metric is considered stale
  * @return true if the metric is stale, false otherwise
  */
-bool is_metric_stale(time_t update_time, int timeout_seconds)
-{
+bool is_metric_stale(time_t update_time, int timeout_seconds) {
    time_t current_time = time(NULL);
    return (current_time - update_time) > timeout_seconds;
 }
 
 /**
  * @brief Update the system metrics based on metric staleness
- * 
+ *
  * This function checks if any metrics are stale and updates their
  * availability flags accordingly.
- * 
+ *
  * @param timeout_seconds The number of seconds after which a metric is considered stale
  */
-void update_metrics_availability(int timeout_seconds)
-{
+void update_metrics_availability(int timeout_seconds) {
    /* Check each metric and update its availability */
    system_metrics.cpu_available = !is_metric_stale(system_metrics.cpu_update_time, timeout_seconds);
-   system_metrics.memory_available = !is_metric_stale(system_metrics.memory_update_time, timeout_seconds);
-   system_metrics.system_temp_available = !is_metric_stale(system_metrics.system_temp_update_time, timeout_seconds);
+   system_metrics.memory_available = !is_metric_stale(system_metrics.memory_update_time,
+                                                      timeout_seconds);
+   system_metrics.system_temp_available = !is_metric_stale(system_metrics.system_temp_update_time,
+                                                           timeout_seconds);
    system_metrics.fan_available = !is_metric_stale(system_metrics.fan_update_time, timeout_seconds);
-   system_metrics.power_available = !is_metric_stale(system_metrics.power_update_time, timeout_seconds);
-   
+   system_metrics.power_available = !is_metric_stale(system_metrics.power_update_time,
+                                                     timeout_seconds);
+
    /* Log if metrics become unavailable */
 #if 0 /* Suppressing these for now. */
    if (!system_metrics.cpu_available) {
@@ -184,11 +183,10 @@ void update_metrics_availability(int timeout_seconds)
 
 /**
  * @brief Get CPU usage percentage
- * 
+ *
  * @return float CPU usage percentage or -1.0f if unavailable
  */
-float get_cpu_usage(void)
-{
+float get_cpu_usage(void) {
    if (system_metrics.cpu_available) {
       return system_metrics.cpu_usage;
    } else {
@@ -198,11 +196,10 @@ float get_cpu_usage(void)
 
 /**
  * @brief Get memory usage percentage
- * 
+ *
  * @return float Memory usage percentage or -1.0f if unavailable
  */
-float get_memory_usage(void)
-{
+float get_memory_usage(void) {
    if (system_metrics.memory_available) {
       return system_metrics.memory_usage;
    } else {
@@ -215,8 +212,7 @@ float get_memory_usage(void)
  *
  * @return float System temperature in Celsius or -1.0f if unavailable
  */
-float get_system_temperature(void)
-{
+float get_system_temperature(void) {
    if (system_metrics.system_temp_available) {
       return system_metrics.system_temperature;
    } else {
@@ -226,11 +222,10 @@ float get_system_temperature(void)
 
 /**
  * @brief Get fan RPM
- * 
+ *
  * @return int Fan RPM or -1 if unavailable
  */
-int get_fan_rpm(void)
-{
+int get_fan_rpm(void) {
    if (system_metrics.fan_available) {
       return system_metrics.fan_rpm;
    } else {
@@ -240,15 +235,13 @@ int get_fan_rpm(void)
 
 /**
  * @brief Get fan load percentage
- * 
+ *
  * @return int Fan load percentage or -1 if unavailable
  */
-int get_fan_load_percent(void)
-{
+int get_fan_load_percent(void) {
    if (system_metrics.fan_available) {
       return system_metrics.fan_load;
    } else {
       return -1;
    }
 }
-

@@ -41,4 +41,4 @@ void serial_get_port(char *buffer, size_t size);
 int serial_port_send(const char *command);
 int forward_helmet_command_to_serial(char *command_string);
 
-#endif // COMMAND_PROCESSING_H
+#endif  // COMMAND_PROCESSING_H

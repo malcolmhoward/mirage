@@ -22,6 +22,9 @@
 #ifndef CURL_DOWNLOAD_H
 #define CURL_DOWNLOAD_H
 
+#include <pthread.h>
+#include <stddef.h>
+
 /* Curl Image Download Data */
 struct curl_data {
    char url[512];
@@ -50,5 +53,4 @@ struct curl_data {
  */
 void *image_download_thread(void *arg);
 
-#endif // CURL_DOWNLOAD_H
-
+#endif  // CURL_DOWNLOAD_H

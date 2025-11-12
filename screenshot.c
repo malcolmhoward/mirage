@@ -19,29 +19,30 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "screenshot.h"
+
+#include <GL/glew.h>
+#include <SDL2/SDL.h>
+#include <mosquitto.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
-#include <SDL2/SDL.h>
-#include <GL/glew.h>
-#include <stdbool.h>
-#include <mosquitto.h>
 
-#include "screenshot.h"
 #include "config_manager.h"
-#include "logging.h"
 #include "image_utils.h"
+#include "logging.h"
 #include "mirage.h"
 #include "recording.h"
 
 /* Global variables for PBO system */
-static GLuint g_pboIds[3] = {0, 0, 0};
+static GLuint g_pboIds[3] = { 0, 0, 0 };
 static int g_pboIndex = 0;
 static int g_readIndex = 2;
 static int g_writeIndex = 1;
-static int g_frameCount = 0; // Track number of frames processed
+static int g_frameCount = 0;  // Track number of frames processed
 static bool g_pboInitialized = false;
 
 /* Added tracking for last successful mapping */
@@ -51,7 +52,7 @@ static bool g_hasValidLastFrame = false;
 /* Screenshot request handling */
 static pthread_mutex_t g_screenshot_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int g_screenshot_requested = 0;
-static char g_screenshot_path[PATH_MAX+29] = "";
+static char g_screenshot_path[PATH_MAX + 29] = "";
 static int g_screenshot_with_overlay = 0;
 static screenshot_t g_screenshot_source = SCREENSHOT_MANUAL;
 
@@ -67,7 +68,7 @@ void set_screenshot_recording_path(const char *path) {
 }
 
 /**
- * Initializes the Pixel Buffer Object (PBO) system used for asynchronous 
+ * Initializes the Pixel Buffer Object (PBO) system used for asynchronous
  * frame capture from OpenGL.
  */
 void init_pbo_system(void) {
@@ -112,70 +113,69 @@ void init_pbo_system(void) {
  * Cleans up resources allocated by the PBO system.
  */
 void cleanup_pbo_system(void) {
-    if (g_pboInitialized) {
-        glDeleteBuffers(3, g_pboIds);
-        g_pboInitialized = false;
-    }
-    g_lastSuccessfulPboIndex = -1;
-    g_hasValidLastFrame = false;
+   if (g_pboInitialized) {
+      glDeleteBuffers(3, g_pboIds);
+      g_pboInitialized = false;
+   }
+   g_lastSuccessfulPboIndex = -1;
+   g_hasValidLastFrame = false;
 }
- 
+
 /**
  * Requests a screenshot to be taken by the main thread.
  */
-int request_screenshot(int with_overlay, int full_resolution,
-                       const char *output_filename, screenshot_t source) {
-    int result = SUCCESS;
+int request_screenshot(int with_overlay,
+                       int full_resolution,
+                       const char *output_filename,
+                       screenshot_t source) {
+   int result = SUCCESS;
 
-    pthread_mutex_lock(&g_screenshot_mutex);
+   pthread_mutex_lock(&g_screenshot_mutex);
 
-    g_screenshot_source = source;
+   g_screenshot_source = source;
 
-    /* If there's already a pending request, don't overwrite it */
-    if (g_screenshot_requested) {
-        LOG_WARNING("Screenshot already requested, ignoring new request");
-        result = FAILURE;
-    } else {
-        /* Set the request flag */
-        g_screenshot_requested = 1;
-        g_screenshot_with_overlay = with_overlay;
+   /* If there's already a pending request, don't overwrite it */
+   if (g_screenshot_requested) {
+      LOG_WARNING("Screenshot already requested, ignoring new request");
+      result = FAILURE;
+   } else {
+      /* Set the request flag */
+      g_screenshot_requested = 1;
+      g_screenshot_with_overlay = with_overlay;
 
-        /* Store the full resolution flag as bit 1 in the request flag */
-        if (full_resolution) {
-            g_screenshot_requested |= 2;
-        }
+      /* Store the full resolution flag as bit 1 in the request flag */
+      if (full_resolution) {
+         g_screenshot_requested |= 2;
+      }
 
-        /* Store the filename if provided */
-        if (output_filename != NULL) {
-            strncpy(g_screenshot_path, output_filename, sizeof(g_screenshot_path) - 1);
-            g_screenshot_path[sizeof(g_screenshot_path) - 1] = '\0';
-        } else {
-            g_screenshot_path[0] = '\0';  /* Empty string indicates auto-generated filename */
-        }
+      /* Store the filename if provided */
+      if (output_filename != NULL) {
+         strncpy(g_screenshot_path, output_filename, sizeof(g_screenshot_path) - 1);
+         g_screenshot_path[sizeof(g_screenshot_path) - 1] = '\0';
+      } else {
+         g_screenshot_path[0] = '\0'; /* Empty string indicates auto-generated filename */
+      }
 
-        LOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s",
-                with_overlay, full_resolution,
-                output_filename ? output_filename : "auto-generated");
-    }
+      LOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s", with_overlay,
+               full_resolution, output_filename ? output_filename : "auto-generated");
+   }
 
-    pthread_mutex_unlock(&g_screenshot_mutex);
+   pthread_mutex_unlock(&g_screenshot_mutex);
 
-    return result;
+   return result;
 }
 
 /**
  * Asynchronously reads pixels from the current OpenGL framebuffer into a user buffer.
  */
 int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
-                                const SDL_Rect *rect,
-                                Uint32 format,
-                                void *pixels,
-                                int pitch)
-{
+                                 const SDL_Rect *rect,
+                                 Uint32 format,
+                                 void *pixels,
+                                 int pitch) {
    /* Basic parameter checks */
    if (!renderer || !pixels) {
-      LOG_ERROR("Invalid arguments: renderer=%p, pixels=%p",
-                (void*)renderer, (void*)pixels);
+      LOG_ERROR("Invalid arguments: renderer=%p, pixels=%p", (void *)renderer, (void *)pixels);
       return 1;
    }
 
@@ -204,7 +204,7 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
    }
 
    /* Calculate the data size (assuming RGBA 8-bit) */
-   const int bytesPerPixel = 4;  /* RGBA */
+   const int bytesPerPixel = 4; /* RGBA */
    const GLsizeiptr dataSize = (GLsizeiptr)(readW * readH * bytesPerPixel);
 
    /* Bind the "current" PBO for asynchronous readback */
@@ -214,7 +214,7 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
    /* Kick off the async read from the current framebuffer */
    glReadPixels(readX, readY, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
-   GLubyte* mappedBuffer = NULL;
+   GLubyte *mappedBuffer = NULL;
 
    /* Skip trying to read during the first two frames -
       we need to prime the pipeline first */
@@ -222,17 +222,15 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
       /* Now try to read from the read buffer */
       glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_readIndex]);
 
-      mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                               0,
-                                               dataSize,
-                                               GL_MAP_READ_BIT);
+      mappedBuffer = (GLubyte *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, dataSize,
+                                                 GL_MAP_READ_BIT);
 
       if (mappedBuffer) {
          /* Copy data with Y-flip */
          for (int y = 0; y < readH; ++y) {
             int flippedY = (readH - 1) - y;
-            GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
-            GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
+            GLubyte *dstRow = (GLubyte *)pixels + (flippedY * pitch);
+            GLubyte *srcRow = mappedBuffer + (y * readW * bytesPerPixel);
             memcpy(dstRow, srcRow, readW * bytesPerPixel);
          }
 
@@ -243,17 +241,15 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
          /* Fall back to the last successful buffer if available */
          glBindBuffer(GL_PIXEL_PACK_BUFFER, g_pboIds[g_lastSuccessfulPboIndex]);
 
-         mappedBuffer = (GLubyte*)glMapBufferRange(GL_PIXEL_PACK_BUFFER,
-                                                  0,
-                                                  dataSize,
-                                                  GL_MAP_READ_BIT);
+         mappedBuffer = (GLubyte *)glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, dataSize,
+                                                    GL_MAP_READ_BIT);
 
          if (mappedBuffer) {
             /* Copy with Y-flip */
             for (int y = 0; y < readH; ++y) {
                int flippedY = (readH - 1) - y;
-               GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
-               GLubyte* srcRow = mappedBuffer + (y * readW * bytesPerPixel);
+               GLubyte *dstRow = (GLubyte *)pixels + (flippedY * pitch);
+               GLubyte *srcRow = mappedBuffer + (y * readW * bytesPerPixel);
                memcpy(dstRow, srcRow, readW * bytesPerPixel);
             }
 
@@ -290,10 +286,10 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
  * Synchronously reads pixels from the current OpenGL framebuffer into a user buffer.
  */
 int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
-                               const SDL_Rect *rect,
-                               Uint32 format,
-                               void *pixels,
-                               int pitch) {
+                                const SDL_Rect *rect,
+                                Uint32 format,
+                                void *pixels,
+                                int pitch) {
    /* Basic parameter checks */
    if (!renderer || !pixels) {
       LOG_ERROR("Invalid arguments for synchronous read");
@@ -313,8 +309,8 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
    }
 
    /* We'll need a temporary buffer to perform the Y-flip */
-   const int bytesPerPixel = 4;  /* RGBA */
-   GLubyte* tempBuffer = (GLubyte*)malloc(readW * readH * bytesPerPixel);
+   const int bytesPerPixel = 4; /* RGBA */
+   GLubyte *tempBuffer = (GLubyte *)malloc(readW * readH * bytesPerPixel);
    if (!tempBuffer) {
       LOG_ERROR("Failed to allocate temporary buffer for pixel read");
       return 1;
@@ -329,8 +325,8 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
    /* Copy with Y-flipping to correct the orientation */
    for (int y = 0; y < readH; ++y) {
       int flippedY = (readH - 1) - y; /* Invert the row index */
-      GLubyte* dstRow = (GLubyte*)pixels + (flippedY * pitch);
-      GLubyte* srcRow = tempBuffer + (y * readW * bytesPerPixel);
+      GLubyte *dstRow = (GLubyte *)pixels + (flippedY * pitch);
+      GLubyte *srcRow = tempBuffer + (y * readW * bytesPerPixel);
       memcpy(dstRow, srcRow, readW * bytesPerPixel);
    }
 
@@ -343,14 +339,17 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
 /**
  * Takes a screenshot with specified options for overlay and resolution.
  */
-int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, const char *output_filename) {
+int take_screenshot(int with_overlay,
+                    int no_camera_mode,
+                    int full_resolution,
+                    const char *output_filename) {
    hud_display_settings *this_hds = get_hud_display_settings();
    SDL_Renderer *renderer = get_sdl_renderer();
    video_out_data *this_vod = get_video_out_data();
    time_t r_time;
    struct tm *l_time = NULL;
    char datetime[16];
-   char filename[PATH_MAX+31];
+   char filename[PATH_MAX + 31];
    int result = 0;
 
    /* Generate timestamp for the filename if needed */
@@ -362,30 +361,25 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
       /* Generate filename with timestamp */
       snprintf(filename, sizeof(filename), "%s/screenshot-%s.jpg", record_path, datetime);
    } else {
-      strncpy(filename, output_filename, PATH_MAX+31-1);
-      filename[PATH_MAX+31-1] = '\0';
+      strncpy(filename, output_filename, PATH_MAX + 31 - 1);
+      filename[PATH_MAX + 31 - 1] = '\0';
    }
 
-   LOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d",
-            filename, with_overlay, full_resolution);
+   LOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d", filename, with_overlay,
+            full_resolution);
 
    if (with_overlay) {
       /* With overlay - capture what's currently on screen */
-      void *screenshot_buffer =
-          malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE * this_hds->eye_output_height);
+      void *screenshot_buffer = malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE *
+                                       this_hds->eye_output_height);
       if (screenshot_buffer == NULL) {
          LOG_ERROR("Unable to allocate memory for screenshot buffer");
          return FAILURE;
       }
 
       /* Use the PBO-based sync read */
-      result = OpenGL_RenderReadPixelsSync(
-         renderer,
-         NULL,
-         PIXEL_FORMAT_OUT,
-         screenshot_buffer,
-         this_hds->eye_output_width * 2 * RGB_OUT_SIZE
-      );
+      result = OpenGL_RenderReadPixelsSync(renderer, NULL, PIXEL_FORMAT_OUT, screenshot_buffer,
+                                           this_hds->eye_output_width * 2 * RGB_OUT_SIZE);
       if (result != 0) {
          LOG_ERROR("Failed to read pixels: %d", result);
          free(screenshot_buffer);
@@ -414,7 +408,9 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
          .bottom_crop = 0,
          .new_width = new_width,
          .new_height = new_height,
-         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY /* Higher quality for full-res */
+         .format_params.quality = full_resolution
+                                      ? 95
+                                      : SNAPSHOT_QUALITY /* Higher quality for full-res */
       };
 
       result = process_and_save_image(&params);
@@ -492,7 +488,9 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
          .bottom_crop = 0,
          .new_width = new_width,
          .new_height = new_height,
-         .format_params.quality = full_resolution ? 95 : SNAPSHOT_QUALITY /* Higher quality for full-res */
+         .format_params.quality = full_resolution
+                                      ? 95
+                                      : SNAPSHOT_QUALITY /* Higher quality for full-res */
       };
 
       result = process_and_save_image(&params);
@@ -518,27 +516,26 @@ int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, c
  * Takes a snapshot for AI processing and saves it to disk.
  */
 void trigger_snapshot(const char *datetime) {
-    hud_display_settings *this_hds = get_hud_display_settings();
-    char snapshot_path[PATH_MAX+29];
+   hud_display_settings *this_hds = get_hud_display_settings();
+   char snapshot_path[PATH_MAX + 29];
 
-    /* Generate fresh timestamp if none was provided */
-    char fresh_datetime[16];
-    if (datetime == NULL || datetime[0] == '\0') {
-        time_t r_time;
-        struct tm *l_time = NULL;
+   /* Generate fresh timestamp if none was provided */
+   char fresh_datetime[16];
+   if (datetime == NULL || datetime[0] == '\0') {
+      time_t r_time;
+      struct tm *l_time = NULL;
 
-        time(&r_time);
-        l_time = localtime(&r_time);
-        strftime(fresh_datetime, sizeof(fresh_datetime), "%Y%m%d_%H%M%S", l_time);
-        datetime = fresh_datetime;
-    }
+      time(&r_time);
+      l_time = localtime(&r_time);
+      strftime(fresh_datetime, sizeof(fresh_datetime), "%Y%m%d_%H%M%S", l_time);
+      datetime = fresh_datetime;
+   }
 
-    /* Format the filename with the timestamp */
-    snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot-%s.jpg",
-            record_path, datetime);
+   /* Format the filename with the timestamp */
+   snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot-%s.jpg", record_path, datetime);
 
-    /* Queue the screenshot request based on configuration */
-    request_screenshot(this_hds->snapshot_overlay, 0, snapshot_path, SCREENSHOT_MQTT);
+   /* Queue the screenshot request based on configuration */
+   request_screenshot(this_hds->snapshot_overlay, 0, snapshot_path, SCREENSHOT_MQTT);
 }
 
 /**
@@ -550,8 +547,7 @@ void mqttViewingSnapshot(const char *filename) {
 
    /* Construct the MQTT command with the snapshot filename */
    snprintf(mqtt_command, sizeof(mqtt_command),
-      "{ \"device\": \"viewing\", \"action\": \"completed\", \"value\": \"%s\" }",
-      filename);
+            "{ \"device\": \"viewing\", \"action\": \"completed\", \"value\": \"%s\" }", filename);
    LOG_INFO("Sending: %s", mqtt_command);
 
    mqttSendMessage("dawn", mqtt_command);
@@ -563,72 +559,71 @@ void mqttViewingSnapshot(const char *filename) {
  * requested parameters and clears the request flag.
  */
 void process_screenshot_requests(int no_camera_mode) {
-    pthread_mutex_lock(&g_screenshot_mutex);
+   pthread_mutex_lock(&g_screenshot_mutex);
 
-    if (g_screenshot_requested) {
-        int with_overlay = g_screenshot_with_overlay;
-        int full_resolution = (g_screenshot_requested & 2) ? 1 : 0;
-        screenshot_t source = g_screenshot_source;
-        char output_path[PATH_MAX+31];
+   if (g_screenshot_requested) {
+      int with_overlay = g_screenshot_with_overlay;
+      int full_resolution = (g_screenshot_requested & 2) ? 1 : 0;
+      screenshot_t source = g_screenshot_source;
+      char output_path[PATH_MAX + 31];
 
-        /* Copy the path to a local variable */
-        if (g_screenshot_path[0] != '\0') {
-            strncpy(output_path, g_screenshot_path, sizeof(output_path) - 1);
-            output_path[sizeof(output_path) - 1] = '\0';
+      /* Copy the path to a local variable */
+      if (g_screenshot_path[0] != '\0') {
+         strncpy(output_path, g_screenshot_path, sizeof(output_path) - 1);
+         output_path[sizeof(output_path) - 1] = '\0';
 
-            /* For MQTT requests, ensure the timestamp is current by updating
-               the filename if it starts with "snapshot-" */
-            if (source == SCREENSHOT_MQTT && strstr(output_path, "/snapshot-") != NULL) {
-                char *base_path = strdup(output_path);
-                char *timestamp_part = strstr(base_path, "/snapshot-");
-                if (timestamp_part) {
-                    *timestamp_part = '\0'; /* Truncate at /snapshot- */
+         /* For MQTT requests, ensure the timestamp is current by updating
+            the filename if it starts with "snapshot-" */
+         if (source == SCREENSHOT_MQTT && strstr(output_path, "/snapshot-") != NULL) {
+            char *base_path = strdup(output_path);
+            char *timestamp_part = strstr(base_path, "/snapshot-");
+            if (timestamp_part) {
+               *timestamp_part = '\0'; /* Truncate at /snapshot- */
 
-                    /* Generate a fresh timestamp */
-                    time_t r_time;
-                    struct tm *l_time = NULL;
-                    char datetime[16];
+               /* Generate a fresh timestamp */
+               time_t r_time;
+               struct tm *l_time = NULL;
+               char datetime[16];
 
-                    time(&r_time);
-                    l_time = localtime(&r_time);
-                    strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+               time(&r_time);
+               l_time = localtime(&r_time);
+               strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
 
-                    /* Recreate filename with fresh timestamp */
-                    snprintf(output_path, sizeof(output_path), "%s/snapshot-%s.jpg",
-                            base_path, datetime);
-                }
-                free(base_path);
+               /* Recreate filename with fresh timestamp */
+               snprintf(output_path, sizeof(output_path), "%s/snapshot-%s.jpg", base_path,
+                        datetime);
             }
-        } else {
-            /* Generate a filename with timestamp */
-            time_t r_time;
-            struct tm *l_time = NULL;
-            char datetime[16];
+            free(base_path);
+         }
+      } else {
+         /* Generate a filename with timestamp */
+         time_t r_time;
+         struct tm *l_time = NULL;
+         char datetime[16];
 
-            time(&r_time);
-            l_time = localtime(&r_time);
-            strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
+         time(&r_time);
+         l_time = localtime(&r_time);
+         strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
 
-            snprintf(output_path, sizeof(output_path), "%s/screenshot-%s.jpg",
-                    record_path, datetime);
-        }
+         snprintf(output_path, sizeof(output_path), "%s/screenshot-%s.jpg", record_path, datetime);
+      }
 
-        /* Clear the request flag before taking the screenshot */
-        g_screenshot_requested = 0;
-        g_screenshot_path[0] = '\0';
-        g_screenshot_source = SCREENSHOT_MANUAL;
+      /* Clear the request flag before taking the screenshot */
+      g_screenshot_requested = 0;
+      g_screenshot_path[0] = '\0';
+      g_screenshot_source = SCREENSHOT_MANUAL;
 
-        pthread_mutex_unlock(&g_screenshot_mutex);
+      pthread_mutex_unlock(&g_screenshot_mutex);
 
-        /* Now take the screenshot from the main thread where OpenGL context is valid */
-        int result = take_screenshot(with_overlay, no_camera_mode, full_resolution, output_path);
+      /* Now take the screenshot from the main thread where OpenGL context is valid */
+      int result = take_screenshot(with_overlay, no_camera_mode, full_resolution, output_path);
 
-        /* Send notification if it was an MQTT request */
-        if (source == SCREENSHOT_MQTT && result == 0) {
-           LOG_INFO("Screenshot for MQTT. Sending...");
-           mqttViewingSnapshot(output_path);
-        }
-    } else {
-        pthread_mutex_unlock(&g_screenshot_mutex);
-    }
+      /* Send notification if it was an MQTT request */
+      if (source == SCREENSHOT_MQTT && result == 0) {
+         LOG_INFO("Screenshot for MQTT. Sending...");
+         mqttViewingSnapshot(output_path);
+      }
+   } else {
+      pthread_mutex_unlock(&g_screenshot_mutex);
+   }
 }

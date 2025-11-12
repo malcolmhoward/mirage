@@ -144,4 +144,3 @@ float get_sim_boost(void);
 float get_sim_throttle(void);
 
 #endif /* SIM_DATA_H */
-

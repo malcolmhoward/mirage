@@ -29,7 +29,7 @@ typedef struct _hud_display_settings {
    int cam_input_width;
    int cam_input_height;
    int cam_input_fps;
-   long cam_frame_duration;   /* The duration of a single frame. */
+   long cam_frame_duration; /* The duration of a single frame. */
 
    int cam_crop_width;
    int cam_crop_x;
@@ -37,11 +37,11 @@ typedef struct _hud_display_settings {
    int eye_output_width;
    int eye_output_height;
 
-   int stereo_offset;         /* Offset to adjust stereo perception of UI elements.
-                               * This offsets to the left or right accordingly on each eye. */
-   double pitch_offset;       /* Often the helmet sensor isn't in line with the level of the
-                               * helmet. This adjusts that. */
-   int snapshot_overlay;      /* Whether to include UI overlay in AI snapshots */
+   int stereo_offset;    /* Offset to adjust stereo perception of UI elements.
+                          * This offsets to the left or right accordingly on each eye. */
+   double pitch_offset;  /* Often the helmet sensor isn't in line with the level of the
+                          * helmet. This adjusts that. */
+   int snapshot_overlay; /* Whether to include UI overlay in AI snapshots */
 } hud_display_settings;
 
 hud_display_settings *get_hud_display_settings(void);
@@ -57,9 +57,9 @@ stream_settings *get_stream_settings(void);
 
 /* Variables for the armor components */
 typedef struct _armor_settings {
-   element *armor_elements;      /* A special element list for armor components. */
-   time_t armor_deregister;      /* How long can we go without seeing an MQTT message from an armor
-                                  * element before we say it's missing? */
+   element *armor_elements; /* A special element list for armor components. */
+   time_t armor_deregister; /* How long can we go without seeing an MQTT message from an armor
+                             * element before we say it's missing? */
 } armor_settings;
 
 armor_settings *get_armor_settings(void);
@@ -81,4 +81,4 @@ int set_inv_compass(int inv);
 
 int get_snapshot_overlay(void);
 
-#endif // CONFIG_MANAGER_H
+#endif  // CONFIG_MANAGER_H

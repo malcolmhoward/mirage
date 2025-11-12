@@ -27,7 +27,7 @@
 
 // The following defines the default *LOG* window dimensions.
 // These were just what I needed but they're dependant on the graphics.
-#define DEFAULT_LOG_WIDTH  615
+#define DEFAULT_LOG_WIDTH 615
 #define DEFAULT_LOG_HEIGHT 345
 
 /* Basic element rendering functions */

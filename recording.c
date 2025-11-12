@@ -20,31 +20,32 @@
  */
 
 #define _GNU_SOURCE
+#include "recording.h"
+
+#include <SDL2/SDL.h>
+#include <glib-2.0/glib.h>
+#include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
+#include <gst/gst.h>
+#include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/time.h>
-#include <pthread.h>
 #include <sys/types.h>
-#include <limits.h>
-#include <glib-2.0/glib.h>
-#include <gst/gst.h>
-#include <gst/app/gstappsink.h>
-#include <gst/app/gstappsrc.h>
-#include <SDL2/SDL.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "config_manager.h"
 #include "defines.h"
 #include "logging.h"
-#include "recording.h"
 #include "secrets.h"
 #include "utils.h"
 
 /* Static (internal) variables */
-static int feed_me = 0;             /* Control the feeding of the encoding thread */
-static pthread_t vid_out_thread = 0; /* Thread ID for video output */
+static int feed_me = 0;                  /* Control the feeding of the encoding thread */
+static pthread_t vid_out_thread = 0;     /* Thread ID for video output */
 static char record_path[PATH_MAX] = "."; /* Path for saving recordings */
 #define NSEC_PER_SEC 1000000000L
 
@@ -57,17 +58,15 @@ void rotate_triple_buffer_indices(video_out_data *vod) {
 }
 
 /* Global video output data structure */
-static video_out_data this_vod = {
-   .output = DISABLED,
-   .buffer_num = 0,
-   .read_index = 2,
-   .write_index = 1,
-   .pipeline = NULL,
-   .rgb_out_pixels = {NULL, NULL, NULL},
-   .filename = "",
-   .started = 0,
-   .outfile = NULL
-};
+static video_out_data this_vod = { .output = DISABLED,
+                                   .buffer_num = 0,
+                                   .read_index = 2,
+                                   .write_index = 1,
+                                   .pipeline = NULL,
+                                   .rgb_out_pixels = { NULL, NULL, NULL },
+                                   .filename = "",
+                                   .started = 0,
+                                   .outfile = NULL };
 
 /* Initialize the p_mutex in video_out_data at program start */
 void init_video_out_data(void) {
@@ -138,13 +137,13 @@ void cleanup_pipeline(GstElement *pipeline, GstElement *srcEncode, GstBus *bus) 
    if (srcEncode) {
       // Disconnect signal handlers if they were connected
       gulong need_data_id = g_signal_handler_find(srcEncode, G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
-                                               G_CALLBACK(start_feed), NULL);
+                                                  G_CALLBACK(start_feed), NULL);
       if (need_data_id > 0) {
          g_signal_handler_disconnect(srcEncode, need_data_id);
       }
 
       gulong enough_data_id = g_signal_handler_find(srcEncode, G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
-                                                 G_CALLBACK(stop_feed), NULL);
+                                                    G_CALLBACK(stop_feed), NULL);
       if (enough_data_id > 0) {
          g_signal_handler_disconnect(srcEncode, enough_data_id);
       }
@@ -167,8 +166,7 @@ void cleanup_pipeline(GstElement *pipeline, GstElement *srcEncode, GstBus *bus) 
 /**
  * Sets the recording/streaming state of the application.
  */
-void set_recording_state(DestinationType state)
-{
+void set_recording_state(DestinationType state) {
    video_out_data *this_vod = get_video_out_data();
 
    if (state == DISABLED && this_vod->output != DISABLED) {
@@ -182,7 +180,7 @@ void set_recording_state(DestinationType state)
       if (thread != 0) {
          struct timespec timeout;
          clock_gettime(CLOCK_REALTIME, &timeout);
-         timeout.tv_sec += 5;  /* 5 second timeout */
+         timeout.tv_sec += 5; /* 5 second timeout */
 
          int result = pthread_timedjoin_np(thread, NULL, &timeout);
          if (result == ETIMEDOUT) {
@@ -286,9 +284,8 @@ static gboolean bus_message_handler(GstBus *bus, GstMessage *message, gpointer d
             GstState old_state, new_state, pending_state;
             gst_message_parse_state_changed(message, &old_state, &new_state, &pending_state);
             LOG_INFO("Pipeline state changed from %s to %s, pending: %s",
-                    gst_element_state_get_name(old_state),
-                    gst_element_state_get_name(new_state),
-                    gst_element_state_get_name(pending_state));
+                     gst_element_state_get_name(old_state), gst_element_state_get_name(new_state),
+                     gst_element_state_get_name(pending_state));
          }
          break;
       }
@@ -304,11 +301,10 @@ static gboolean bus_message_handler(GstBus *bus, GstMessage *message, gpointer d
          break;
       default:
          /* Log the message type name for debugging */
-         LOG_INFO("Unhandled GStreamer message type: %s from %s",
-                GST_MESSAGE_TYPE_NAME(message),
-                GST_OBJECT_NAME(GST_MESSAGE_SRC(message)));
+         LOG_INFO("Unhandled GStreamer message type: %s from %s", GST_MESSAGE_TYPE_NAME(message),
+                  GST_OBJECT_NAME(GST_MESSAGE_SRC(message)));
          break;
-      break;
+         break;
    }
 
    return TRUE;
@@ -362,31 +358,28 @@ void *video_next_thread(void *arg) {
    strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
 
 #ifdef MKV_OUT
-   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mkv", record_path, datetime);
+   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mkv", record_path,
+            datetime);
 #else
-   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mp4", record_path, datetime);
+   snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mp4", record_path,
+            datetime);
 #endif
 
    /* Build pipeline description based on output type */
    if (this_vod.output == RECORD_STREAM) {
       LOG_INFO("New recording: %s", this_vod.filename);
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE,
-                 window_width, window_height, TARGET_RECORDING_FPS,
-                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE,
-                 this_vod.filename,
-                 YOUTUBE_STREAM_KEY);
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE, window_width, window_height,
+                 TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
+                 RECORD_PULSE_AUDIO_DEVICE, this_vod.filename, YOUTUBE_STREAM_KEY);
    } else if (this_vod.output == RECORD) {
       LOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, RECORD_PULSE_AUDIO_DEVICE, this_vod.filename);
       LOG_INFO("descr: %s", descr);
    } else if (this_vod.output == STREAM) {
-      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE,
-                 window_width, window_height, TARGET_RECORDING_FPS,
-                 STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE,
-                 YOUTUBE_STREAM_KEY);
+      g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE, window_width, window_height,
+                 TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
+                 RECORD_PULSE_AUDIO_DEVICE, YOUTUBE_STREAM_KEY);
    } else {
       LOG_ERROR("Invalid destination passed.");
       this_vod.output = DISABLED;
@@ -415,7 +408,7 @@ void *video_next_thread(void *arg) {
 
    // Enable latency adjustment for better AV sync
    gst_pipeline_set_auto_flush_bus(GST_PIPELINE(pipeline), TRUE);
-   gst_pipeline_set_latency(GST_PIPELINE(pipeline), 100 * GST_MSECOND); // Adjust latency as needed
+   gst_pipeline_set_latency(GST_PIPELINE(pipeline), 100 * GST_MSECOND);  // Adjust latency as needed
 
    // Add clock management for better AV sync
    GstClock *system_clock = gst_system_clock_obtain();
@@ -449,38 +442,39 @@ void *video_next_thread(void *arg) {
    }
 
    /* Set the caps on the source */
-   caps = gst_caps_new_simple("video/x-raw",
-      "bpp", G_TYPE_INT, 32,
-      "depth", G_TYPE_INT, 32,
-      "width", G_TYPE_INT, window_width,
-      "height", G_TYPE_INT, window_height,
-      NULL);
+   caps = gst_caps_new_simple("video/x-raw", "bpp", G_TYPE_INT, 32, "depth", G_TYPE_INT, 32,
+                              "width", G_TYPE_INT, window_width, "height", G_TYPE_INT,
+                              window_height, NULL);
 
    gst_app_src_set_caps(GST_APP_SRC(srcEncode), caps);
    gst_caps_unref(caps);
 
    // Configure appsrc properties
    g_object_set(G_OBJECT(srcEncode),
-      // Basic properties
-      "is-live", TRUE,                  // Mark as a live source
-      "format", GST_FORMAT_TIME,        // Use time format for buffers
-      "do-timestamp", TRUE,             // Add timestamps to buffers
+                // Basic properties
+                "is-live",
+                TRUE,  // Mark as a live source
+                "format",
+                GST_FORMAT_TIME,  // Use time format for buffers
+                "do-timestamp",
+                TRUE,  // Add timestamps to buffers
 
-      // Stream configuration
-      "stream-type", GST_APP_STREAM_TYPE_STREAM, // Continuous stream of buffers
+                // Stream configuration
+                "stream-type",
+                GST_APP_STREAM_TYPE_STREAM,  // Continuous stream of buffers
 
-      // Flow control
-      "emit-signals", TRUE,             // Emit signals for flow control
+                // Flow control
+                "emit-signals",
+                TRUE,  // Emit signals for flow control
 
-      NULL);
+                NULL);
 
    state_ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
    if (state_ret == GST_STATE_CHANGE_FAILURE) {
       LOG_ERROR("Failed to set pipeline to PLAYING state");
       cleanup_pipeline(pipeline, srcEncode, bus);
       return NULL;
-   }
-   else if (state_ret == GST_STATE_CHANGE_ASYNC) {
+   } else if (state_ret == GST_STATE_CHANGE_ASYNC) {
       LOG_INFO("Pipeline state change is ASYNC - waiting for data...");
    }
 
@@ -517,8 +511,9 @@ void *video_next_thread(void *arg) {
                GstClockTime pts = gst_clock_get_time(pipeline_clock) - base_time;
 
                GST_BUFFER_PTS(buffer) = pts;
-               GST_BUFFER_DTS(buffer) = pts;  /* Set DTS same as PTS */
-               GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND, TARGET_RECORDING_FPS);
+               GST_BUFFER_DTS(buffer) = pts; /* Set DTS same as PTS */
+               GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale(1, GST_SECOND,
+                                                                   TARGET_RECORDING_FPS);
                GST_BUFFER_OFFSET(buffer) = count++;
 
                /* Push buffer */
@@ -541,7 +536,7 @@ void *video_next_thread(void *arg) {
       /* Keep your existing timing code */
       clock_gettime(CLOCK_MONOTONIC, &end_time);
       processing_time_ns = (end_time.tv_sec - start_time.tv_sec) * NSEC_PER_SEC +
-                          (end_time.tv_nsec - start_time.tv_nsec);
+                           (end_time.tv_nsec - start_time.tv_nsec);
       delay_time_ns = TARGET_RECORDING_FRAME_DURATION_US * 1000L - processing_time_ns;
 
       if (delay_time_ns > 0) {
@@ -567,13 +562,13 @@ void *video_next_thread(void *arg) {
          /* Signal main thread to restart */
          set_recording_state(orig_output);
 
-         break;  /* Exit this thread, new one will be created */
+         break; /* Exit this thread, new one will be created */
       }
    }
 
    LOG_INFO("Shutting down pipeline");
    this_vod.started = 0;
-   
+
    // Send EOS and wait for it to propagate
    LOG_INFO("Sending EOS to pipeline");
    if (srcEncode) {
@@ -596,4 +591,3 @@ void *video_next_thread(void *arg) {
 
    return NULL;
 }
-

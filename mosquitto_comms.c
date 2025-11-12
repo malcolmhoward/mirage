@@ -19,30 +19,28 @@
  * part of the project and are adopted by the project author(s).
  */
 
-#include <stdio.h>
 #include <mosquitto.h>
+#include <stdio.h>
 
-#include "defines.h"
 #include "armor.h"
 #include "command_processing.h"
-#include "config_parser.h"
 #include "config_manager.h"
+#include "config_parser.h"
+#include "defines.h"
 #include "logging.h"
 
 /* Mosquitto STUFF */
 /* Callback called when the client receives a CONNACK message from the broker. */
-void on_connect(struct mosquitto *mosq, void *obj, int reason_code)
-{
+void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
    int rc;
    armor_settings *this_as = get_armor_settings();
    element *this_element = this_as->armor_elements;
 
-   if (this_as->armor_elements == NULL)
-   {
+   if (this_as->armor_elements == NULL) {
       return;
    }
 
-   if(reason_code != 0){
+   if (reason_code != 0) {
       mosquitto_disconnect(mosq);
       return;
    }
@@ -51,19 +49,19 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code)
 
    // Subscribe to the main hud service
    rc = mosquitto_subscribe(mosq, NULL, "hud", 1);
-   if(rc != MOSQ_ERR_SUCCESS){
+   if (rc != MOSQ_ERR_SUCCESS) {
       LOG_ERROR("Error subscribing to hud: %s", mosquitto_strerror(rc));
    }
 
    // Subscribe to the helmet topic for faceplate control
    rc = mosquitto_subscribe(mosq, NULL, "helmet", 1);
-   if(rc != MOSQ_ERR_SUCCESS){
+   if (rc != MOSQ_ERR_SUCCESS) {
       LOG_ERROR("Error subscribing to helmet: %s", mosquitto_strerror(rc));
    }
 
    // Subscribe to the stat topic for system metrics
    rc = mosquitto_subscribe(mosq, NULL, "stat", 1);
-   if(rc != MOSQ_ERR_SUCCESS) {
+   if (rc != MOSQ_ERR_SUCCESS) {
       LOG_ERROR("Error on subscribing to stat topic: %s", mosquitto_strerror(rc));
    }
 
@@ -71,7 +69,7 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code)
    while (this_element != NULL) {
       LOG_INFO(" %s\n", this_element->mqtt_device);
       rc = mosquitto_subscribe(mosq, NULL, this_element->mqtt_device, 1);
-      if(rc != MOSQ_ERR_SUCCESS){
+      if (rc != MOSQ_ERR_SUCCESS) {
          LOG_ERROR("Error subscribing: %s", mosquitto_strerror(rc));
       }
 
@@ -80,25 +78,27 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code)
 }
 
 /* Callback called when the broker sends a SUBACK in response to a SUBSCRIBE. */
-void on_subscribe(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos)
-{
-	int i;
-	bool have_subscription = false;
+void on_subscribe(struct mosquitto *mosq,
+                  void *obj,
+                  int mid,
+                  int qos_count,
+                  const int *granted_qos) {
+   int i;
+   bool have_subscription = false;
 
-	for(i=0; i<qos_count; i++){
-		if(granted_qos[i] <= 2){
-			have_subscription = true;
-		}
-	}
-	if(have_subscription == false){
-		LOG_ERROR("Error: All subscriptions rejected.");
-		mosquitto_disconnect(mosq);
-	}
+   for (i = 0; i < qos_count; i++) {
+      if (granted_qos[i] <= 2) {
+         have_subscription = true;
+      }
+   }
+   if (have_subscription == false) {
+      LOG_ERROR("Error: All subscriptions rejected.");
+      mosquitto_disconnect(mosq);
+   }
 }
 
 /* Callback called when the client receives a message. */
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg)
-{
+void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
    // Properly null-terminate the payload to pass around.
    char *payload = malloc(msg->payloadlen + 1);
    if (!payload) {
@@ -130,5 +130,3 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    free(payload);
 }
 /* End Mosquitto Stuff */
-
-

@@ -31,14 +31,14 @@
 
 /* Serial Port */
 #include <sys/ioctl.h>
-#include <termios.h>
 #include <sys/select.h>
+#include <termios.h>
 
-#include "defines.h"
 #include "armor.h"
 #include "audio.h"
 #include "command_processing.h"
 #include "config_manager.h"
+#include "defines.h"
 #include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
@@ -65,19 +65,17 @@ unsigned int get_log_generation(void) {
 
 // Serial port state management structure
 typedef struct {
-   int fd;                  // File descriptor for the serial port
-   int enabled;             // Whether serial is enabled
-   char port[24];           // Port name
-   pthread_mutex_t mutex;   // Mutex for thread-safe access
+   int fd;                 // File descriptor for the serial port
+   int enabled;            // Whether serial is enabled
+   char port[24];          // Port name
+   pthread_mutex_t mutex;  // Mutex for thread-safe access
 } serial_state_t;
 
 // Global instance with proper initialization
-static serial_state_t serial_state = {
-   .fd = -1,
-   .enabled = 0,
-   .port = "",
-   .mutex = PTHREAD_MUTEX_INITIALIZER
-};
+static serial_state_t serial_state = { .fd = -1,
+                                       .enabled = 0,
+                                       .port = "",
+                                       .mutex = PTHREAD_MUTEX_INITIALIZER };
 
 /**
  * Checks if serial communication is enabled
@@ -113,16 +111,16 @@ void serial_set_state(int enabled, const char *port, int fd) {
    pthread_mutex_lock(&serial_state.mutex);
 
    if (enabled >= 0) {
-       serial_state.enabled = enabled;
+      serial_state.enabled = enabled;
    }
 
    if (port != NULL) {
-       strncpy(serial_state.port, port, sizeof(serial_state.port) - 1);
-       serial_state.port[sizeof(serial_state.port) - 1] = '\0';
+      strncpy(serial_state.port, port, sizeof(serial_state.port) - 1);
+      serial_state.port[sizeof(serial_state.port) - 1] = '\0';
    }
 
    if (fd >= 0 || fd == -1) {  // Allow setting to -1 to indicate invalid
-       serial_state.fd = fd;
+      serial_state.fd = fd;
    }
 
    pthread_mutex_unlock(&serial_state.mutex);
@@ -141,8 +139,7 @@ void serial_get_port(char *buffer, size_t size) {
 }
 
 /* Parse commands specifically from the "stat" topic. */
-int parse_stat_command(char *command_string)
-{
+int parse_stat_command(char *command_string) {
    /* Parse JSON message */
    struct json_object *parsed_json = json_tokener_parse(command_string);
    if (parsed_json == NULL) {
@@ -181,8 +178,7 @@ int parse_stat_command(char *command_string)
          system_metrics.memory_update_time = current_time;
          system_metrics.memory_available = true;
       }
-   }
-   else if (strcmp(device_type, "Fan") == 0) {
+   } else if (strcmp(device_type, "Fan") == 0) {
       struct json_object *rpm_obj = NULL;
       struct json_object *load_obj = NULL;
 
@@ -200,7 +196,8 @@ int parse_stat_command(char *command_string)
    /* Note: We could process both Battery and BatteryStatus messages but it would take storing the
     * hierarchy of these devices. It's a scope I didn't want to have to worry about and don't really
     * need at this point. With that being said, some of the framework is here. */
-   /* else if (strcmp(device_type, "Battery") == 0 || strcmp(device_type, "BatteryStatus") == 0) { */
+   /* else if (strcmp(device_type, "Battery") == 0 || strcmp(device_type, "BatteryStatus") == 0) {
+    */
    else if (strcmp(device_type, "BatteryStatus") == 0) {
       struct json_object *obj = NULL;
 
@@ -237,13 +234,15 @@ int parse_stat_command(char *command_string)
 
       if (json_object_object_get_ex(parsed_json, "time_remaining_fmt", &obj)) {
          const char *time_fmt = json_object_get_string(obj);
-         strncpy(system_metrics.time_remaining_fmt, time_fmt, sizeof(system_metrics.time_remaining_fmt) - 1);
+         strncpy(system_metrics.time_remaining_fmt, time_fmt,
+                 sizeof(system_metrics.time_remaining_fmt) - 1);
          system_metrics.time_remaining_fmt[sizeof(system_metrics.time_remaining_fmt) - 1] = '\0';
       }
 
       if (json_object_object_get_ex(parsed_json, "battery_chemistry", &obj)) {
          const char *chemistry = json_object_get_string(obj);
-         strncpy(system_metrics.battery_chemistry, chemistry, sizeof(system_metrics.battery_chemistry) - 1);
+         strncpy(system_metrics.battery_chemistry, chemistry,
+                 sizeof(system_metrics.battery_chemistry) - 1);
          system_metrics.battery_chemistry[sizeof(system_metrics.battery_chemistry) - 1] = '\0';
       }
 
@@ -289,7 +288,6 @@ int parse_stat_command(char *command_string)
          /* Parse critical faults */
          if (json_object_object_get_ex(parsed_json, "critical_faults", &fault_array) &&
              json_object_is_type(fault_array, json_type_array)) {
-
             int fault_count = json_object_array_length(fault_array);
             fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
 
@@ -312,7 +310,6 @@ int parse_stat_command(char *command_string)
          /* Parse warning faults */
          if (json_object_object_get_ex(parsed_json, "warning_faults", &fault_array) &&
              json_object_is_type(fault_array, json_type_array)) {
-
             int fault_count = json_object_array_length(fault_array);
             fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
 
@@ -335,7 +332,6 @@ int parse_stat_command(char *command_string)
          /* Parse info faults */
          if (json_object_object_get_ex(parsed_json, "info_faults", &fault_array) &&
              json_object_is_type(fault_array, json_type_array)) {
-
             int fault_count = json_object_array_length(fault_array);
             fault_count = fault_count > MAX_FAULT_COUNT ? MAX_FAULT_COUNT : fault_count;
 
@@ -390,8 +386,7 @@ int parse_stat_command(char *command_string)
 }
 
 /* Parse the JSON "commands" that come over serial/USB or MQTT. */
-int parse_json_command(char *command_string, char *topic)
-{
+int parse_json_command(char *command_string, char *topic) {
    if (command_string == NULL || topic == NULL) {
       LOG_ERROR("Invalid parameters: command_string or topic is NULL");
       return FAILURE;
@@ -437,7 +432,7 @@ int parse_json_command(char *command_string, char *topic)
    /* Check if command_string starts with '{' to validate it's JSON */
    if (command_string[0] != '{') {
       LOG_INFO("Non-JSON debug message received: %s", command_string);
-      return SUCCESS;  /* Exit gracefully for debug messages */
+      return SUCCESS; /* Exit gracefully for debug messages */
    }
 
    parsed_json = json_tokener_parse(command_string);
@@ -471,7 +466,8 @@ int parse_json_command(char *command_string, char *topic)
                      // Get the sensor heading value
                      double raw_heading = json_object_get_double(tmpobj);
 
-                     // If we get a negative value, convert from -180 to +180 range to 0 to 360 range
+                     // If we get a negative value, convert from -180 to +180 range to 0 to 360
+                     // range
                      if (raw_heading < 0) {
                         raw_heading += 360.0;
                      }
@@ -515,8 +511,11 @@ int parse_json_command(char *command_string, char *topic)
             if (json_object_object_get_ex(parsed_json, "air_quality_description", &tmpobj)) {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr != NULL) {
-                  strncpy(this_enviro->air_quality_description, tmpstr, sizeof(this_enviro->air_quality_description) - 1);
-                  this_enviro->air_quality_description[sizeof(this_enviro->air_quality_description) - 1] = '\0'; /* Ensure null termination */
+                  strncpy(this_enviro->air_quality_description, tmpstr,
+                          sizeof(this_enviro->air_quality_description) - 1);
+                  this_enviro
+                      ->air_quality_description[sizeof(this_enviro->air_quality_description) - 1] =
+                      '\0'; /* Ensure null termination */
                }
             }
 
@@ -536,8 +535,11 @@ int parse_json_command(char *command_string, char *topic)
             if (json_object_object_get_ex(parsed_json, "co2_quality", &tmpobj)) {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr != NULL) {
-                  strncpy(this_enviro->co2_quality_description, tmpstr, sizeof(this_enviro->co2_quality_description) - 1);
-                  this_enviro->co2_quality_description[sizeof(this_enviro->co2_quality_description) - 1] = '\0';
+                  strncpy(this_enviro->co2_quality_description, tmpstr,
+                          sizeof(this_enviro->co2_quality_description) - 1);
+                  this_enviro
+                      ->co2_quality_description[sizeof(this_enviro->co2_quality_description) - 1] =
+                      '\0';
                }
             }
 
@@ -548,8 +550,10 @@ int parse_json_command(char *command_string, char *topic)
             if (json_object_object_get_ex(parsed_json, "co2_source_analysis", &tmpobj)) {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr != NULL) {
-                  strncpy(this_enviro->co2_source_analysis, tmpstr, sizeof(this_enviro->co2_source_analysis) - 1);
-                  this_enviro->co2_source_analysis[sizeof(this_enviro->co2_source_analysis) - 1] = '\0';
+                  strncpy(this_enviro->co2_source_analysis, tmpstr,
+                          sizeof(this_enviro->co2_source_analysis) - 1);
+                  this_enviro->co2_source_analysis[sizeof(this_enviro->co2_source_analysis) - 1] =
+                      '\0';
                }
             }
 
@@ -717,7 +721,7 @@ int parse_json_command(char *command_string, char *topic)
                      // Get zoom value
                      if (json_object_object_get_ex(parsed_json, "value", &tmpobj)) {
                         float zoom_value = json_object_get_int(tmpobj);
-                        element* map_elem = find_map_element();
+                        element *map_elem = find_map_element();
                         if (map_elem && zoom_value > 0) {
                            map_elem->map_zoom = zoom_value;
                            map_elem->force_refresh = 1;
@@ -727,7 +731,7 @@ int parse_json_command(char *command_string, char *topic)
                      // Get map type
                      if (json_object_object_get_ex(parsed_json, "value", &tmpobj)) {
                         const char *maptype_str = json_object_get_string(tmpobj);
-                        element* map_elem = find_map_element();
+                        element *map_elem = find_map_element();
 
                         if (map_elem) {
                            // Convert string to enum
@@ -801,8 +805,7 @@ int parse_json_command(char *command_string, char *topic)
                         if (!strcmp(current_element->name, tmpstr)) {
                            if (!alreadySpoke) {
                               snprintf(text, sizeof(text) - 1, "%s %s display.",
-                                       enabled ? "Enabling" : "Disabling",
-                                       current_element->name);
+                                       enabled ? "Enabling" : "Disabling", current_element->name);
                               text[sizeof(text) - 1] = '\0';
                               mqttTextToSpeech(text);
                               alreadySpoke++;
@@ -835,12 +838,13 @@ int parse_json_command(char *command_string, char *topic)
                                     if (target != NULL) {
                                        switch_to_hud(target, target->transition_type);
 
-                                       snprintf(temp_msg, sizeof(temp_msg) - 1, "Switched to %s hud.", hudName);
+                                       snprintf(temp_msg, sizeof(temp_msg) - 1,
+                                                "Switched to %s hud.", hudName);
                                        temp_msg[sizeof(temp_msg) - 1] = '\0';
                                        mqttTextToSpeech(temp_msg);
                                     } else {
-                                       snprintf(temp_msg, sizeof(temp_msg) - 1, "Requested HUD, \"%s\", not found.",
-                                                hudName);
+                                       snprintf(temp_msg, sizeof(temp_msg) - 1,
+                                                "Requested HUD, \"%s\", not found.", hudName);
                                        temp_msg[sizeof(temp_msg) - 1] = '\0';
                                        mqttTextToSpeech(temp_msg);
                                        LOG_ERROR(temp_msg);
@@ -861,19 +865,26 @@ int parse_json_command(char *command_string, char *topic)
                                  if (target != NULL) {
                                     /* Get transition type */
                                     int transition_type = target->transition_type; /* Default */
-                                    if (json_object_object_get_ex(parsed_json, "transitionType", &tmpobj)) {
+                                    if (json_object_object_get_ex(parsed_json, "transitionType",
+                                                                  &tmpobj)) {
                                        if (tmpobj != NULL) {
                                           if (json_object_get_type(tmpobj) == json_type_string) {
-                                             const char *transition_name = json_object_get_string(tmpobj);
+                                             const char *transition_name = json_object_get_string(
+                                                 tmpobj);
                                              if (transition_name != NULL) {
-                                                transition_type = find_transition_by_name(transition_name);
+                                                transition_type = find_transition_by_name(
+                                                    transition_name);
                                              }
                                           } else {
                                              transition_type = json_object_get_int(tmpobj);
-                                             if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-                                                LOG_WARNING("Invalid transition type %d in JSON command, using default",
+                                             if (transition_type < 0 ||
+                                                 transition_type >= TRANSITION_MAX) {
+                                                LOG_WARNING("Invalid transition type %d in JSON "
+                                                            "command, using default",
                                                             transition_type);
-                                                transition_type = target->transition_type; // Fall back to default
+                                                transition_type =
+                                                    target
+                                                        ->transition_type;  // Fall back to default
                                              }
                                           }
                                        }
@@ -925,8 +936,7 @@ int parse_json_command(char *command_string, char *topic)
 }
 
 /* Append a command we received into raw log buffer. */
-void log_command(char *command)
-{
+void log_command(char *command) {
    strncpy(raw_log[next_log_row], command, LOG_LINE_LENGTH);
    next_log_row++;
    if (next_log_row >= LOG_ROWS) {
@@ -944,74 +954,74 @@ void log_command(char *command)
  * @return 0 on success, -1 on failure
  */
 int serial_port_connect(const char *port_name, speed_t baud_rate, int *fd) {
-    struct termios SerialPortSettings;
+   struct termios SerialPortSettings;
 
-    if (strcmp(port_name, "") == 0) {
-        *fd = fileno(stdin);
-        LOG_INFO("Using stdin for commands instead of serial port");
-        return 0;
-    }
+   if (strcmp(port_name, "") == 0) {
+      *fd = fileno(stdin);
+      LOG_INFO("Using stdin for commands instead of serial port");
+      return 0;
+   }
 
-    // Open the serial port
-    *fd = open(port_name, O_RDWR | O_NOCTTY);
-    if (*fd == -1) {
-        LOG_ERROR("Unable to open serial port %s: %s", port_name, strerror(errno));
-        return -1;
-    }
+   // Open the serial port
+   *fd = open(port_name, O_RDWR | O_NOCTTY);
+   if (*fd == -1) {
+      LOG_ERROR("Unable to open serial port %s: %s", port_name, strerror(errno));
+      return -1;
+   }
 
-    LOG_INFO("Serial port %s opened successfully.", port_name);
+   LOG_INFO("Serial port %s opened successfully.", port_name);
 
-    // Clear all settings
-    memset(&SerialPortSettings, 0, sizeof(SerialPortSettings));
+   // Clear all settings
+   memset(&SerialPortSettings, 0, sizeof(SerialPortSettings));
 
-    // Get current settings
-    if (tcgetattr(*fd, &SerialPortSettings) != 0) {
-        LOG_ERROR("Failed to get port attributes: %s", strerror(errno));
-        LOG_ERROR("Closing port.");
-        close(*fd);
-        return -1;
-    }
+   // Get current settings
+   if (tcgetattr(*fd, &SerialPortSettings) != 0) {
+      LOG_ERROR("Failed to get port attributes: %s", strerror(errno));
+      LOG_ERROR("Closing port.");
+      close(*fd);
+      return -1;
+   }
 
-    // Set input/output baud rate
-    cfsetispeed(&SerialPortSettings, baud_rate);
-    cfsetospeed(&SerialPortSettings, baud_rate);
+   // Set input/output baud rate
+   cfsetispeed(&SerialPortSettings, baud_rate);
+   cfsetospeed(&SerialPortSettings, baud_rate);
 
-    // 8N1 Mode
-    SerialPortSettings.c_cflag &= ~PARENB;    // Disable parity
-    SerialPortSettings.c_cflag &= ~CSTOPB;    // 1 stop bit
-    SerialPortSettings.c_cflag &= ~CSIZE;     // Clear size bits
-    SerialPortSettings.c_cflag |= CS8;        // 8 data bits
+   // 8N1 Mode
+   SerialPortSettings.c_cflag &= ~PARENB;  // Disable parity
+   SerialPortSettings.c_cflag &= ~CSTOPB;  // 1 stop bit
+   SerialPortSettings.c_cflag &= ~CSIZE;   // Clear size bits
+   SerialPortSettings.c_cflag |= CS8;      // 8 data bits
 
-    // Flow control and modem settings
-    SerialPortSettings.c_cflag |= CRTSCTS;    // Enable hardware flow Control
-    SerialPortSettings.c_cflag |= CREAD | CLOCAL; // Enable receiver, ignore modem control lines
-    SerialPortSettings.c_cflag &= ~HUPCL;     // Disable hangup on close
+   // Flow control and modem settings
+   SerialPortSettings.c_cflag |= CRTSCTS;         // Enable hardware flow Control
+   SerialPortSettings.c_cflag |= CREAD | CLOCAL;  // Enable receiver, ignore modem control lines
+   SerialPortSettings.c_cflag &= ~HUPCL;          // Disable hangup on close
 
-    // Raw input mode
-    SerialPortSettings.c_lflag &= ~(ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK);
-    SerialPortSettings.c_iflag = IGNBRK;
+   // Raw input mode
+   SerialPortSettings.c_lflag &= ~(ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK);
+   SerialPortSettings.c_iflag = IGNBRK;
 
-    // Raw output mode
-    SerialPortSettings.c_oflag &= ~(OPOST | ONLCR);
+   // Raw output mode
+   SerialPortSettings.c_oflag &= ~(OPOST | ONLCR);
 
-    // Read timeouts
-    SerialPortSettings.c_cc[VMIN] = 0;       // Return immediately with what's available
-    SerialPortSettings.c_cc[VTIME] = 1;       // 0.1 seconds timeout between bytes
+   // Read timeouts
+   SerialPortSettings.c_cc[VMIN] = 0;   // Return immediately with what's available
+   SerialPortSettings.c_cc[VTIME] = 1;  // 0.1 seconds timeout between bytes
 
-    // Apply settings
-    if (tcsetattr(*fd, TCSANOW, &SerialPortSettings) != 0) {
-        LOG_ERROR("ERROR in setting attributes: %s", strerror(errno));
-        LOG_ERROR("Closing port.");
-        close(*fd);
-        return -1;
-    }
+   // Apply settings
+   if (tcsetattr(*fd, TCSANOW, &SerialPortSettings) != 0) {
+      LOG_ERROR("ERROR in setting attributes: %s", strerror(errno));
+      LOG_ERROR("Closing port.");
+      close(*fd);
+      return -1;
+   }
 
-    tcflush(*fd, TCIOFLUSH);
+   tcflush(*fd, TCIOFLUSH);
 
-    // Short delay to let settings take effect
-    usleep(100000);
+   // Short delay to let settings take effect
+   usleep(100000);
 
-    return 0;
+   return 0;
 }
 
 /**
@@ -1022,292 +1032,293 @@ int serial_port_connect(const char *port_name, speed_t baud_rate, int *fd) {
  * @return NULL on thread completion
  */
 void *serial_command_processing_thread(void *arg) {
-    int sfd = -1;
-    fd_set read_fds;
-    struct timeval timeout, read_timeout;
-    char sread_buf[MAX_SERIAL_BUFFER_LENGTH];
-    char *usb_port = (char *)arg;
+   int sfd = -1;
+   fd_set read_fds;
+   struct timeval timeout, read_timeout;
+   char sread_buf[MAX_SERIAL_BUFFER_LENGTH];
+   char *usb_port = (char *)arg;
 
-    /* Command buffering */
-    char command_buffer[MAX_SERIAL_BUFFER_LENGTH];
-    int command_length = 0;
+   /* Command buffering */
+   char command_buffer[MAX_SERIAL_BUFFER_LENGTH];
+   int command_length = 0;
 
-    /* Watchdog and reconnection settings */
-    time_t last_successful_read = 0;
-    int watchdog_timeout_sec = 10; // Consider device dead after 10 sec without data
-    int reconnect_attempts = 0;
-    int max_reconnect_delay = 30; // Max seconds between reconnection attempts
-    speed_t serial_speed = B115200;
+   /* Watchdog and reconnection settings */
+   time_t last_successful_read = 0;
+   int watchdog_timeout_sec = 10;  // Consider device dead after 10 sec without data
+   int reconnect_attempts = 0;
+   int max_reconnect_delay = 30;  // Max seconds between reconnection attempts
+   speed_t serial_speed = B115200;
 
-    /* Initialize command buffer */
-    command_buffer[0] = '\0';
-    memset(raw_log, '\0', LOG_ROWS * LOG_LINE_LENGTH);
+   /* Initialize command buffer */
+   command_buffer[0] = '\0';
+   memset(raw_log, '\0', LOG_ROWS * LOG_LINE_LENGTH);
 
-    /* Initial connection */
-    if (serial_port_connect(usb_port, serial_speed, &sfd) != 0) {
-        if (strcmp(usb_port, "") != 0) {
-            LOG_ERROR("Initial connection to serial port %s failed, will retry", usb_port);
-            // Continue anyway - main loop will handle reconnection
-        } else {
-            LOG_ERROR("Failed to open stdin, exiting thread");
-            return NULL;
-        }
-    } else {
-        last_successful_read = time(NULL);
-        serial_set_state(-1, NULL, sfd); // Update just the file descriptor
-    }
+   /* Initial connection */
+   if (serial_port_connect(usb_port, serial_speed, &sfd) != 0) {
+      if (strcmp(usb_port, "") != 0) {
+         LOG_ERROR("Initial connection to serial port %s failed, will retry", usb_port);
+         // Continue anyway - main loop will handle reconnection
+      } else {
+         LOG_ERROR("Failed to open stdin, exiting thread");
+         return NULL;
+      }
+   } else {
+      last_successful_read = time(NULL);
+      serial_set_state(-1, NULL, sfd);  // Update just the file descriptor
+   }
 
-    while (!checkShutdown()) {
-        int select_result, bytes_available = 0;
-        int read_result = 0;
-        int flags;
+   while (!checkShutdown()) {
+      int select_result, bytes_available = 0;
+      int read_result = 0;
+      int flags;
 
-        /* Check if we have a valid file descriptor */
-        if (sfd < 0) {
-            /* If we don't have a valid file descriptor, try to reconnect */
-            if (strcmp(usb_port, "") != 0) {
-                /* Calculate backoff delay - increases with failed attempts but caps at maximum */
-                int backoff_delay = (reconnect_attempts > max_reconnect_delay) ?
-                                    max_reconnect_delay : reconnect_attempts;
+      /* Check if we have a valid file descriptor */
+      if (sfd < 0) {
+         /* If we don't have a valid file descriptor, try to reconnect */
+         if (strcmp(usb_port, "") != 0) {
+            /* Calculate backoff delay - increases with failed attempts but caps at maximum */
+            int backoff_delay = (reconnect_attempts > max_reconnect_delay) ? max_reconnect_delay
+                                                                           : reconnect_attempts;
 
-                LOG_INFO("Attempting to reconnect to %s (attempt %d, delay %d sec)",
-                        usb_port, reconnect_attempts + 1, backoff_delay);
+            LOG_INFO("Attempting to reconnect to %s (attempt %d, delay %d sec)", usb_port,
+                     reconnect_attempts + 1, backoff_delay);
 
-                sleep(backoff_delay); // Delay before reconnection attempt
+            sleep(backoff_delay);  // Delay before reconnection attempt
 
-                if (serial_port_connect(usb_port, serial_speed, &sfd) == 0) {
-                    LOG_INFO("Successfully reconnected to %s", usb_port);
-                    reconnect_attempts = 0;
-                    last_successful_read = time(NULL);
-                    serial_set_state(-1, NULL, sfd); // Update just the file descriptor
-                } else {
-                    LOG_WARNING("Failed to reconnect to %s", usb_port);
-                    reconnect_attempts++;
-                    continue;
-                }
+            if (serial_port_connect(usb_port, serial_speed, &sfd) == 0) {
+               LOG_INFO("Successfully reconnected to %s", usb_port);
+               reconnect_attempts = 0;
+               last_successful_read = time(NULL);
+               serial_set_state(-1, NULL, sfd);  // Update just the file descriptor
             } else {
-                LOG_ERROR("Invalid file descriptor and not using serial port, exiting thread");
-                break;
+               LOG_WARNING("Failed to reconnect to %s", usb_port);
+               reconnect_attempts++;
+               continue;
             }
-        }
+         } else {
+            LOG_ERROR("Invalid file descriptor and not using serial port, exiting thread");
+            break;
+         }
+      }
 
-        /* Check watchdog timer */
-        time_t current_time = time(NULL);
-        if (strcmp(usb_port, "") != 0 && last_successful_read > 0 &&
-            (current_time - last_successful_read) > watchdog_timeout_sec) {
-            LOG_WARNING("No data received for %ld seconds, attempting reconnection",
-                        current_time - last_successful_read);
+      /* Check watchdog timer */
+      time_t current_time = time(NULL);
+      if (strcmp(usb_port, "") != 0 && last_successful_read > 0 &&
+          (current_time - last_successful_read) > watchdog_timeout_sec) {
+         LOG_WARNING("No data received for %ld seconds, attempting reconnection",
+                     current_time - last_successful_read);
 
-            /* Close and invalidate the file descriptor */
+         /* Close and invalidate the file descriptor */
+         close(sfd);
+         sfd = -1;
+         continue;  // Will trigger reconnection on next iteration
+      }
+
+      /* Wait for data with timeout using select() */
+      FD_ZERO(&read_fds);
+      FD_SET(sfd, &read_fds);
+      timeout.tv_sec = 1;  // 1 second timeout for main loop
+      timeout.tv_usec = 0;
+
+      select_result = select(sfd + 1, &read_fds, NULL, NULL, &timeout);
+
+      if (select_result < 0) {
+         if (errno == EINTR) {
+            /* Interrupted by signal, not an error */
+            continue;
+         }
+
+         LOG_ERROR("Select error: %s", strerror(errno));
+
+         /* Handle serious errors by reconnecting */
+         if (strcmp(usb_port, "") != 0) {
             close(sfd);
             sfd = -1;
-            continue; // Will trigger reconnection on next iteration
-        }
+            continue;  // Will trigger reconnection on next iteration
+         } else {
+            LOG_ERROR("Select error on stdin, exiting thread");
+            break;
+         }
+      } else if (select_result == 0) {
+         /* Timeout, no data available - this is normal */
+         continue;
+      }
 
-        /* Wait for data with timeout using select() */
-        FD_ZERO(&read_fds);
-        FD_SET(sfd, &read_fds);
-        timeout.tv_sec = 1;  // 1 second timeout for main loop
-        timeout.tv_usec = 0;
+      /* At this point, data should be available */
+      if (!FD_ISSET(sfd, &read_fds)) {
+         /* This shouldn't happen but check anyway */
+         continue;
+      }
 
-        select_result = select(sfd + 1, &read_fds, NULL, NULL, &timeout);
+      /* Check bytes available */
+      if (ioctl(sfd, FIONREAD, &bytes_available) == -1) {
+         LOG_ERROR("ioctl error: %s", strerror(errno));
+         if (strcmp(usb_port, "") != 0) {
+            close(sfd);
+            sfd = -1;
+            continue;  // Will trigger reconnection on next iteration
+         } else {
+            LOG_ERROR("ioctl error on stdin, exiting thread");
+            break;
+         }
+      }
 
-        if (select_result < 0) {
-            if (errno == EINTR) {
-                /* Interrupted by signal, not an error */
-                continue;
-            }
+      if (bytes_available == 0) {
+         if (strcmp(usb_port, "") != 0) {
+            LOG_WARNING("Zero bytes available but select indicated ready - possible device issue");
+            /* Test the connection by doing a non-blocking zero-length write */
+            flags = fcntl(sfd, F_GETFL, 0);
+            fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
 
-            LOG_ERROR("Select error: %s", strerror(errno));
-
-            /* Handle serious errors by reconnecting */
-            if (strcmp(usb_port, "") != 0) {
-                close(sfd);
-                sfd = -1;
-                continue; // Will trigger reconnection on next iteration
-            } else {
-                LOG_ERROR("Select error on stdin, exiting thread");
-                break;
-            }
-        } else if (select_result == 0) {
-            /* Timeout, no data available - this is normal */
-            continue;
-        }
-
-        /* At this point, data should be available */
-        if (!FD_ISSET(sfd, &read_fds)) {
-            /* This shouldn't happen but check anyway */
-            continue;
-        }
-
-        /* Check bytes available */
-        if (ioctl(sfd, FIONREAD, &bytes_available) == -1) {
-            LOG_ERROR("ioctl error: %s", strerror(errno));
-            if (strcmp(usb_port, "") != 0) {
-                close(sfd);
-                sfd = -1;
-                continue; // Will trigger reconnection on next iteration
-            } else {
-                LOG_ERROR("ioctl error on stdin, exiting thread");
-                break;
-            }
-        }
-
-        if (bytes_available == 0) {
-            if (strcmp(usb_port, "") != 0) {
-                LOG_WARNING("Zero bytes available but select indicated ready - possible device issue");
-                /* Test the connection by doing a non-blocking zero-length write */
-                flags = fcntl(sfd, F_GETFL, 0);
-                fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
-
-                if (write(sfd, NULL, 0) < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                    LOG_WARNING("Connection test failed: %s", strerror(errno));
-                    close(sfd);
-                    sfd = -1;
-                    continue; // Will trigger reconnection on next iteration
-                }
-
-                /* Restore original flags */
-                fcntl(sfd, F_SETFL, flags);
-            }
-            continue;
-        }
-
-        /* Set non-blocking mode for read */
-        flags = fcntl(sfd, F_GETFL, 0);
-        fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
-
-        /* Read with select() timeout */
-        FD_ZERO(&read_fds);
-        FD_SET(sfd, &read_fds);
-        read_timeout.tv_sec = 2;  // 2 second timeout for read operation
-        read_timeout.tv_usec = 0;
-
-        select_result = select(sfd + 1, &read_fds, NULL, NULL, &read_timeout);
-
-        if (select_result <= 0) {
-            if (select_result < 0) {
-                LOG_ERROR("Read select error: %s", strerror(errno));
-            } else {
-                LOG_WARNING("Read operation timed out after 2 seconds");
-            }
-
-            /* Handle timeout or error */
-            if (strcmp(usb_port, "") != 0) {
-                LOG_WARNING("Possible device hang, attempting to recover connection");
-                /* Restore original flags before closing */
-                fcntl(sfd, F_SETFL, flags);
-                close(sfd);
-                sfd = -1;
-                continue; // Will trigger reconnection on next iteration
+            if (write(sfd, NULL, 0) < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+               LOG_WARNING("Connection test failed: %s", strerror(errno));
+               close(sfd);
+               sfd = -1;
+               continue;  // Will trigger reconnection on next iteration
             }
 
             /* Restore original flags */
             fcntl(sfd, F_SETFL, flags);
-            continue;
-        }
+         }
+         continue;
+      }
 
-        /* Actually read the data */
-        read_result = read(sfd, sread_buf,
-                          bytes_available < (MAX_SERIAL_BUFFER_LENGTH - 1) ?
-                          bytes_available : (MAX_SERIAL_BUFFER_LENGTH - 1));
+      /* Set non-blocking mode for read */
+      flags = fcntl(sfd, F_GETFL, 0);
+      fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
 
-        /* Restore original flags */
-        fcntl(sfd, F_SETFL, flags);
+      /* Read with select() timeout */
+      FD_ZERO(&read_fds);
+      FD_SET(sfd, &read_fds);
+      read_timeout.tv_sec = 2;  // 2 second timeout for read operation
+      read_timeout.tv_usec = 0;
 
-        if (read_result < 0) {
-            LOG_ERROR("Read error: %s", strerror(errno));
+      select_result = select(sfd + 1, &read_fds, NULL, NULL, &read_timeout);
 
-            /* Handle serious I/O errors */
-            if (errno == EIO || errno == ENXIO || errno == ENODEV || errno == EBADF) {
-                LOG_WARNING("Serious I/O error, reconnecting");
-                if (strcmp(usb_port, "") != 0) {
-                    close(sfd);
-                    sfd = -1;
-                    continue; // Will trigger reconnection on next iteration
-                } else {
-                    LOG_ERROR("Cannot recover from read error on stdin");
-                    break;
-                }
-            }
-            continue;
-        } else if (read_result == 0) {
-            LOG_WARNING("Zero bytes read despite having bytes available - possible disconnection");
+      if (select_result <= 0) {
+         if (select_result < 0) {
+            LOG_ERROR("Read select error: %s", strerror(errno));
+         } else {
+            LOG_WARNING("Read operation timed out after 2 seconds");
+         }
+
+         /* Handle timeout or error */
+         if (strcmp(usb_port, "") != 0) {
+            LOG_WARNING("Possible device hang, attempting to recover connection");
+            /* Restore original flags before closing */
+            fcntl(sfd, F_SETFL, flags);
+            close(sfd);
+            sfd = -1;
+            continue;  // Will trigger reconnection on next iteration
+         }
+
+         /* Restore original flags */
+         fcntl(sfd, F_SETFL, flags);
+         continue;
+      }
+
+      /* Actually read the data */
+      read_result = read(sfd, sread_buf,
+                         bytes_available < (MAX_SERIAL_BUFFER_LENGTH - 1)
+                             ? bytes_available
+                             : (MAX_SERIAL_BUFFER_LENGTH - 1));
+
+      /* Restore original flags */
+      fcntl(sfd, F_SETFL, flags);
+
+      if (read_result < 0) {
+         LOG_ERROR("Read error: %s", strerror(errno));
+
+         /* Handle serious I/O errors */
+         if (errno == EIO || errno == ENXIO || errno == ENODEV || errno == EBADF) {
+            LOG_WARNING("Serious I/O error, reconnecting");
             if (strcmp(usb_port, "") != 0) {
-                close(sfd);
-                sfd = -1;
-                continue; // Will trigger reconnection on next iteration
+               close(sfd);
+               sfd = -1;
+               continue;  // Will trigger reconnection on next iteration
+            } else {
+               LOG_ERROR("Cannot recover from read error on stdin");
+               break;
             }
-            continue;
-        }
+         }
+         continue;
+      } else if (read_result == 0) {
+         LOG_WARNING("Zero bytes read despite having bytes available - possible disconnection");
+         if (strcmp(usb_port, "") != 0) {
+            close(sfd);
+            sfd = -1;
+            continue;  // Will trigger reconnection on next iteration
+         }
+         continue;
+      }
 
-        /* Update watchdog timer and reset reconnection attempts on successful read */
-        last_successful_read = time(NULL);
-        reconnect_attempts = 0;
+      /* Update watchdog timer and reset reconnection attempts on successful read */
+      last_successful_read = time(NULL);
+      reconnect_attempts = 0;
 
-        /* Process the received data */
-        sread_buf[read_result] = '\0';
+      /* Process the received data */
+      sread_buf[read_result] = '\0';
 
-        for (int j = 0; j < read_result; j++) {
-           if (sread_buf[j] == '\n') {
-              command_buffer[command_length] = '\0';
-              if (command_length > 0) {
-                 log_command(command_buffer);
+      for (int j = 0; j < read_result; j++) {
+         if (sread_buf[j] == '\n') {
+            command_buffer[command_length] = '\0';
+            if (command_length > 0) {
+               log_command(command_buffer);
 
-                 // Default topic is "helmet"
-                 char topic[256] = "helmet";
+               // Default topic is "helmet"
+               char topic[256] = "helmet";
 
-                 // Parse JSON to extract device
-                 struct json_object *parsed_json = json_tokener_parse(command_buffer);
-                 if (parsed_json != NULL) {
-                    struct json_object *device_obj = NULL;
-                    if (json_object_object_get_ex(parsed_json, "device", &device_obj)) {
-                       const char *device = json_object_get_string(device_obj);
-                       if (device != NULL) {
-                          // Check if device matches any armor component
-                          armor_settings *this_as = get_armor_settings();
-                          element *armor_element = this_as->armor_elements;
+               // Parse JSON to extract device
+               struct json_object *parsed_json = json_tokener_parse(command_buffer);
+               if (parsed_json != NULL) {
+                  struct json_object *device_obj = NULL;
+                  if (json_object_object_get_ex(parsed_json, "device", &device_obj)) {
+                     const char *device = json_object_get_string(device_obj);
+                     if (device != NULL) {
+                        // Check if device matches any armor component
+                        armor_settings *this_as = get_armor_settings();
+                        element *armor_element = this_as->armor_elements;
 
-                          while (armor_element != NULL) {
-                             if (strcmp(armor_element->mqtt_device, device) == 0) {
-                                // Found matching armor component, copy the device to topic
-                                strncpy(topic, device, sizeof(topic) - 1);
-                                topic[sizeof(topic) - 1] = '\0';
-                                break;
-                             }
-                             armor_element = armor_element->next;
-                          }
-                       }
-                    }
-                    json_object_put(parsed_json);  // Free the JSON object
-                 }
+                        while (armor_element != NULL) {
+                           if (strcmp(armor_element->mqtt_device, device) == 0) {
+                              // Found matching armor component, copy the device to topic
+                              strncpy(topic, device, sizeof(topic) - 1);
+                              topic[sizeof(topic) - 1] = '\0';
+                              break;
+                           }
+                           armor_element = armor_element->next;
+                        }
+                     }
+                  }
+                  json_object_put(parsed_json);  // Free the JSON object
+               }
 
-                 // Use the determined topic
-                 registerArmor(topic);
-                 parse_json_command(command_buffer, topic);
-              }
-              command_buffer[0] = '\0';
-              command_length = 0;
-           } else if (sread_buf[j] == '\r') {
-              /* Ignore carriage returns */
-           } else if (command_length < MAX_SERIAL_BUFFER_LENGTH - 2) {
-              command_buffer[command_length++] = sread_buf[j];
-           } else {
-              LOG_WARNING("Command buffer overflow, discarding data");
-              command_buffer[0] = '\0';
-              command_length = 0;
-           }
-        }
-    }
+               // Use the determined topic
+               registerArmor(topic);
+               parse_json_command(command_buffer, topic);
+            }
+            command_buffer[0] = '\0';
+            command_length = 0;
+         } else if (sread_buf[j] == '\r') {
+            /* Ignore carriage returns */
+         } else if (command_length < MAX_SERIAL_BUFFER_LENGTH - 2) {
+            command_buffer[command_length++] = sread_buf[j];
+         } else {
+            LOG_WARNING("Command buffer overflow, discarding data");
+            command_buffer[0] = '\0';
+            command_length = 0;
+         }
+      }
+   }
 
-    /* Clean up on thread exit */
-    if (sfd >= 0) {
-        close(sfd);
-        serial_set_state(-1, NULL, -1); // Mark the fd as invalid
-    }
+   /* Clean up on thread exit */
+   if (sfd >= 0) {
+      close(sfd);
+      serial_set_state(-1, NULL, -1);  // Mark the fd as invalid
+   }
 
-    LOG_INFO("Serial command processing thread exiting");
-    return NULL;
+   LOG_INFO("Serial command processing thread exiting");
+   return NULL;
 }
 
 /**
@@ -1335,14 +1346,14 @@ int serial_port_send(const char *command) {
    char buffer[MAX_SERIAL_BUFFER_LENGTH];
 
    strncpy(buffer, command, MAX_SERIAL_BUFFER_LENGTH - 2);
-   buffer[MAX_SERIAL_BUFFER_LENGTH - 2] = '\0'; // Ensure null termination with space for newline
+   buffer[MAX_SERIAL_BUFFER_LENGTH - 2] = '\0';  // Ensure null termination with space for newline
 
    // Make sure the command ends with a newline
    cmd_len = strlen(buffer);
    if (cmd_len > 0 && buffer[cmd_len - 1] != '\n') {
       buffer[cmd_len] = '\n';
       buffer[cmd_len + 1] = '\0';
-      cmd_len++; // Update length to include newline
+      cmd_len++;  // Update length to include newline
    }
 
    // Send the command
@@ -1395,13 +1406,12 @@ int forward_helmet_command_to_serial(char *command_string) {
    return serial_port_send(command_string);
 }
 
-void *socket_command_processing_thread(void *arg)
-{
+void *socket_command_processing_thread(void *arg) {
    int server_fd, new_socket;
    struct sockaddr_in address;
    int opt = 1;
    int addrlen = sizeof(address);
-   char buffer[MAX_SERIAL_BUFFER_LENGTH] = {0};
+   char buffer[MAX_SERIAL_BUFFER_LENGTH] = { 0 };
 
    // Creating socket file descriptor
    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -1458,7 +1468,7 @@ void *socket_command_processing_thread(void *arg)
       if (activity > 0 && FD_ISSET(server_fd, &readfds)) {
          struct timeval read_timeout;
 
-         new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+         new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
          if (new_socket < 0) {
             LOG_ERROR("Accept failed.");
             continue;
@@ -1471,7 +1481,8 @@ void *socket_command_processing_thread(void *arg)
          read_timeout.tv_usec = 0;
 
          // Set the receive timeout for the new socket
-         if (setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&read_timeout, sizeof(read_timeout)) < 0) {
+         if (setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&read_timeout,
+                        sizeof(read_timeout)) < 0) {
             LOG_ERROR("Setting socket receive timeout failed.");
             close(new_socket);
             continue;
@@ -1480,7 +1491,7 @@ void *socket_command_processing_thread(void *arg)
          while (!checkShutdown()) {
             int bytes_read = read(new_socket, buffer, sizeof(buffer) - 1);
             if (bytes_read > 0) {
-               buffer[bytes_read] = '\0'; // Null-terminate the received string
+               buffer[bytes_read] = '\0';  // Null-terminate the received string
                registerArmor("helmet");
                parse_json_command(buffer, "helmet");
             } else if (bytes_read == 0) {
@@ -1488,7 +1499,7 @@ void *socket_command_processing_thread(void *arg)
                break;
             } else if (bytes_read < 0 && errno == EWOULDBLOCK) {
                LOG_WARNING("Socket receive timed out.");
-               break; // Timeout occurred
+               break;  // Timeout occurred
             } else if (bytes_read < 0) {
                LOG_ERROR("Socket read failed with error: %s", strerror(errno));
                break;

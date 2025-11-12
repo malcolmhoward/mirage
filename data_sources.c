@@ -19,16 +19,17 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "data_sources.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "data_sources.h"
-#include "system_metrics.h"
-#include "mirage.h"
 #include "config_manager.h"
 #include "logging.h"
+#include "mirage.h"
 #include "sim_data.h"
+#include "system_metrics.h"
 
 /* External reference to FPS counter */
 extern double averageFrameRate;
@@ -37,7 +38,7 @@ int is_dynamic_source(const char *source) {
    if (!source || strlen(source) < 3) {
       return 0;
    }
-   
+
    size_t len = strlen(source);
    return (source[0] == '*' && source[len - 1] == '*');
 }
@@ -120,12 +121,10 @@ float resolve_data_source_float(const char *source) {
       return this_gps->speed;
    }
    if (strcmp(source, "*LATITUDE*") == 0) {
-      return (this_gps->latitudeDegrees != 0.0) ? 
-             this_gps->latitudeDegrees : this_gps->latitude;
+      return (this_gps->latitudeDegrees != 0.0) ? this_gps->latitudeDegrees : this_gps->latitude;
    }
    if (strcmp(source, "*LONGITUDE*") == 0) {
-      return (this_gps->longitudeDegrees != 0.0) ? 
-             this_gps->longitudeDegrees : this_gps->longitude;
+      return (this_gps->longitudeDegrees != 0.0) ? this_gps->longitudeDegrees : this_gps->longitude;
    }
 
    /* === ENVIRONMENTAL SENSORS === */
@@ -190,4 +189,3 @@ float resolve_data_source_float(const char *source) {
    LOG_WARNING("Unknown dynamic data source: '%s'", source);
    return 0.0f;
 }
-

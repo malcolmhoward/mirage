@@ -66,10 +66,10 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
  * @return 0 on success, 1 on failure
  */
 int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
-                                const SDL_Rect *rect,
-                                Uint32 format,
-                                void *pixels,
-                                int pitch);
+                                 const SDL_Rect *rect,
+                                 Uint32 format,
+                                 void *pixels,
+                                 int pitch);
 
 /**
  * Requests a screenshot to be taken by the main thread
@@ -80,8 +80,10 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
  * @param source The source of the screenshot request
  * @return 0 if request was queued successfully, non-zero otherwise
  */
-int request_screenshot(int with_overlay, int full_resolution,
-                       const char *output_filename, screenshot_t source);
+int request_screenshot(int with_overlay,
+                       int full_resolution,
+                       const char *output_filename,
+                       screenshot_t source);
 
 /**
  * Takes a screenshot with specified options
@@ -92,7 +94,10 @@ int request_screenshot(int with_overlay, int full_resolution,
  * @param output_filename Optional custom filename
  * @return 0 on success, non-zero on failure
  */
-int take_screenshot(int with_overlay, int no_camera_mode, int full_resolution, const char *output_filename);
+int take_screenshot(int with_overlay,
+                    int no_camera_mode,
+                    int full_resolution,
+                    const char *output_filename);
 
 /**
  * Takes a snapshot for AI processing and saves it to disk.

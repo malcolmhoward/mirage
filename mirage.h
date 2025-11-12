@@ -22,10 +22,10 @@
 #ifndef MIRAGE_H
 #define MIRAGE_H
 
-#include <gst/gst.h>
-#include <limits.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <gst/gst.h>
+#include <limits.h>
 
 #include "config_parser.h"
 #include "detect.h"
@@ -47,15 +47,15 @@ typedef struct _od_data {
 
 /* ALERTS */
 typedef enum {
-   ALERT_NONE        = 0,
-   ALERT_RECORDING   = 1 << 0,
+   ALERT_NONE = 0,
+   ALERT_RECORDING = 1 << 0,
    ALERT_CONFIG_RELOADED = 1 << 1,
-   ALERT_MAX         = 1 << 2
+   ALERT_MAX = 1 << 2
 } alert_t;
 
 struct Alert {
-    alert_t flag;
-    const char* message;
+   alert_t flag;
+   const char *message;
 };
 
 // Device gets
@@ -249,7 +249,8 @@ int checkShutdown(void);
  * For now this uses a simple memcpy because this isn't currently a frequent operation.
  * There is a better frame copy available if we're recording/streaming at the time.
  *
- * @param temp_buffer pointer to uninitialized memory location. This will be malloced and need to be freed.
+ * @param temp_buffer pointer to uninitialized memory location. This will be malloced and need to be
+ * freed.
  * @return memory location of allocated frame, should match temp_buffer for easy checking.
  */
 void *grab_latest_camera_frame(void *temp_buffer);
@@ -262,13 +263,13 @@ void *grab_latest_camera_frame(void *temp_buffer);
  * for elements that extend beyond screen boundaries, and applies rotation if needed.
  *
  * @param tex The SDL texture to render.
- * @param src Source rectangle defining which portion of the texture to use (can be NULL for entire texture).
+ * @param src Source rectangle defining which portion of the texture to use (can be NULL for entire
+ * texture).
  * @param dest Destination rectangle for the left eye view.
  * @param dest2 Destination rectangle for the right eye view (can be NULL to use same as left).
  * @param angle Rotation angle in degrees (0 for no rotation).
  */
-void renderStereo(SDL_Texture * tex, SDL_Rect * src, SDL_Rect * dest, SDL_Rect * dest2,
-                  double angle);
+void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *dest2, double angle);
 
 /**
  * @brief Sends a text message to be spoken via text-to-speech over MQTT.
@@ -305,5 +306,4 @@ void mqttSendMessage(const char *topic, const char *text);
  */
 void free_elements(element *start_element);
 
-#endif // MIRAGE_H
-
+#endif  // MIRAGE_H

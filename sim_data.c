@@ -19,13 +19,14 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "sim_data.h"
+
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
-#include <time.h>
 #include <sys/time.h>
+#include <time.h>
 
-#include "sim_data.h"
 #include "logging.h"
 
 /* Simulation state */
@@ -75,10 +76,10 @@ void init_sim_data(void) {
    sim_start_time = get_time_seconds();
    sim_time = 0.0;
    sim_initialized = 1;
-   
+
    /* Seed random */
    sim_rand_state = (unsigned int)time(NULL);
-   
+
    LOG_INFO("Simulated data sources initialized");
 }
 
@@ -86,12 +87,12 @@ void update_sim_data(void) {
    if (!sim_initialized) {
       init_sim_data();
    }
-   
+
    /* Update simulation time */
    sim_time = get_time_seconds() - sim_start_time;
-   
+
    /* Update automotive simulations */
-   
+
    /* RPM: Idle most of time, occasional revs */
    static double last_rpm_change = 0.0;
    if (sim_time - last_rpm_change > 3.0) {
@@ -104,10 +105,10 @@ void update_sim_data(void) {
          sim_rpm_target = 800.0f + sim_randf() * 200.0f;
       }
    }
-   
+
    /* Smooth RPM changes */
    sim_rpm_current = lerp(sim_rpm_current, sim_rpm_target, 0.05f);
-   
+
    /* Speed: Gradual changes */
    static double last_speed_change = 0.0;
    if (sim_time - last_speed_change > 5.0) {
@@ -115,28 +116,26 @@ void update_sim_data(void) {
       sim_speed_target = sim_randf() * 80.0f;
    }
    sim_speed_current = lerp(sim_speed_current, sim_speed_target, 0.02f);
-   
+
    /* Engine temp: Warm up then stabilize */
-   float target_temp = (sim_time < 60.0) ? 
-                       60.0f + (sim_time / 60.0f) * 150.0f : 210.0f;
+   float target_temp = (sim_time < 60.0) ? 60.0f + (sim_time / 60.0f) * 150.0f : 210.0f;
    sim_engine_temp = lerp(sim_engine_temp, target_temp, 0.01f);
-   
+
    /* Fuel: Slowly decrease */
    sim_fuel_level -= 0.001f;
    if (sim_fuel_level < 10.0f) {
-      sim_fuel_level = 95.0f;  /* "Refuel" */
+      sim_fuel_level = 95.0f; /* "Refuel" */
    }
-   
+
    /* Throttle: Correlates with RPM changes */
-   sim_throttle_target = (sim_rpm_target > 2000.0f) ? 
-                         40.0f + sim_randf() * 60.0f : 
-                         sim_randf() * 10.0f;
+   sim_throttle_target = (sim_rpm_target > 2000.0f) ? 40.0f + sim_randf() * 60.0f
+                                                    : sim_randf() * 10.0f;
    sim_throttle_current = lerp(sim_throttle_current, sim_throttle_target, 0.08f);
-   
+
    /* Boost: Follows throttle with lag */
-   float boost_target = (sim_throttle_current > 50.0f) ? 
-                        (sim_throttle_current - 50.0f) * 0.4f - 5.0f :
-                        -5.0f - sim_randf() * 10.0f;
+   float boost_target = (sim_throttle_current > 50.0f)
+                            ? (sim_throttle_current - 50.0f) * 0.4f - 5.0f
+                            : -5.0f - sim_randf() * 10.0f;
    sim_boost_current = lerp(sim_boost_current, boost_target, 0.06f);
 }
 
@@ -155,16 +154,16 @@ float get_sim_random(void) {
    static float current_value = 50.0f;
    static float target_value = 50.0f;
    static double last_change = 0.0;
-   
+
    /* Change target every 0.5 seconds */
    if (sim_time - last_change > 0.5) {
       last_change = sim_time;
       target_value = sim_randf() * 100.0f;
    }
-   
+
    /* Smooth towards target */
    current_value = lerp(current_value, target_value, 0.2f);
-   
+
    return current_value;
 }
 
@@ -197,4 +196,3 @@ float get_sim_boost(void) {
 float get_sim_throttle(void) {
    return sim_throttle_current;
 }
-

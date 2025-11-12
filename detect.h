@@ -38,7 +38,7 @@ typedef struct _detect {
 
 typedef struct _detect_net {
    void *detectNet_net;
-   void* detections;
+   void *detections;
 
    void *d_image;
    int l_width;

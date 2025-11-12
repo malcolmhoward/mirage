@@ -53,7 +53,7 @@ typedef struct _frame {
    struct _frame *next;
 } frame;
 
-#define MAX_FRAMES 1024                /* Maximum number of animation frames per animation. */
+#define MAX_FRAMES 1024 /* Maximum number of animation frames per animation. */
 
 /* Animation Object */
 typedef struct _anim {
@@ -85,11 +85,11 @@ typedef enum {
    MAP_TYPE_SATELLITE,
    MAP_TYPE_ROADMAP,
    MAP_TYPE_TERRAIN,
-   MAP_TYPE_COUNT  /* Always keep last to get count */
+   MAP_TYPE_COUNT /* Always keep last to get count */
 } map_type_t;
 
 /* Map type string representations - declare as extern */
-extern const char* MAP_TYPE_STRINGS[];
+extern const char *MAP_TYPE_STRINGS[];
 
 /* Parent data type for all UI elements. Not all fields are used for all types. */
 typedef struct _element {
@@ -105,21 +105,21 @@ typedef struct _element {
     * The maximum number of HUDs is defined by the MAX_HUDS constant from defines.h.
     */
    char hud_flags[MAX_HUDS];
-   char hotkey[2];   /* Hotkey to enable/disable element */
+   char hotkey[2]; /* Hotkey to enable/disable element */
 
    /* Static and animated graphics */
-   char filename[MAX_FILENAME_LENGTH * 2];      /* Regular filename to graphic. */
-   char filename_r[MAX_FILENAME_LENGTH * 2];    /* Recording filename to graphic. */
-   char filename_s[MAX_FILENAME_LENGTH * 2];    /* Streaming filename to graphic. */
-   char filename_rs[MAX_FILENAME_LENGTH * 2];   /* Recording and streaming to graphic. */
-   char filename_l[MAX_FILENAME_LENGTH * 2];    /* AI listening filename graphic. */
-   char filename_w[MAX_FILENAME_LENGTH * 2];    /* AI wakework filename graphic. */
-   char filename_p[MAX_FILENAME_LENGTH * 2];    /* AI processing filename graphic. */
+   char filename[MAX_FILENAME_LENGTH * 2];    /* Regular filename to graphic. */
+   char filename_r[MAX_FILENAME_LENGTH * 2];  /* Recording filename to graphic. */
+   char filename_s[MAX_FILENAME_LENGTH * 2];  /* Streaming filename to graphic. */
+   char filename_rs[MAX_FILENAME_LENGTH * 2]; /* Recording and streaming to graphic. */
+   char filename_l[MAX_FILENAME_LENGTH * 2];  /* AI listening filename graphic. */
+   char filename_w[MAX_FILENAME_LENGTH * 2];  /* AI wakework filename graphic. */
+   char filename_p[MAX_FILENAME_LENGTH * 2];  /* AI processing filename graphic. */
 
-   char filename_base[MAX_FILENAME_LENGTH * 2];      /* Filename of base armor graphic. */
-   char filename_online[MAX_FILENAME_LENGTH * 2];    /* Filename of online armor graphic. */
-   char filename_warning[MAX_FILENAME_LENGTH * 2];   /* Filename of warning armor graphic. */
-   char filename_offline[MAX_FILENAME_LENGTH * 2];   /* Filename of offline armor graphic. */
+   char filename_base[MAX_FILENAME_LENGTH * 2];    /* Filename of base armor graphic. */
+   char filename_online[MAX_FILENAME_LENGTH * 2];  /* Filename of online armor graphic. */
+   char filename_warning[MAX_FILENAME_LENGTH * 2]; /* Filename of warning armor graphic. */
+   char filename_offline[MAX_FILENAME_LENGTH * 2]; /* Filename of offline armor graphic. */
 
    /* Text elements */
    char text[MAX_TEXT_LENGTH];
@@ -188,8 +188,8 @@ typedef struct _element {
    double last_voltage;
 
    /* Armor metrics positioning */
-   float metrics_x_offset;   /* Horizontal position within component (0.0 - 1.0) */
-   float metrics_y_offset;   /* Vertical position within component (0.0 - 1.0) */
+   float metrics_x_offset; /* Horizontal position within component (0.0 - 1.0) */
+   float metrics_y_offset; /* Vertical position within component (0.0 - 1.0) */
 
    /* Armor display properties */
    int notice_x;
@@ -202,40 +202,40 @@ typedef struct _element {
    int metrics_font_size;
 
    /* Metrics texture caching */
-   SDL_Texture **metrics_textures;  /* Array of metrics textures for each component */
-   char **last_metrics_text;        /* Array of last metrics text strings */
-   int metrics_texture_count;       /* Number of components with metrics */
+   SDL_Texture **metrics_textures; /* Array of metrics textures for each component */
+   char **last_metrics_text;       /* Array of last metrics text strings */
+   int metrics_texture_count;      /* Number of components with metrics */
 
    armor_warning_t warn_state;
 
    /* Gauge-specific properties */
-   char gauge_type[MAX_TEXT_LENGTH];            /* "linear", "arc", "ring" */
-   float gauge_min_value;                       /* Minimum value on scale */
-   float gauge_max_value;                       /* Maximum value on scale */
-   char gauge_value_source[MAX_TEXT_LENGTH];    /* "*BATTERY*", "*SPEED*", etc. or static value */
-   float gauge_current_value;                   /* Current numeric value (computed) */
-   float gauge_warning_threshold;               /* Value at which to change color */
-   SDL_Color gauge_primary_color;               /* Normal operation color */
-   SDL_Color gauge_warning_color;               /* Warning/critical color */
-   int gauge_orientation;                       /* 0=horizontal, 1=vertical (linear only) */
-   float gauge_arc_start;                       /* Start angle in degrees (arc/ring) */
-   float gauge_arc_sweep;                       /* Sweep angle in degrees (arc/ring) */
-   int gauge_thickness;                         /* Line thickness for ring gauges */
-   int gauge_ticks;                             /* Number of tick marks (arc gauges) */
-   int gauge_smooth;                            /* Enable smooth interpolation */
-   int gauge_glow;                              /* Enable glow effect */
-   float gauge_display_value;                   /* Smoothed value for rendering */
-   int gauge_show_value;                        /* Show numeric value label (0/1) */
-   char gauge_value_format[32];                 /* Format string for value label (e.g., "%.1f%%") */
-   SDL_Color gauge_value_color;                 /* Color for value label text */
-   int gauge_value_size;                        /* Font size for value label */
+   char gauge_type[MAX_TEXT_LENGTH];         /* "linear", "arc", "ring" */
+   float gauge_min_value;                    /* Minimum value on scale */
+   float gauge_max_value;                    /* Maximum value on scale */
+   char gauge_value_source[MAX_TEXT_LENGTH]; /* "*BATTERY*", "*SPEED*", etc. or static value */
+   float gauge_current_value;                /* Current numeric value (computed) */
+   float gauge_warning_threshold;            /* Value at which to change color */
+   SDL_Color gauge_primary_color;            /* Normal operation color */
+   SDL_Color gauge_warning_color;            /* Warning/critical color */
+   int gauge_orientation;                    /* 0=horizontal, 1=vertical (linear only) */
+   float gauge_arc_start;                    /* Start angle in degrees (arc/ring) */
+   float gauge_arc_sweep;                    /* Sweep angle in degrees (arc/ring) */
+   int gauge_thickness;                      /* Line thickness for ring gauges */
+   int gauge_ticks;                          /* Number of tick marks (arc gauges) */
+   int gauge_smooth;                         /* Enable smooth interpolation */
+   int gauge_glow;                           /* Enable glow effect */
+   float gauge_display_value;                /* Smoothed value for rendering */
+   int gauge_show_value;                     /* Show numeric value label (0/1) */
+   char gauge_value_format[32];              /* Format string for value label (e.g., "%.1f%%") */
+   SDL_Color gauge_value_color;              /* Color for value label text */
+   int gauge_value_size;                     /* Font size for value label */
 
    /* Gauge cache for performance optimization */
-   SDL_Texture *gauge_cache_texture;            /* Pre-rendered static background */
-   int gauge_cache_dirty;                       /* 1 = needs regeneration, 0 = valid */
-   float gauge_last_rendered_value;             /* Last value we rendered label for */
-   SDL_Texture *gauge_value_label_texture;      /* Cached value label texture */
-   int gauge_value_label_width;                 /* Cached label dimensions */
+   SDL_Texture *gauge_cache_texture;       /* Pre-rendered static background */
+   int gauge_cache_dirty;                  /* 1 = needs regeneration, 0 = valid */
+   float gauge_last_rendered_value;        /* Last value we rendered label for */
+   SDL_Texture *gauge_value_label_texture; /* Cached value label texture */
+   int gauge_value_label_width;            /* Cached label dimensions */
    int gauge_value_label_height;
 
    /* Transition state - used for fade/zoom effects */
@@ -276,10 +276,12 @@ int check_and_reload_config(const char *config_filename);
 int reload_config(const char *config_filename);
 
 // Function prototypes for parsing functions
-int parse_animated_json(element * curr_element);
-int parse_color(char *string, unsigned char *r, unsigned char *g, unsigned char *b,
+int parse_animated_json(element *curr_element);
+int parse_color(char *string,
+                unsigned char *r,
+                unsigned char *g,
+                unsigned char *b,
                 unsigned char *a);
 int parse_json_config(const char *filename);
 
-#endif // CONFIG_PARSER_H
-
+#endif  // CONFIG_PARSER_H

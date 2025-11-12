@@ -24,7 +24,7 @@
 #include <unistd.h>
 
 /* Check to see if the file has grown in size. Save new size to passed in value. */
-int has_file_grown(const char* filename, off_t *last_size) {
+int has_file_grown(const char *filename, off_t *last_size) {
    struct stat sb;
 
    if (stat(filename, &sb) == -1) {

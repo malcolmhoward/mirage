@@ -26,9 +26,9 @@
 
 // Log levels
 typedef enum {
-    LOG_INFO,
-    LOG_WARNING,
-    LOG_ERROR,
+   LOG_INFO,
+   LOG_WARNING,
+   LOG_ERROR,
 } log_level_t;
 
 #ifdef __cplusplus
@@ -36,7 +36,12 @@ extern "C" {
 #endif
 
 // Logging function
-void log_message(log_level_t level, const char *file, int line, const char *func, const char *fmt, ...);
+void log_message(log_level_t level,
+                 const char *file,
+                 int line,
+                 const char *func,
+                 const char *fmt,
+                 ...);
 
 #ifdef __cplusplus
 }
@@ -54,8 +59,8 @@ void close_logging(void);
 
 // Macros for easy logging
 #define LOG_INFO(fmt, ...) log_message(LOG_INFO, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define LOG_WARNING(fmt, ...) log_message(LOG_WARNING, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_WARNING(fmt, ...) \
+   log_message(LOG_WARNING, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) log_message(LOG_ERROR, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
-#endif // LOGGING_H
-
+#endif  // LOGGING_H

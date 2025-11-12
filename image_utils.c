@@ -19,11 +19,11 @@
  * part of the project and are adopted by the project author(s).
  */
 
-#include <SDL2/SDL.h>
-#include <stdio.h>
-#include <gd.h>
-
 #include "image_utils.h"
+
+#include <SDL2/SDL.h>
+#include <gd.h>
+#include <stdio.h>
 
 /**
  * Saves an RGBA buffer as a JPEG image.
@@ -38,9 +38,12 @@
  *
  * @return An error code from ImageErrorCode indicating the result of the operation.
  */
-ImageErrorCode save_rgba_to_jpeg(const uint8_t *rgba_buffer, int width, int height,
-                                 const char *filename, int quality) {
-   // Validate input perameters 
+ImageErrorCode save_rgba_to_jpeg(const uint8_t *rgba_buffer,
+                                 int width,
+                                 int height,
+                                 const char *filename,
+                                 int quality) {
+   // Validate input perameters
    if (!rgba_buffer || width <= 0 || height <= 0 || !filename || quality < 0 || quality > 100) {
       return IMG_ERR_INVALID_PARAMS;
    }
@@ -83,15 +86,15 @@ ImageErrorCode save_rgba_to_jpeg(const uint8_t *rgba_buffer, int width, int heig
  * @param str Pointer to the string to be converted.
  */
 void str_tolower(char *str) {
-    for ( ; *str; ++str) {
-       *str = tolower(*str);
-    }
+   for (; *str; ++str) {
+      *str = tolower(*str);
+   }
 }
 
 /**
  * Processes an RGBA buffer, performs cropping and resizing, and saves the result to a file.
- * The output format (JPEG or PNG) is determined by the file extension. Quality or compression level is
- * specified according to the format.
+ * The output format (JPEG or PNG) is determined by the file extension. Quality or compression level
+ * is specified according to the format.
  *
  * @param params Pointer to an ImageProcessParams structure containing the processing parameters.
  *
@@ -100,11 +103,10 @@ void str_tolower(char *str) {
 ImageErrorCode process_and_save_image(const ImageProcessParams *params) {
    // Validate input parameters
    if (!params || !params->rgba_buffer || params->orig_width <= 0 || params->orig_height <= 0 ||
-      params->new_width <= 0 || params->new_height <= 0 ||
-      params->left_crop < 0 || params->right_crop < 0 ||
-      params->top_crop < 0 || params->bottom_crop < 0 ||
-      params->left_crop + params->right_crop >= params->orig_width ||
-      params->top_crop + params->bottom_crop >= params->orig_height) {
+       params->new_width <= 0 || params->new_height <= 0 || params->left_crop < 0 ||
+       params->right_crop < 0 || params->top_crop < 0 || params->bottom_crop < 0 ||
+       params->left_crop + params->right_crop >= params->orig_width ||
+       params->top_crop + params->bottom_crop >= params->orig_height) {
       return IMG_ERR_INVALID_PARAMS;
    }
 
@@ -143,40 +145,42 @@ ImageErrorCode process_and_save_image(const ImageProcessParams *params) {
    for (int y = 0; y < params->orig_height; ++y) {
       for (int x = 0; x < params->orig_width; ++x) {
          int idx = (y * params->orig_width + x) * 4;
-         int color = gdImageColorAllocateAlpha(srcImg, params->rgba_buffer[idx], params->rgba_buffer[idx + 1],
-                                               params->rgba_buffer[idx + 2], 127 - (params->rgba_buffer[idx + 3] >> 1));
-          gdImageSetPixel(srcImg, x, y, color);
+         int color = gdImageColorAllocateAlpha(srcImg, params->rgba_buffer[idx],
+                                               params->rgba_buffer[idx + 1],
+                                               params->rgba_buffer[idx + 2],
+                                               127 - (params->rgba_buffer[idx + 3] >> 1));
+         gdImageSetPixel(srcImg, x, y, color);
       }
    }
 
-    // Perform cropping and resizing
-    gdImagePtr finalImg = gdImageCreateTrueColor(params->new_width, params->new_height);
-    if (!finalImg) {
-        gdImageDestroy(srcImg);
-        return IMG_ERR_MEMORY_ALLOCATION_FAILED;
-    }
-    gdImageCopyResampled(finalImg, srcImg, 0, 0, params->left_crop, params->top_crop,
-                         params->new_width, params->new_height,
-                         params->orig_width - (params->left_crop + params->right_crop),
-                         params->orig_height - (params->top_crop + params->bottom_crop));
+   // Perform cropping and resizing
+   gdImagePtr finalImg = gdImageCreateTrueColor(params->new_width, params->new_height);
+   if (!finalImg) {
+      gdImageDestroy(srcImg);
+      return IMG_ERR_MEMORY_ALLOCATION_FAILED;
+   }
+   gdImageCopyResampled(finalImg, srcImg, 0, 0, params->left_crop, params->top_crop,
+                        params->new_width, params->new_height,
+                        params->orig_width - (params->left_crop + params->right_crop),
+                        params->orig_height - (params->top_crop + params->bottom_crop));
 
-    // Save the final image based on the determined format
-    FILE *outFile = fopen(params->filename, "wb");
-    if (!outFile) {
-        gdImageDestroy(srcImg);
-        gdImageDestroy(finalImg);
-        return IMG_ERR_FILE_OPEN_FAILED;
-    }
+   // Save the final image based on the determined format
+   FILE *outFile = fopen(params->filename, "wb");
+   if (!outFile) {
+      gdImageDestroy(srcImg);
+      gdImageDestroy(finalImg);
+      return IMG_ERR_FILE_OPEN_FAILED;
+   }
 
-    if (is_jpeg) {
-        gdImageJpeg(finalImg, outFile, params->format_params.quality);
-    } else if (is_png) {
-        gdImagePngEx(finalImg, outFile, params->format_params.compression);
-    }
+   if (is_jpeg) {
+      gdImageJpeg(finalImg, outFile, params->format_params.quality);
+   } else if (is_png) {
+      gdImagePngEx(finalImg, outFile, params->format_params.compression);
+   }
 
-    fclose(outFile);
-    gdImageDestroy(srcImg);
-    gdImageDestroy(finalImg);
+   fclose(outFile);
+   gdImageDestroy(srcImg);
+   gdImageDestroy(finalImg);
 
-    return IMG_SUCCESS; // Indicate success
+   return IMG_SUCCESS;  // Indicate success
 }

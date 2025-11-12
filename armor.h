@@ -25,5 +25,4 @@
 void setArmorEnabled(int enabled);
 void registerArmor(char *mqtt_device_in);
 
-#endif // ARMOR_H
-
+#endif  // ARMOR_H

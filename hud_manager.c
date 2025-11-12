@@ -19,34 +19,29 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "hud_manager.h"
+
 #include <SDL2/SDL.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "config_manager.h"
-#include "hud_manager.h"
 #include "logging.h"
 #include "mirage.h"
 
 /* Global HUD manager instance */
-static hud_manager hud_mgr = {
-   .screens = NULL,
-   .current_screen = NULL,
-   .transition_from = NULL,
-   .transition_progress = 0.0,
-   .transition_type = TRANSITION_FADE,
-   .transition_duration_ms = 500,
-   .transition_start_time = 0
-};
+static hud_manager hud_mgr = { .screens = NULL,
+                               .current_screen = NULL,
+                               .transition_from = NULL,
+                               .transition_progress = 0.0,
+                               .transition_type = TRANSITION_FADE,
+                               .transition_duration_ms = 500,
+                               .transition_start_time = 0 };
 
 /* Transition names for user-friendly configuration */
-static const char* transition_names[TRANSITION_MAX] = {
-   "fade",
-   "slide_left",
-   "slide_right",
-   "zoom"
-};
+static const char *transition_names[TRANSITION_MAX] = { "fade", "slide_left", "slide_right",
+                                                        "zoom" };
 
 /* Initialize HUD manager */
 void init_hud_manager(void) {
@@ -71,8 +66,8 @@ void cleanup_hud_manager(void) {
 }
 
 /* Find a HUD by name */
-hud_screen* find_hud_by_name(const char* name) {
-   hud_screen* current = hud_mgr.screens;
+hud_screen *find_hud_by_name(const char *name) {
+   hud_screen *current = hud_mgr.screens;
    while (current != NULL) {
       if (strcmp(current->name, name) == 0) {
          return current;
@@ -83,8 +78,8 @@ hud_screen* find_hud_by_name(const char* name) {
 }
 
 /* Find a HUD by ID */
-hud_screen* find_hud_by_id(int id) {
-   hud_screen* current = hud_mgr.screens;
+hud_screen *find_hud_by_id(int id) {
+   hud_screen *current = hud_mgr.screens;
    while (current != NULL) {
       if (current->hud_id == id) {
          return current;
@@ -100,7 +95,7 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
       LOG_ERROR("HUD with name %s already exists", name);
       return -1;
    }
-   
+
    /* Find next available ID */
    int next_id = 0;
    hud_screen *current = hud_mgr.screens;
@@ -114,18 +109,18 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
       }
       current = current->next;
    }
-   
+
    /* Create new HUD screen */
    hud_screen *new_screen = (hud_screen *)malloc(sizeof(hud_screen));
    if (new_screen == NULL) {
       LOG_ERROR("Failed to allocate memory for new HUD");
       return -1;
    }
-   
+
    /* Initialize the HUD */
-   strncpy(new_screen->name, name, MAX_TEXT_LENGTH-1);
-   new_screen->name[MAX_TEXT_LENGTH-1] = '\0';
-   
+   strncpy(new_screen->name, name, MAX_TEXT_LENGTH - 1);
+   new_screen->name[MAX_TEXT_LENGTH - 1] = '\0';
+
    if (hotkey != NULL) {
       strncpy(new_screen->hotkey, hotkey, 1);
       new_screen->hotkey[1] = '\0';
@@ -134,10 +129,10 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
    }
 
    new_screen->transition_type = find_transition_by_name(transition);
-   
+
    new_screen->hud_id = next_id;
    new_screen->next = NULL;
-   
+
    /* Add to HUD list */
    if (hud_mgr.screens == NULL) {
       hud_mgr.screens = new_screen;
@@ -150,7 +145,7 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
       }
       current->next = new_screen;
    }
-   
+
    return new_screen->hud_id;
 }
 
@@ -160,16 +155,16 @@ void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
       LOG_ERROR("Invalid HD passed for transition.");
       return;
    }
-   
+
    if (this_screen == hud_mgr.current_screen) {
       LOG_INFO("Already on HUD '%s'", this_screen->name);
       return;
    }
-   
+
    /* Validate transition type */
    if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-      LOG_WARNING("Invalid transition type %d, using default for screen %s",
-                  transition_type, this_screen->transition_type);
+      LOG_WARNING("Invalid transition type %d, using default for screen %s", transition_type,
+                  this_screen->transition_type);
       transition_type = this_screen->transition_type;
    }
 
@@ -180,9 +175,9 @@ void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
    hud_mgr.transition_type = transition_type;
    //hud_mgr.transition_duration_ms = transition_duration_ms;
    hud_mgr.transition_start_time = SDL_GetTicks();
-   
-   LOG_INFO("Switching to HUD: %s with transition %s", 
-            this_screen->name, get_transition_name(transition_type));
+
+   LOG_INFO("Switching to HUD: %s with transition %s", this_screen->name,
+            get_transition_name(transition_type));
 }
 
 /* Get ID of current HUD */
@@ -194,12 +189,12 @@ int get_current_hud_id(void) {
 }
 
 /* Get pointer to the HUD manager */
-hud_manager* get_hud_manager(void) {
+hud_manager *get_hud_manager(void) {
    return &hud_mgr;
 }
 
 /* Get string name of transition type */
-const char* get_transition_name(transition_t transition_type) {
+const char *get_transition_name(transition_t transition_type) {
    if (transition_type >= 0 && transition_type < TRANSITION_MAX) {
       return transition_names[transition_type];
    }
@@ -207,7 +202,7 @@ const char* get_transition_name(transition_t transition_type) {
 }
 
 /* Find transition type by name */
-int find_transition_by_name(const char* name) {
+int find_transition_by_name(const char *name) {
    if (name == NULL) {
       return get_hud_manager()->transition_type; /* Default if not defined */
    }

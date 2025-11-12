@@ -35,22 +35,22 @@ typedef enum {
 
 /* HUD screen definition */
 typedef struct _hud_screen {
-   char name[MAX_TEXT_LENGTH];        /* Name of this HUD configuration */
-   char hotkey[2];                    /* Optional hotkey to activate this HUD */
-   transition_t transition_type;      /* Optional transition specific to this HUD */
-   int hud_id;                        /* Unique identifier for this HUD (0-15) */
-   struct _hud_screen *next;          /* Next HUD in chain */
+   char name[MAX_TEXT_LENGTH];   /* Name of this HUD configuration */
+   char hotkey[2];               /* Optional hotkey to activate this HUD */
+   transition_t transition_type; /* Optional transition specific to this HUD */
+   int hud_id;                   /* Unique identifier for this HUD (0-15) */
+   struct _hud_screen *next;     /* Next HUD in chain */
 } hud_screen;
 
 /* HUD management */
 typedef struct _hud_manager {
-   hud_screen *screens;               /* List of available HUD screens */
-   hud_screen *current_screen;        /* Currently active screen */
-   hud_screen *transition_from;       /* Screen transitioning from (NULL if not in transition) */
-   float transition_progress;         /* 0.0-1.0 progress of current transition */
-   transition_t transition_type;      /* Type of transition animation */
-   int transition_duration_ms;        /* Duration in milliseconds */
-   Uint32 transition_start_time;      /* When the transition started */
+   hud_screen *screens;          /* List of available HUD screens */
+   hud_screen *current_screen;   /* Currently active screen */
+   hud_screen *transition_from;  /* Screen transitioning from (NULL if not in transition) */
+   float transition_progress;    /* 0.0-1.0 progress of current transition */
+   transition_t transition_type; /* Type of transition animation */
+   int transition_duration_ms;   /* Duration in milliseconds */
+   Uint32 transition_start_time; /* When the transition started */
 } hud_manager;
 
 /* Initialization and cleanup functions */
@@ -83,7 +83,7 @@ void cleanup_hud_manager(void);
  * @param name The name of the HUD to search for
  * @return Pointer to the hud_screen structure if found, NULL otherwise
  */
-hud_screen* find_hud_by_name(const char* name);
+hud_screen *find_hud_by_name(const char *name);
 
 /**
  * @brief Finds a HUD screen by its ID.
@@ -94,7 +94,7 @@ hud_screen* find_hud_by_name(const char* name);
  * @param id The ID of the HUD to search for (0-15)
  * @return Pointer to the hud_screen structure if found, NULL otherwise
  */
-hud_screen* find_hud_by_id(int id);
+hud_screen *find_hud_by_id(int id);
 
 /**
  * @brief Switches to a different HUD with specified transition.
@@ -148,7 +148,7 @@ int get_current_hud_id(void);
  *
  * @return Pointer to the global hud_manager structure
  */
-hud_manager* get_hud_manager(void);
+hud_manager *get_hud_manager(void);
 
 /* Rendering functions */
 
@@ -161,7 +161,7 @@ hud_manager* get_hud_manager(void);
  * @param transition_type The transition type enumeration value
  * @return String name of the transition type, or "unknown" for invalid values
  */
-const char* get_transition_name(transition_t transition_type);
+const char *get_transition_name(transition_t transition_type);
 
 /**
  * @brief Finds a transition type by its string name.
@@ -172,6 +172,6 @@ const char* get_transition_name(transition_t transition_type);
  * @param name The string name of the transition type to find
  * @return The corresponding transition_t value, or the default transition type if not found
  */
-int find_transition_by_name(const char* name);
+int find_transition_by_name(const char *name);
 
 #endif /* HUD_MANAGER_H */

@@ -19,16 +19,17 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "armor.h"
+
 #include <time.h>
 
-#include "defines.h"
-#include "armor.h"
 #include "config_manager.h"
+#include "defines.h"
 #include "element_renderer.h"
 #include "logging.h"
 #include "mirage.h"
 
-static int armor_enabled = 1;    /* Variable to turn on/off displaying armor. */
+static int armor_enabled = 1; /* Variable to turn on/off displaying armor. */
 
 void setArmorEnabled(int enabled) {
    if (enabled) {
@@ -39,8 +40,7 @@ void setArmorEnabled(int enabled) {
 }
 
 /* Register armor component when MQTT message received */
-void registerArmor(char *mqtt_device_in)
-{
+void registerArmor(char *mqtt_device_in) {
    char text[2048] = "";
    armor_settings *this_as = get_armor_settings();
    element *this_element = this_as->armor_elements;
@@ -71,8 +71,9 @@ void registerArmor(char *mqtt_device_in)
             this_element->texture = this_element->texture_online;
 
             /* Trigger notification timeout */
-            int notice_timeout = (armor_display != NULL && armor_display->notice_timeout > 0) ?
-                                 armor_display->notice_timeout : 5;
+            int notice_timeout = (armor_display != NULL && armor_display->notice_timeout > 0)
+                                     ? armor_display->notice_timeout
+                                     : 5;
             trigger_armor_notification_timeout(notice_timeout);
 
             /* TTS for connection */

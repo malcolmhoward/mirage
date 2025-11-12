@@ -19,17 +19,16 @@
  * part of the project and are adopted by the project author(s).
  */
 
+#include "curl_download.h"
+
+#include <curl/curl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <curl/curl.h>
-
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_image.h"
-
-#include "curl_download.h"
 #include "logging.h"
 #include "mirage.h"
 
@@ -114,8 +113,8 @@ void *image_download_thread(void *arg) {
          pthread_mutex_unlock(&this_data->mutex);
 
          if ((this_data->download_count > 0) && (this_data->download_count - downloads <= 0)) {
-            /* We've downloaded all we need to. This thread is being monitored though, so just sleep for a
-             * while and then continue.
+            /* We've downloaded all we need to. This thread is being monitored though, so just sleep
+             * for a while and then continue.
              */
             LOG_INFO("Download limit reached.");
             sleep(60);
@@ -162,4 +161,3 @@ void *image_download_thread(void *arg) {
 
    return NULL;
 }
-

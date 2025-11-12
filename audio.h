@@ -24,9 +24,14 @@
 
 #include <mqueue.h>
 
+#include "defines.h"
+
 /* Audio playback commands. */
 /* TODO: Replace text strings with JSON. */
-enum commands { SOUND_PLAY, SOUND_STOP };
+enum commands {
+   SOUND_PLAY,
+   SOUND_STOP
+};
 
 /* Commands
  * play [string filename]
@@ -67,5 +72,4 @@ typedef struct _audio_msg {
 void *audio_thread(void *arg);
 int process_audio_command(int command, char *file, double start_percent);
 
-#endif // AUDIO_H
-
+#endif  // AUDIO_H

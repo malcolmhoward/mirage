@@ -22,6 +22,8 @@
 #ifndef DEVICES_H
 #define DEVICES_H
 
+#include "config_parser.h"
+
 /* Motion Object */
 typedef struct _motion {
    int format;
@@ -35,20 +37,20 @@ typedef struct _enviro {
    double humidity;
 
    /* Air Quality Measurements */
-   double air_quality;                 /* 0-100 scale */
-   char air_quality_description[15];   /* Text description: Excellent/Good/Average/Poor/Very Poor */
+   double air_quality;               /* 0-100 scale */
+   char air_quality_description[15]; /* Text description: Excellent/Good/Average/Poor/Very Poor */
 
    /* VOC and CO2 Data */
-   double tvoc_ppb;                    /* TVOC in ppb */
-   double eco2_ppm;                    /* Equivalent CO2 in ppm */
-   double co2_ppm;                     /* Actual CO2 in ppm */
-   char co2_quality_description[15];   /* Text description of CO2 quality */
-   int co2_eco2_diff;                  /* Difference between CO2 and eCO2 */
-   char co2_source_analysis[30];       /* Analysis of CO2 sources */
+   double tvoc_ppb;                  /* TVOC in ppb */
+   double eco2_ppm;                  /* Equivalent CO2 in ppm */
+   double co2_ppm;                   /* Actual CO2 in ppm */
+   char co2_quality_description[15]; /* Text description of CO2 quality */
+   int co2_eco2_diff;                /* Difference between CO2 and eCO2 */
+   char co2_source_analysis[30];     /* Analysis of CO2 sources */
 
    /* Calculated Environmental Indices */
-   double heat_index_c;                /* Heat index in Celsius */
-   double dew_point;                   /* Dew point in Celsius */
+   double heat_index_c; /* Heat index in Celsius */
+   double dew_point;    /* Dew point in Celsius */
 } enviro;
 
 /* GPS Object */
@@ -73,10 +75,9 @@ long double get_loadavg(void);
 long double get_mem_usage(void);
 int get_wifi_signal_level(void);
 
-element* find_map_element(void);
+element *find_map_element(void);
 void change_map_zoom(int direction);
 void cycle_map_type(void);
 void trigger_map_refresh(void);
 
-#endif // DEVICES_H
-
+#endif  // DEVICES_H

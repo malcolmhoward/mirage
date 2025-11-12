@@ -62,15 +62,15 @@
  * Union for format-specific parameters: JPEG quality or PNG compression level.
  */
 typedef struct {
-    const unsigned char *rgba_buffer;
-    int orig_width, orig_height;
-    const char *filename;
-    int left_crop, top_crop, right_crop, bottom_crop;
-    int new_width, new_height;
-    union {
-        int quality;      // Used for JPEG
-        int compression;  // Used for PNG
-    } format_params;
+   const unsigned char *rgba_buffer;
+   int orig_width, orig_height;
+   const char *filename;
+   int left_crop, top_crop, right_crop, bottom_crop;
+   int new_width, new_height;
+   union {
+      int quality;      // Used for JPEG
+      int compression;  // Used for PNG
+   } format_params;
 } ImageProcessParams;
 
 /**
@@ -108,24 +108,26 @@ typedef struct {
  * Indicates a failure in an operation using the GD library.
  */
 typedef enum {
-    IMG_SUCCESS = 0,
-    IMG_ERR_INVALID_PARAMS = -1,
-    IMG_ERR_INVALID_CROP = -2,
-    IMG_ERR_EXTENSION_NOT_FOUND = -3,
-    IMG_ERR_UNSUPPORTED_FORMAT = -4,
-    IMG_ERR_INVALID_JPEG_QUALITY = -5,
-    IMG_ERR_INVALID_PNG_COMPRESSION = -6,
-    IMG_ERR_FILE_OPEN_FAILED = -7,
-    IMG_ERR_MEMORY_ALLOCATION_FAILED = -8,
-    IMG_ERR_GD_OPERATION_FAILED = -9
+   IMG_SUCCESS = 0,
+   IMG_ERR_INVALID_PARAMS = -1,
+   IMG_ERR_INVALID_CROP = -2,
+   IMG_ERR_EXTENSION_NOT_FOUND = -3,
+   IMG_ERR_UNSUPPORTED_FORMAT = -4,
+   IMG_ERR_INVALID_JPEG_QUALITY = -5,
+   IMG_ERR_INVALID_PNG_COMPRESSION = -6,
+   IMG_ERR_FILE_OPEN_FAILED = -7,
+   IMG_ERR_MEMORY_ALLOCATION_FAILED = -8,
+   IMG_ERR_GD_OPERATION_FAILED = -9
 } ImageErrorCode;
 
 // Function prototype for saving RGBA data as a JPEG image
 ImageErrorCode save_rgba_to_jpeg(const uint8_t *rgba_buffer,
-                                 int width, int height, const char *filename, int quality);
+                                 int width,
+                                 int height,
+                                 const char *filename,
+                                 int quality);
 
 // Function prototype to modify the RGBA data and then save as a JPEG or PNG image
 ImageErrorCode process_and_save_image(const ImageProcessParams *params);
 
-#endif // IMAGE_UTILS_H
-
+#endif  // IMAGE_UTILS_H

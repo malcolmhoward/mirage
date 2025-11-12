@@ -48,10 +48,10 @@
 #include <unistd.h>
 
 /* Serial Port */
-#include <termios.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <termios.h>
 
 /* Sockets */
 #include <netdb.h>
@@ -82,9 +82,9 @@
 
 /* GStreamer */
 #include <glib-2.0/glib.h>
-#include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 #include <gst/app/gstappsrc.h>
+#include <gst/gst.h>
 
 /* Mosquitto */
 #include <mosquitto.h>
@@ -99,13 +99,13 @@
 #include <stdbool.h>
 
 /* Local */
-#include "defines.h" /* Out of order due to dependencies */
-#include "audio.h"
 #include "armor.h"
+#include "audio.h"
 #include "command_processing.h"
 #include "config_manager.h"
 #include "config_parser.h"
 #include "curl_download.h"
+#include "defines.h" /* Out of order due to dependencies */
 #include "devices.h"
 #include "element_renderer.h"
 #include "frame_rate_tracker.h"
@@ -122,79 +122,73 @@
 #include "utils.h"
 #include "version.h"
 
-static pthread_mutex_t v_mutex = PTHREAD_MUTEX_INITIALIZER;  /* Mutex for video buffer access. */
-static GstMapInfo mapL[2], mapR[2];        /* Video memory maps. */
+static pthread_mutex_t v_mutex = PTHREAD_MUTEX_INITIALIZER; /* Mutex for video buffer access. */
+static GstMapInfo mapL[2], mapR[2];                         /* Video memory maps. */
 #ifdef DISPLAY_TIMING
-struct timespec ts_cap[2];          /* Store the display latency. */
+struct timespec ts_cap[2]; /* Store the display latency. */
 #endif
-static int video_posted = 0;               /* Notify that the new video frames are ready. */
-static int buffer_num = 0;                 /* Video is double buffered. This swaps between them. */
+static int video_posted = 0; /* Notify that the new video frames are ready. */
+static int buffer_num = 0;   /* Video is double buffered. This swaps between them. */
 
 static int window_width = 0;
 static int window_height = 0;
 static pthread_mutex_t windowSizeMutex = PTHREAD_MUTEX_INITIALIZER;
 
-pthread_t od_L_thread = 0, od_R_thread = 0;  /* Object detection thread IDs */
-static int single_cam = 0;                   /* Single Camera Mode Enable */
-static int cam1_id = -1, cam2_id = -1;       /* Camera IDs for CSI or USB */
+pthread_t od_L_thread = 0, od_R_thread = 0; /* Object detection thread IDs */
+static int single_cam = 0;                  /* Single Camera Mode Enable */
+static int cam1_id = -1, cam2_id = -1;      /* Camera IDs for CSI or USB */
 
-static struct mosquitto *mosq = NULL;        /* MQTT pointer */
+static struct mosquitto *mosq = NULL; /* MQTT pointer */
 
-static int quit = 0;                         /* Global to sync exiting of threads */
-int detect_enabled = 0;                      /* Is object detection enabled? */
+static int quit = 0;    /* Global to sync exiting of threads */
+int detect_enabled = 0; /* Is object detection enabled? */
 
 double averageFrameRate = 0.0;
 static int curr_fps = 60;
 
-static unsigned int config_check_interval = 5000;  /* Check every 5000ms (5s) */
+static unsigned int config_check_interval = 5000; /* Check every 5000ms (5s) */
 
 /* Right now we only support one instance of each. These are their objects. */
-motion this_motion = {
-   .format = 0,
-   .heading = 0.0,
-   .pitch = 0.0,
-   .roll = 0.0,
-   .w = 1.0,    /* Identity quaternion values */
-   .x = 0.0,
-   .y = 0.0,
-   .z = 0.0
-};
+motion this_motion = { .format = 0,
+                       .heading = 0.0,
+                       .pitch = 0.0,
+                       .roll = 0.0,
+                       .w = 1.0, /* Identity quaternion values */
+                       .x = 0.0,
+                       .y = 0.0,
+                       .z = 0.0 };
 
-enviro this_enviro = {
-   .temp = 0.0,
-   .humidity = 0.0,
-   .air_quality = 0.0,
-   .air_quality_description = "",
-   .tvoc_ppb = 0.0,
-   .eco2_ppm = 0.0,
-   .co2_ppm = 0.0,
-   .co2_quality_description = "",
-   .co2_eco2_diff = 0,
-   .co2_source_analysis = "",
-   .heat_index_c = 0.0,
-   .dew_point = 0.0
-};
+enviro this_enviro = { .temp = 0.0,
+                       .humidity = 0.0,
+                       .air_quality = 0.0,
+                       .air_quality_description = "",
+                       .tvoc_ppb = 0.0,
+                       .eco2_ppm = 0.0,
+                       .co2_ppm = 0.0,
+                       .co2_quality_description = "",
+                       .co2_eco2_diff = 0,
+                       .co2_source_analysis = "",
+                       .heat_index_c = 0.0,
+                       .dew_point = 0.0 };
 
-gps this_gps = {
-   .time = "00:00:00",
-   .date = "2021/01/01",
-   .fix = 0,
-   .quality = 0,
-   .latitude = 0.0,
-   .latitudeDegrees = 0.0,
-   .lat = "0N",
-   .longitude = 0.0,
-   .longitudeDegrees = 0.0,
-   .lon = "0W",
-   .speed = 0.0,
-   .angle = 0.0,
-   .altitude = 0.0,
-   .satellites = 0
-};
+gps this_gps = { .time = "00:00:00",
+                 .date = "2021/01/01",
+                 .fix = 0,
+                 .quality = 0,
+                 .latitude = 0.0,
+                 .latitudeDegrees = 0.0,
+                 .lat = "0N",
+                 .longitude = 0.0,
+                 .longitudeDegrees = 0.0,
+                 .lon = "0W",
+                 .speed = 0.0,
+                 .angle = 0.0,
+                 .altitude = 0.0,
+                 .satellites = 0 };
 
 /* AI */
 #define AI_NAME_MAX_LENGTH 32
-#define AI_STATE_MAX_LENGTH 18   /* This is actually defined by the states in DAWN. */
+#define AI_STATE_MAX_LENGTH 18 /* This is actually defined by the states in DAWN. */
 static char aiName[AI_NAME_MAX_LENGTH] = "";
 static char aiState[AI_STATE_MAX_LENGTH] = "";
 
@@ -203,148 +197,144 @@ extern thread_info audio_threads[NUM_AUDIO_THREADS];
 mqd_t qd_server;
 extern mqd_t qd_clients[NUM_AUDIO_THREADS];
 
-const struct Alert alert_messages[ALERT_MAX] = {
-   {ALERT_RECORDING, "ERROR: Recording failed!"},
-   {ALERT_CONFIG_RELOADED, "Configuration reloaded successfully"}
-};
+const struct Alert alert_messages[ALERT_MAX] = { { ALERT_RECORDING, "ERROR: Recording failed!" },
+                                                 { ALERT_CONFIG_RELOADED,
+                                                   "Configuration reloaded successfully" } };
 
 static unsigned int config_alert_start_time = 0;
-static const unsigned int config_alert_duration = 5000; // 5 seconds
+static const unsigned int config_alert_duration = 5000;  // 5 seconds
 
 alert_t active_alerts = ALERT_NONE;
 
-element default_element =
-{
-   .type = STATIC,
-   .enabled = 0,
+element default_element = { .type = STATIC,
+                            .enabled = 0,
 
-   .name = "",
-   .hotkey = "",
+                            .name = "",
+                            .hotkey = "",
 
-   .filename = "",
-   .filename_r = "",
-   .filename_s = "",
-   .filename_rs = "",
+                            .filename = "",
+                            .filename_r = "",
+                            .filename_s = "",
+                            .filename_rs = "",
 
-   .filename_base = "",
-   .filename_online = "",
-   .filename_warning = "",
-   .filename_offline = "",
+                            .filename_base = "",
+                            .filename_online = "",
+                            .filename_warning = "",
+                            .filename_offline = "",
 
-   .text = "",
-   .last_rendered_text = "",
-   .font = "",
-   //SDL_Color font_color;
-   .ttf_font = NULL,
-   .font_size = -1,
-   .halign = "left",
+                            .text = "",
+                            .last_rendered_text = "",
+                            .font = "",
+                            //SDL_Color font_color;
+                            .ttf_font = NULL,
+                            .font_size = -1,
+                            .halign = "left",
 
-   .dest_x = 0,
-   .dest_y = 0,
-   .angle = 0.0,
-   .fixed = 0,
+                            .dest_x = 0,
+                            .dest_y = 0,
+                            .angle = 0.0,
+                            .fixed = 0,
 
-   .layer = 0,
+                            .layer = 0,
 
-   .surface = NULL,
-   .texture = NULL,
-   .texture_r = NULL,
-   .texture_s = NULL,
-   .texture_rs = NULL,
-   .texture_l = NULL,
-   .texture_w = NULL,
-   .texture_p = NULL,
+                            .surface = NULL,
+                            .texture = NULL,
+                            .texture_r = NULL,
+                            .texture_s = NULL,
+                            .texture_rs = NULL,
+                            .texture_l = NULL,
+                            .texture_w = NULL,
+                            .texture_p = NULL,
 
-   .texture_base = NULL,
-   .texture_online = NULL,
-   .texture_warning = NULL,
-   .texture_offline = NULL,
+                            .texture_base = NULL,
+                            .texture_online = NULL,
+                            .texture_warning = NULL,
+                            .texture_offline = NULL,
 
-   .dst_rect = {0, 0, 0, 0},
+                            .dst_rect = { 0, 0, 0, 0 },
 
-   .special_name = "",
-   .mqtt_device = "",
-   .mqtt_registered = 0,
-   .mqtt_last_time = 0,
+                            .special_name = "",
+                            .mqtt_device = "",
+                            .mqtt_registered = 0,
+                            .mqtt_last_time = 0,
 
-   .width = 0,
-   .height = 0,
+                            .width = 0,
+                            .height = 0,
 
-   .download_count = 0,
-   .map_type = MAP_TYPE_HYBRID,
-   .map_zoom = 15,
-   .update_interval_sec = MAP_UPDATE_SEC,
-   .force_refresh = 0,
+                            .download_count = 0,
+                            .map_type = MAP_TYPE_HYBRID,
+                            .map_zoom = 15,
+                            .update_interval_sec = MAP_UPDATE_SEC,
+                            .force_refresh = 0,
 
-   .center_x_offset = 0,
-   .center_y_offset = 0,
+                            .center_x_offset = 0,
+                            .center_y_offset = 0,
 
-   .text_x_offset = 0,
-   .text_y_offset = 0,
+                            .text_x_offset = 0,
+                            .text_y_offset = 0,
 
-   .this_anim.first_frame = NULL,
-   .this_anim.frame_count = 0,
+                            .this_anim.first_frame = NULL,
+                            .this_anim.frame_count = 0,
 
-   .warning_temp = -1.0,
-   .warning_voltage = -1.0,
+                            .warning_temp = -1.0,
+                            .warning_voltage = -1.0,
 
-   .last_temp = -1.0,
-   .last_voltage = -1.0,
+                            .last_temp = -1.0,
+                            .last_voltage = -1.0,
 
-   .notice_x = 0,
-   .notice_y = 0,
-   .notice_width = 0,
-   .notice_height = 0,
-   .notice_timeout = DEFAULT_ARMOR_NOTICE_TIMEOUT,
-   .show_metrics = 0,
-   .metrics_font = "",
-   .metrics_font_size = 20,
+                            .notice_x = 0,
+                            .notice_y = 0,
+                            .notice_width = 0,
+                            .notice_height = 0,
+                            .notice_timeout = DEFAULT_ARMOR_NOTICE_TIMEOUT,
+                            .show_metrics = 0,
+                            .metrics_font = "",
+                            .metrics_font_size = 20,
 
-   .metrics_textures = NULL,
-   .last_metrics_text = NULL,
-   .metrics_texture_count = 0,
+                            .metrics_textures = NULL,
+                            .last_metrics_text = NULL,
+                            .metrics_texture_count = 0,
 
-   .warn_state = WARN_NORMAL,
+                            .warn_state = WARN_NORMAL,
 
-   /* Gauge-specific property defaults */
-   .gauge_type = "",
-   .gauge_min_value = 0.0f,
-   .gauge_max_value = 100.0f,
-   .gauge_value_source = "",
-   .gauge_current_value = 0.0f,
-   .gauge_warning_threshold = -1.0f,  /* -1 means no warning threshold */
-   .gauge_primary_color = {0x00, 0xF5, 0xFC, 0xFF},  /* Cyan by default */
-   .gauge_warning_color = {0xFF, 0x00, 0x00, 0xFF},  /* Red by default */
-   .gauge_orientation = 0,  /* 0 = horizontal */
-   .gauge_arc_start = 0.0f,
-   .gauge_arc_sweep = 360.0f,
-   .gauge_thickness = 10,
-   .gauge_ticks = 0,
-   .gauge_smooth = 0,
-   .gauge_glow = 0,
-   .gauge_display_value = 0.0f,
-   .gauge_show_value = 0,
-   .gauge_value_format[0] = '\0',
-   .gauge_value_color = (SDL_Color){255, 255, 255, 255},
-   .gauge_value_size = 24,
+                            /* Gauge-specific property defaults */
+                            .gauge_type = "",
+                            .gauge_min_value = 0.0f,
+                            .gauge_max_value = 100.0f,
+                            .gauge_value_source = "",
+                            .gauge_current_value = 0.0f,
+                            .gauge_warning_threshold = -1.0f, /* -1 means no warning threshold */
+                            .gauge_primary_color = { 0x00, 0xF5, 0xFC, 0xFF }, /* Cyan by default */
+                            .gauge_warning_color = { 0xFF, 0x00, 0x00, 0xFF }, /* Red by default */
+                            .gauge_orientation = 0,                            /* 0 = horizontal */
+                            .gauge_arc_start = 0.0f,
+                            .gauge_arc_sweep = 360.0f,
+                            .gauge_thickness = 10,
+                            .gauge_ticks = 0,
+                            .gauge_smooth = 0,
+                            .gauge_glow = 0,
+                            .gauge_display_value = 0.0f,
+                            .gauge_show_value = 0,
+                            .gauge_value_format[0] = '\0',
+                            .gauge_value_color = (SDL_Color){ 255, 255, 255, 255 },
+                            .gauge_value_size = 24,
 
-   .gauge_cache_texture = NULL,
-   .gauge_cache_dirty = 1,
-   .gauge_last_rendered_value = -999999.0f,  /* Force initial render */
-   .gauge_value_label_texture = NULL,
-   .gauge_value_label_width = 0,
-   .gauge_value_label_height = 0,
+                            .gauge_cache_texture = NULL,
+                            .gauge_cache_dirty = 1,
+                            .gauge_last_rendered_value = -999999.0f, /* Force initial render */
+                            .gauge_value_label_texture = NULL,
+                            .gauge_value_label_width = 0,
+                            .gauge_value_label_height = 0,
 
-   .transition_alpha = 0.0f,
-   .in_transition = 0,
-   .scale = 1.0f,
+                            .transition_alpha = 0.0f,
+                            .in_transition = 0,
+                            .scale = 1.0f,
 
-   .prev = NULL,
-   .next = NULL
-};
+                            .prev = NULL,
+                            .next = NULL };
 
-element *first_element = NULL;               /* Pointer to first UI element. */
-element intro_element;                       /* Special intro element. */
+element *first_element = NULL; /* Pointer to first UI element. */
+element intro_element;         /* Special intro element. */
 
 /* Local font elements to store each loaded font. */
 typedef struct _local_fonts {
@@ -360,7 +350,7 @@ local_font *font_list = NULL;
 typedef struct _texture_cache {
    SDL_Texture *texture;
    char filename[MAX_FILENAME_LENGTH * 2];
-   time_t file_mtime;     /* File modification time for cache validation */
+   time_t file_mtime; /* File modification time for cache validation */
 
    struct _texture_cache *next;
 } texture_cache;
@@ -370,7 +360,7 @@ texture_cache *texture_list = NULL;
 detect this_detect[2][MAX_DETECT];
 detect this_detect_sorted[2][MAX_DETECT];
 
-static SDL_Renderer *renderer = NULL;               /* Global SDL Renderer */
+static SDL_Renderer *renderer = NULL; /* Global SDL Renderer */
 static SDL_threadID main_thread_id = 0;
 
 od_data oddataL, oddataR;
@@ -378,56 +368,49 @@ od_data oddataL, oddataR;
 /**
  * Returns a pointer to the global motion data structure.
  */
-motion *get_motion_dev(void)
-{
+motion *get_motion_dev(void) {
    return &this_motion;
 }
 
 /**
  * Returns a pointer to the global environmental data structure.
  */
-enviro *get_enviro_dev(void)
-{
+enviro *get_enviro_dev(void) {
    return &this_enviro;
 }
 
 /**
  * Returns a pointer to the global GPS data structure.
  */
-gps *get_gps_dev(void)
-{
+gps *get_gps_dev(void) {
    return &this_gps;
 }
 
 /**
  * Returns a pointer to the global intro element.
  */
-element *get_intro_element(void)
-{
+element *get_intro_element(void) {
    return &intro_element;
 }
 
 /**
  * Returns a pointer to the default element template.
  */
-element *get_default_element(void)
-{
+element *get_default_element(void) {
    return &default_element;
 }
 
 /**
  * Returns a pointer to the first element in the UI element linked list.
  */
-element *get_first_element(void)
-{
+element *get_first_element(void) {
    return first_element;
 }
 
 /**
  * Sets the first element in the UI element linked list.
  */
-element *set_first_element(element *this_element)
-{
+element *set_first_element(element *this_element) {
    first_element = this_element;
 
    return first_element;
@@ -436,8 +419,7 @@ element *set_first_element(element *this_element)
 /**
  * Returns a pointer to the global SDL renderer.
  */
-SDL_Renderer *get_sdl_renderer(void)
-{
+SDL_Renderer *get_sdl_renderer(void) {
    // Check if main thread ID has been initialized
    if (main_thread_id == 0) {
       LOG_ERROR("Main thread ID not initialized!");
@@ -456,8 +438,7 @@ SDL_Renderer *get_sdl_renderer(void)
 /**
  * Enables or disables object detection.
  */
-int set_detect_enabled(int enable)
-{
+int set_detect_enabled(int enable) {
    detect_enabled = enable;
 
    return detect_enabled;
@@ -466,16 +447,14 @@ int set_detect_enabled(int enable)
 /**
  * Checks if the application is in the process of shutting down.
  */
-int checkShutdown(void)
-{
+int checkShutdown(void) {
    return quit;
 }
 
 /**
  * Gets the current window dimensions.
  */
-int get_window_size(int *width, int *height)
-{
+int get_window_size(int *width, int *height) {
    *width = window_width;
    *height = window_height;
 
@@ -496,14 +475,14 @@ void process_ai_state(const char *newAIName, const char *newAIState) {
  * Returns the AI given name for sending back MQTT messages.
  */
 const char *get_ai_name(void) {
-   return (const char *) aiName;
+   return (const char *)aiName;
 };
 
 /*
  * Returns the current AI state that was last send by the AI.
  */
 const char *get_ai_state(void) {
-   return (const char *) aiState;
+   return (const char *)aiState;
 };
 
 /*
@@ -514,8 +493,7 @@ int get_curr_fps(void) {
 }
 
 /* Free the UI element list. */
-void free_elements(element *start_element)
-{
+void free_elements(element *start_element) {
    element *this_element = start_element;
    element *next_element = NULL;
 
@@ -593,73 +571,68 @@ void free_elements(element *start_element)
 }
 
 /* Debug function to check proper processing of UI elements. */
-void dump_element_list(void)
-{
+void dump_element_list(void) {
    element *curr_element = first_element;
    int count = 0;
 
    while (curr_element != NULL) {
       switch (curr_element->type) {
-      case STATIC:
-         LOG_INFO("Element[%d]:\n"
-                "\ttype:\tSTATIC\n"
-                "\tfile:\t%s\n"
-                "\tdest_x:\t%d\n"
-                "\tdest_y:\t%d\n"
-                "\tangle:\t%f\n"
-                "\tlayer:\t%d",
-                count,
-                curr_element->filename, curr_element->dest_x, curr_element->dest_y,
-                curr_element->angle, curr_element->layer);
-         break;
-      case ANIMATED:
-         LOG_INFO("Element[%d]:\n"
-                "\ttype:\tANIMATED\n"
-                "\tfile:\t%s\n"
-                "\tdest_x:\t%d\n"
-                "\tdest_y:\t%d\n"
-                "\tangle:\t%f\n"
-                "\tlayer:\t%d",
-                count,
-                curr_element->filename, curr_element->dest_x, curr_element->dest_y,
-                curr_element->angle, curr_element->layer);
-         break;
-      case TEXT:
-         LOG_INFO("Element[%d]:\n"
-                "\ttype:\tTEXT\n"
-                "\tstring:\t%s\n"
-                "\tfont:\t%s\n"
-                "\tsize:\t%d\n"
-                "\tdest_x:\t%d\n"
-                "\tdest_y:\t%d\n"
-                "\thalign:\t%s\n"
-                "\tangle:\t%f\n"
-                "\tlayer:\t%d",
-                count,
-                curr_element->text, curr_element->font, curr_element->font_size,
-                curr_element->dest_x, curr_element->dest_y,
-                curr_element->halign, curr_element->angle, curr_element->layer);
-         break;
-      case SPECIAL:
-         LOG_INFO("Element[%d]:\n"
-                "\ttype:\tSPECIAL\n"
-                "\tname:\t%s\n"
-                "\tfile:\t%s\n"
-                "\tdest_x:\t%d\n"
-                "\tdest_y:\t%d\n"
-                "\tangle:\t%f\n"
-                "\tlayer:\t%d",
-                count,
-                curr_element->special_name, curr_element->filename,
-                curr_element->dest_x, curr_element->dest_y,
-                curr_element->angle, curr_element->layer);
-         break;
-      case ANIMATED_DYNAMIC:
-         LOG_INFO("Not implemented.");
-         break;
-      case ARMOR_COMPONENT:
-         LOG_INFO("Not implemented.");
-         break;
+         case STATIC:
+            LOG_INFO("Element[%d]:\n"
+                     "\ttype:\tSTATIC\n"
+                     "\tfile:\t%s\n"
+                     "\tdest_x:\t%d\n"
+                     "\tdest_y:\t%d\n"
+                     "\tangle:\t%f\n"
+                     "\tlayer:\t%d",
+                     count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
+                     curr_element->angle, curr_element->layer);
+            break;
+         case ANIMATED:
+            LOG_INFO("Element[%d]:\n"
+                     "\ttype:\tANIMATED\n"
+                     "\tfile:\t%s\n"
+                     "\tdest_x:\t%d\n"
+                     "\tdest_y:\t%d\n"
+                     "\tangle:\t%f\n"
+                     "\tlayer:\t%d",
+                     count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
+                     curr_element->angle, curr_element->layer);
+            break;
+         case TEXT:
+            LOG_INFO("Element[%d]:\n"
+                     "\ttype:\tTEXT\n"
+                     "\tstring:\t%s\n"
+                     "\tfont:\t%s\n"
+                     "\tsize:\t%d\n"
+                     "\tdest_x:\t%d\n"
+                     "\tdest_y:\t%d\n"
+                     "\thalign:\t%s\n"
+                     "\tangle:\t%f\n"
+                     "\tlayer:\t%d",
+                     count, curr_element->text, curr_element->font, curr_element->font_size,
+                     curr_element->dest_x, curr_element->dest_y, curr_element->halign,
+                     curr_element->angle, curr_element->layer);
+            break;
+         case SPECIAL:
+            LOG_INFO("Element[%d]:\n"
+                     "\ttype:\tSPECIAL\n"
+                     "\tname:\t%s\n"
+                     "\tfile:\t%s\n"
+                     "\tdest_x:\t%d\n"
+                     "\tdest_y:\t%d\n"
+                     "\tangle:\t%f\n"
+                     "\tlayer:\t%d",
+                     count, curr_element->special_name, curr_element->filename,
+                     curr_element->dest_x, curr_element->dest_y, curr_element->angle,
+                     curr_element->layer);
+            break;
+         case ANIMATED_DYNAMIC:
+            LOG_INFO("Not implemented.");
+            break;
+         case ARMOR_COMPONENT:
+            LOG_INFO("Not implemented.");
+            break;
       }
 
       count++;
@@ -667,11 +640,10 @@ void dump_element_list(void)
    }
 }
 
-/* This function plays the intro animation on power up. It is designed to minimize dead loading time.
- * I'd still like to find a better way to do this but due to the way SDL handles threads, it's not
- * that easy. */
-int play_intro(int frames, int clear, int *finished)
-{
+/* This function plays the intro animation on power up. It is designed to minimize dead loading
+ * time. I'd still like to find a better way to do this but due to the way SDL handles threads, it's
+ * not that easy. */
+int play_intro(int frames, int clear, int *finished) {
    SDL_Rect src_rect;
    SDL_Rect dst_rect_l, dst_rect_r;
    int frame_count = 0;
@@ -703,10 +675,10 @@ int play_intro(int frames, int clear, int *finished)
       src_rect.w = intro_element.this_anim.current_frame->source_w;
       src_rect.h = intro_element.this_anim.current_frame->source_h;
 
-      dst_rect_l.x = dst_rect_r.x =
-          intro_element.dest_x + intro_element.this_anim.current_frame->dest_x;
-      dst_rect_l.y = dst_rect_r.y =
-          intro_element.dest_y + intro_element.this_anim.current_frame->dest_y;
+      dst_rect_l.x = dst_rect_r.x = intro_element.dest_x +
+                                    intro_element.this_anim.current_frame->dest_x;
+      dst_rect_l.y = dst_rect_r.y = intro_element.dest_y +
+                                    intro_element.this_anim.current_frame->dest_y;
       dst_rect_l.w = dst_rect_r.w = intro_element.this_anim.current_frame->source_w;
       dst_rect_l.h = dst_rect_r.h = intro_element.this_anim.current_frame->source_h;
 
@@ -731,8 +703,8 @@ int play_intro(int frames, int clear, int *finished)
          Uint32 start = 0, stop = 0;
 #endif
 
-         this_vod->rgb_out_pixels[this_vod->write_index] =
-             malloc(window_width * RGB_OUT_SIZE * window_height);
+         this_vod->rgb_out_pixels[this_vod->write_index] = malloc(window_width * RGB_OUT_SIZE *
+                                                                  window_height);
          if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
             LOG_ERROR("Unable to malloc rgb frame 0.");
             return 2;
@@ -741,8 +713,8 @@ int play_intro(int frames, int clear, int *finished)
          start = SDL_GetTicks();
 #endif
          if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
-                                  this_vod->rgb_out_pixels[this_vod->write_index],
-                                  window_width * RGB_OUT_SIZE) != 0) {
+                                          this_vod->rgb_out_pixels[this_vod->write_index],
+                                          window_width * RGB_OUT_SIZE) != 0) {
             LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
             free(this_vod->rgb_out_pixels[this_vod->write_index]);
             this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
@@ -757,7 +729,7 @@ int play_intro(int frames, int clear, int *finished)
             if ((cur_time < min_time) || (min_time == 0))
                min_time = cur_time;
             LOG_INFO("OpenGL_RenderReadPixelsAsync(): %0.2f ms, min: %d, max: %d. weight: %d",
-                   avg_time, min_time, max_time, weight);
+                     avg_time, min_time, max_time, weight);
 #endif
          }
 
@@ -787,14 +759,13 @@ int play_intro(int frames, int clear, int *finished)
 }
 
 /* Pthread function to background object detection. Runs to completion once per frame. */
-void *object_detection_thread(void *arg)
-{
+void *object_detection_thread(void *arg) {
    //int detects = 0;
-   od_data *my_data = (od_data *) arg;
+   od_data *my_data = (od_data *)arg;
 
    detect_image(&my_data->detect_obj, my_data->pix_data, this_detect[my_data->eye], MAX_DETECT);
-   //detects = detect_image(&my_data->detect_obj, my_data->pix_data, this_detect[my_data->eye], MAX_DETECT);
-   //printf("Objects detected: %d\n", detects);
+   //detects = detect_image(&my_data->detect_obj, my_data->pix_data, this_detect[my_data->eye],
+   //MAX_DETECT); printf("Objects detected: %d\n", detects);
 
    my_data->complete = 1;
 
@@ -813,10 +784,12 @@ void *object_detection_thread(void *arg)
  * For CSI cameras, sensor_id 0 is used for left and 1 for right.
  * For USB cameras, /dev/video0 is used for left and /dev/video2 for right.
  */
-static void build_pipeline_string(char* descr, size_t descr_size, const char* cam_type,
-                                  const hud_display_settings* this_hds) {
-   char left_pipeline[GSTREAMER_PIPELINE_LENGTH/2];
-   char right_pipeline[GSTREAMER_PIPELINE_LENGTH/2];
+static void build_pipeline_string(char *descr,
+                                  size_t descr_size,
+                                  const char *cam_type,
+                                  const hud_display_settings *this_hds) {
+   char left_pipeline[GSTREAMER_PIPELINE_LENGTH / 2];
+   char right_pipeline[GSTREAMER_PIPELINE_LENGTH / 2];
    bool is_csi = (cam_type == NULL) || (strncmp(cam_type, "csi", 3) == 0);
 
    if (is_csi) {
@@ -824,30 +797,32 @@ static void build_pipeline_string(char* descr, size_t descr_size, const char* ca
          cam1_id = DEFAULT_CSI_CAM1;
          cam2_id = DEFAULT_CSI_CAM2;
       }
-      g_snprintf(left_pipeline, sizeof(left_pipeline), GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT,
-                 cam1_id, this_hds->cam_input_width, this_hds->cam_input_height,
-                 this_hds->cam_input_fps, this_hds->cam_frame_duration,
-                 single_cam ? "" : "L");
+      g_snprintf(left_pipeline, sizeof(left_pipeline),
+                 GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT, cam1_id,
+                 this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps,
+                 this_hds->cam_frame_duration, single_cam ? "" : "L");
 
       if (!single_cam) {
-         g_snprintf(right_pipeline, sizeof(right_pipeline), GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT,
-                    cam2_id, this_hds->cam_input_width, this_hds->cam_input_height,
-                    this_hds->cam_input_fps, this_hds->cam_frame_duration, "R");
+         g_snprintf(right_pipeline, sizeof(right_pipeline),
+                    GST_CAM_PIPELINE_CSI_INPUT GST_CAM_PIPELINE_OUTPUT, cam2_id,
+                    this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps,
+                    this_hds->cam_frame_duration, "R");
       }
    } else {
       if (cam1_id == -1) {
          cam1_id = DEFAULT_USB_CAM1;
          cam2_id = DEFAULT_USB_CAM2;
       }
-      g_snprintf(left_pipeline, sizeof(left_pipeline), GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT,
-                 cam1_id, this_hds->cam_input_width, this_hds->cam_input_height,
-                 this_hds->cam_input_fps, this_hds->cam_frame_duration,
-                 single_cam ? "" : "L");
+      g_snprintf(left_pipeline, sizeof(left_pipeline),
+                 GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT, cam1_id,
+                 this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps,
+                 this_hds->cam_frame_duration, single_cam ? "" : "L");
 
       if (!single_cam) {
-         g_snprintf(right_pipeline, sizeof(right_pipeline), GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT,
-                    cam2_id, this_hds->cam_input_width, this_hds->cam_input_height,
-                    this_hds->cam_input_fps, this_hds->cam_frame_duration, "R");
+         g_snprintf(right_pipeline, sizeof(right_pipeline),
+                    GST_CAM_PIPELINE_USB_INPUT GST_CAM_PIPELINE_OUTPUT, cam2_id,
+                    this_hds->cam_input_width, this_hds->cam_input_height, this_hds->cam_input_fps,
+                    this_hds->cam_frame_duration, "R");
       }
    }
 
@@ -861,15 +836,14 @@ static void build_pipeline_string(char* descr, size_t descr_size, const char* ca
 /* Video input handling thread.
  * This thread handles input from the cameras and camera sync using timestamps.
  */
-void *video_processing_thread(void *arg)
-{
+void *video_processing_thread(void *arg) {
    GstElement *pipeline = NULL, *sinkL = NULL, *sinkR = NULL;
    GstSample *sampleL[2] = { NULL }, *sampleR[2] = { NULL };
    GstBuffer *bufferL[2] = { NULL }, *bufferR[2] = { NULL };
    gchar descr[GSTREAMER_PIPELINE_LENGTH] = "";
    GError *error = NULL;
    gboolean eosL = false, eosR = false;
-   const char *cam_type = (const char *) arg;
+   const char *cam_type = (const char *)arg;
 
 #ifdef DEBUG_BUFFERS
    int sync_comp = 0;
@@ -961,44 +935,45 @@ void *video_processing_thread(void *arg)
 
             /* handle sync */
             while (((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts) >
-                  this_hds->cam_frame_duration) {
+                   this_hds->cam_frame_duration) {
                gst_sample_unref(sampleR[!buffer_num]);
                g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
                bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
 #ifdef DEBUG_BUFFERS
                LOG_WARNING("Catching up R buffer.");
                LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                     (this_hds->cam_frame_duration) >
-                     abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
-                     sync_comp);
+                           bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                           (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                           (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
+                                                                (long)bufferR[!buffer_num]->pts),
+                           sync_comp);
                sync_comp++;
 #endif
             }
             while (((long)bufferR[!buffer_num]->pts - (long)bufferL[!buffer_num]->pts) >
-                  this_hds->cam_frame_duration) {
+                   this_hds->cam_frame_duration) {
                gst_sample_unref(sampleL[!buffer_num]);
                g_signal_emit_by_name(sinkL, "pull-sample", &sampleL[!buffer_num], NULL);
                bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
 #ifdef DEBUG_BUFFERS
                LOG_WARNING("Catching up L buffer.");
                LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                     (this_hds->cam_frame_duration) >
-                     abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
-                     sync_comp);
+                           bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                           (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                           (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
+                                                                (long)bufferR[!buffer_num]->pts),
+                           sync_comp);
                sync_comp++;
 #endif
             }
 
 #ifdef DEBUG_BUFFERS
             LOG_INFO("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                  bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                  (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                  (this_hds->cam_frame_duration) >
-                  abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts), sync_comp);
+                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                     (this_hds->cam_frame_duration) >
+                         abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
+                     sync_comp);
 #endif
 
             gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
@@ -1038,13 +1013,12 @@ void *video_processing_thread(void *arg)
 /*
  * Retrieves a font from the font cache or loads it if not present.
  */
-TTF_Font *get_local_font(char *font_name, int font_size)
-{
+TTF_Font *get_local_font(char *font_name, int font_size) {
    local_font *this_font = NULL;
 
    if (font_name == NULL || font_size <= 0) {
-      LOG_WARNING("Invalid font parameters: name=%s, size=%d",
-                  font_name ? font_name : "NULL", font_size);
+      LOG_WARNING("Invalid font parameters: name=%s, size=%d", font_name ? font_name : "NULL",
+                  font_size);
       return NULL;
    }
 
@@ -1191,7 +1165,8 @@ SDL_Texture *get_cached_texture(const char *filename) {
       while (prev && prev->next != this_texture) {
          prev = prev->next;
       }
-      if (prev) prev->next = NULL;
+      if (prev)
+         prev->next = NULL;
       return NULL;
    }
 
@@ -1210,14 +1185,14 @@ void *grab_latest_camera_frame(void *temp_buffer) {
    hud_display_settings *this_hds = get_hud_display_settings();
 
    /* Use camera frame buffer if available */
-   pthread_mutex_lock(&v_mutex); // Lock the video mutex to safely access mapL
+   pthread_mutex_lock(&v_mutex);  // Lock the video mutex to safely access mapL
    if (video_posted && mapL[buffer_num].data != NULL) {
       /* Allocate temporary buffer for the screenshot */
       temp_buffer = malloc(this_hds->cam_input_width * this_hds->cam_input_height * 4);
       if (temp_buffer != NULL) {
          /* Copy camera data */
          memcpy(temp_buffer, mapL[buffer_num].data,
-               this_hds->cam_input_width * this_hds->cam_input_height * 4);
+                this_hds->cam_input_width * this_hds->cam_input_height * 4);
       }
    }
    pthread_mutex_unlock(&v_mutex);
@@ -1228,9 +1203,7 @@ void *grab_latest_camera_frame(void *temp_buffer) {
 /*
  * Renders a texture to both eyes in a stereo display.
  */
-void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
-                  SDL_Rect *dest2, double angle)
-{
+void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *dest2, double angle) {
    SDL_Rect src_rect_l, src_rect_r;
    SDL_Rect dest_rect_l, dest_rect_r;
    int overage = 0;
@@ -1267,7 +1240,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Left edge of left eye */
    if (dest_rect_l.x < 0) {
       if (src_rect_l.w != dest_rect_l.w) {
-         scale = ((double) src_rect_l.w) / ((double) dest_rect_l.w);
+         scale = ((double)src_rect_l.w) / ((double)dest_rect_l.w);
       }
 
       overage = -dest_rect_l.x;
@@ -1280,7 +1253,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Right edge of left eye */
    if ((dest_rect_l.x + dest_rect_l.w) > this_hds->eye_output_width) {
       if (src_rect_l.w != dest_rect_l.w) {
-         scale = ((double) src_rect_l.w) / ((double) dest_rect_l.w);
+         scale = ((double)src_rect_l.w) / ((double)dest_rect_l.w);
       }
 
       overage = (dest_rect_l.x + dest_rect_l.w) - this_hds->eye_output_width;
@@ -1291,7 +1264,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Top edge of left eye */
    if (dest_rect_l.y < 0) {
       if (src_rect_l.h != dest_rect_l.h) {
-         scale = ((double) src_rect_l.h) / ((double) dest_rect_l.h);
+         scale = ((double)src_rect_l.h) / ((double)dest_rect_l.h);
       }
 
       overage = -dest_rect_l.y;
@@ -1304,7 +1277,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Bottom edge of left eye */
    if ((dest_rect_l.y + dest_rect_l.h) > this_hds->eye_output_height) {
       if (src_rect_l.h != dest_rect_l.h) {
-         scale = ((double) src_rect_l.h) / ((double) dest_rect_l.h);
+         scale = ((double)src_rect_l.h) / ((double)dest_rect_l.h);
       }
 
       overage = (dest_rect_l.y + dest_rect_l.h) - this_hds->eye_output_height;
@@ -1317,7 +1290,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Left edge of right eye */
    if (dest_rect_r.x < this_hds->eye_output_width) {
       if (src_rect_r.w != dest_rect_r.w) {
-         scale = ((double) src_rect_r.w) / ((double) dest_rect_r.w);
+         scale = ((double)src_rect_r.w) / ((double)dest_rect_r.w);
       }
 
       overage = this_hds->eye_output_width - dest_rect_r.x;
@@ -1330,7 +1303,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Right edge of right eye */
    if ((dest_rect_r.x + dest_rect_r.w) > (2 * this_hds->eye_output_width)) {
       if (src_rect_r.w != dest_rect_r.w) {
-         scale = ((double) src_rect_r.w) / ((double) dest_rect_r.w);
+         scale = ((double)src_rect_r.w) / ((double)dest_rect_r.w);
       }
 
       overage = (dest_rect_r.x + dest_rect_r.w) - (2 * this_hds->eye_output_width);
@@ -1341,7 +1314,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Top edge of right eye */
    if (dest_rect_r.y < 0) {
       if (src_rect_r.h != dest_rect_r.h) {
-         scale = ((double) src_rect_r.h) / ((double) dest_rect_r.h);
+         scale = ((double)src_rect_r.h) / ((double)dest_rect_r.h);
       }
 
       overage = -dest_rect_r.y;
@@ -1354,7 +1327,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest,
    /* Bottom edge of right eye */
    if ((dest_rect_r.y + dest_rect_r.h) > this_hds->eye_output_height) {
       if (src_rect_r.h != dest_rect_r.h) {
-         scale = ((double) src_rect_r.h) / ((double) dest_rect_r.h);
+         scale = ((double)src_rect_r.h) / ((double)dest_rect_r.h);
       }
 
       overage = (dest_rect_r.y + dest_rect_r.h) - this_hds->eye_output_height;
@@ -1391,8 +1364,7 @@ void mqttTextToSpeech(const char *text) {
 
    // Construct the MQTT command with the provided text
    snprintf(mqtt_command, sizeof(mqtt_command),
-            "{ \"device\": \"text to speech\", \"action\": \"play\", \"value\": \"%s\" }",
-            text);
+            "{ \"device\": \"text to speech\", \"action\": \"play\", \"value\": \"%s\" }", text);
 
    if (mosq == NULL) {
       LOG_ERROR("MQTT not initialized trying to send: \"%s\"", text);
@@ -1443,13 +1415,13 @@ void display_help(int argc, char *argv[]) {
    printf("  -d, --device DEVICE    Specify the device for USB/serial connection.\n");
    printf("  -c, --camera TYPE      Specify the camera type, csi or usb.\n");
    printf("  -n, --camcount [1/2]   Specify the number of cameras for display, 1 or 2.\n");
-   printf("  -b, --black-background  Disable cameras and use black background (for UI design/transparency).\n");
+   printf("  -b, --black-background  Disable cameras and use black background (for UI "
+          "design/transparency).\n");
    printf("\n");
 }
 
 /* MAIN: Start here. */
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
    /* Variable Inits */
    hud_display_settings *this_hds = get_hud_display_settings();
    armor_settings *this_as = get_armor_settings();
@@ -1468,8 +1440,8 @@ int main(int argc, char **argv)
    /* getopt */
    int opt = 0;
    int fullscreen = 0;
-   char record_path[PATH_MAX];   /* Where do we store recordings? */
-   int no_camera_mode = 0;       /* Flag to enable no camera mode */
+   char record_path[PATH_MAX]; /* Where do we store recordings? */
+   int no_camera_mode = 0;     /* Flag to enable no camera mode */
    DestinationType initial_recording_state = DISABLED;
 
    /* Threads */
@@ -1491,7 +1463,7 @@ int main(int argc, char **argv)
 #ifdef DISPLAY_TIMING
    unsigned long last_ts_cap = 0, present_time = 0, ts_total = 0;
    unsigned int ts_count = 0;
-   struct timespec display_time = { .tv_sec = 0, .tv_nsec = 0};
+   struct timespec display_time = { .tv_sec = 0, .tv_nsec = 0 };
 #endif
 
    init_video_out_data();
@@ -1500,7 +1472,7 @@ int main(int argc, char **argv)
 
    unsigned int totalFrames = 0;
    unsigned int currTime = SDL_GetTicks();
-   unsigned int last_file_check = 0;         /* when was the recording last checked */
+   unsigned int last_file_check = 0; /* when was the recording last checked */
 
    Uint64 thisPTime, lastPTime;
    double elapsed = 0.0;
@@ -1536,21 +1508,19 @@ int main(int argc, char **argv)
     * t  - record and stream on startup
     * u: - USB/serial with port
     */
-   static struct option long_options[] = {
-      {"black-background", no_argument, NULL, 'b'},
-      {"camera", required_argument, NULL, 'c'},
-      {"device", required_argument, NULL, 'd'},
-      {"fullscreen", no_argument, NULL, 'f'},
-      {"help", no_argument, NULL, 'h'},
-      {"logfile", required_argument, NULL, 'l'},
-      {"camcount", required_argument, NULL, 'n'},
-      {"record_path", required_argument, NULL, 'p'},
-      {"record", no_argument, NULL, 'r'},
-      {"stream", no_argument, NULL, 's'},
-      {"record_stream", no_argument, NULL, 't'},
-      {"usb", no_argument, NULL, 'u'},
-      {0, 0, 0, 0}
-   };
+   static struct option long_options[] = { { "black-background", no_argument, NULL, 'b' },
+                                           { "camera", required_argument, NULL, 'c' },
+                                           { "device", required_argument, NULL, 'd' },
+                                           { "fullscreen", no_argument, NULL, 'f' },
+                                           { "help", no_argument, NULL, 'h' },
+                                           { "logfile", required_argument, NULL, 'l' },
+                                           { "camcount", required_argument, NULL, 'n' },
+                                           { "record_path", required_argument, NULL, 'p' },
+                                           { "record", no_argument, NULL, 'r' },
+                                           { "stream", no_argument, NULL, 's' },
+                                           { "record_stream", no_argument, NULL, 't' },
+                                           { "usb", no_argument, NULL, 'u' },
+                                           { 0, 0, 0, 0 } };
    int option_index = 0;
 
    const char *log_filename = NULL;
@@ -1580,94 +1550,94 @@ int main(int argc, char **argv)
       }
 
       switch (opt) {
-      case 'b':
-         no_camera_mode = 1;
-         printf("No camera mode enabled - cameras disabled\n");
-         break;
-      case 'c':
-         if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {
-            fprintf(stderr, "Camera type must be \"usb\" or \"csi\".\n");
-            return EXIT_FAILURE;
-         }
+         case 'b':
+            no_camera_mode = 1;
+            printf("No camera mode enabled - cameras disabled\n");
+            break;
+         case 'c':
+            if ((strncmp(optarg, "usb", 3) != 0) && (strncmp(optarg, "csi", 3) != 0)) {
+               fprintf(stderr, "Camera type must be \"usb\" or \"csi\".\n");
+               return EXIT_FAILURE;
+            }
 
-         cam_type = optarg;
-         break;
-      case 'f':
-         fullscreen = 1;
+            cam_type = optarg;
+            break;
+         case 'f':
+            fullscreen = 1;
 
-         break;
-      case 'h':
-         display_help(argc, argv);
-         return EXIT_SUCCESS;
-      case 'l':
-         log_filename = optarg;
-         break;
-      case 'n':
-         char *token = NULL;
-         int values[3] = {-1, -1, -1}; // Store camcount and optional camera IDs
-         int index = 0;
+            break;
+         case 'h':
+            display_help(argc, argv);
+            return EXIT_SUCCESS;
+         case 'l':
+            log_filename = optarg;
+            break;
+         case 'n':
+            char *token = NULL;
+            int values[3] = { -1, -1, -1 };  // Store camcount and optional camera IDs
+            int index = 0;
 
-         // Create a copy of optarg since strtok modifies the string
-         char *optarg_copy = strdup(optarg);
-         if (!optarg_copy) {
-            fprintf(stderr, "Memory allocation failed!\n");
-            return EXIT_FAILURE;
-         }
+            // Create a copy of optarg since strtok modifies the string
+            char *optarg_copy = strdup(optarg);
+            if (!optarg_copy) {
+               fprintf(stderr, "Memory allocation failed!\n");
+               return EXIT_FAILURE;
+            }
 
-         // Parse comma-separated values
-         token = strtok(optarg_copy, ",");
-         while (token && index < 3) {
-            values[index] = atoi(token);
-            token = strtok(NULL, ",");
-            index++;
-         }
+            // Parse comma-separated values
+            token = strtok(optarg_copy, ",");
+            while (token && index < 3) {
+               values[index] = atoi(token);
+               token = strtok(NULL, ",");
+               index++;
+            }
 
-         // Validate camera count
-         if (values[0] != 1 && values[0] != 2) {
-            fprintf(stderr, "camcount (number of cameras) must be 1 or 2!\n");
+            // Validate camera count
+            if (values[0] != 1 && values[0] != 2) {
+               fprintf(stderr, "camcount (number of cameras) must be 1 or 2!\n");
+               free(optarg_copy);
+               return EXIT_FAILURE;
+            }
+
+            single_cam = (values[0] == 1);
+
+            // Handle camera IDs if provided
+            if (values[0] == 2) {
+               if (index > 1) {
+                  cam1_id = values[1];  // First camera ID
+               }
+               if (index > 2) {
+                  cam2_id = values[2];  // Second camera ID
+               }
+            } else if (values[0] == 1 && index > 1) {
+               cam1_id = values[1];  // Single camera ID
+            }
+
             free(optarg_copy);
+            break;
+         case 'p':
+            snprintf(record_path, 256, "%s", optarg);
+            break;
+         case 'r':
+            initial_recording_state = RECORD;
+            break;
+         case 's':
+            initial_recording_state = STREAM;
+            break;
+         case 't':
+            initial_recording_state = RECORD_STREAM;
+            break;
+         case 'u':
+            usb_enable = 1;
+            serial_set_state(1, NULL, -1);
+            break;
+         case 'd':
+            strncpy(usb_port, optarg, 24);
+            serial_set_state(-1, usb_port, -1);
+            break;
+         default:
+            display_help(argc, argv);
             return EXIT_FAILURE;
-         }
-
-         single_cam = (values[0] == 1);
-
-         // Handle camera IDs if provided
-         if (values[0] == 2) {
-            if (index > 1) {
-               cam1_id = values[1]; // First camera ID
-            }
-            if (index > 2) {
-               cam2_id = values[2]; // Second camera ID
-            }
-         } else if (values[0] == 1 && index > 1) {
-            cam1_id = values[1]; // Single camera ID
-         }
-
-         free(optarg_copy);
-         break;
-      case 'p':
-         snprintf(record_path, 256, "%s", optarg);
-         break;
-      case 'r':
-         initial_recording_state = RECORD;
-         break;
-      case 's':
-         initial_recording_state = STREAM;
-         break;
-      case 't':
-         initial_recording_state = RECORD_STREAM;
-         break;
-      case 'u':
-         usb_enable = 1;
-         serial_set_state(1, NULL, -1);
-         break;
-      case 'd':
-         strncpy(usb_port, optarg, 24);
-         serial_set_state(-1, usb_port, -1);
-         break;
-      default:
-         display_help(argc, argv);
-         return EXIT_FAILURE;
       }
    }
 
@@ -1699,7 +1669,8 @@ int main(int argc, char **argv)
       //perror("Server: mq_unlink");
    }
 
-   if ((qd_server = mq_open(SERVER_QUEUE_NAME, O_RDONLY | O_CREAT, QUEUE_PERMISSIONS, &attr)) == -1) {
+   if ((qd_server = mq_open(SERVER_QUEUE_NAME, O_RDONLY | O_CREAT, QUEUE_PERMISSIONS, &attr)) ==
+       -1) {
       perror("Server: mq_open (server)");
       return EXIT_FAILURE;
    }
@@ -1711,21 +1682,21 @@ int main(int argc, char **argv)
 
    for (current_thread = 0; current_thread < NUM_AUDIO_THREADS; current_thread++) {
       /* Setup Output Device */
-      snprintf(audio_threads[current_thread].client_queue_name,
-               MAX_FILENAME_LENGTH, "/stark-sound-client-%d", current_thread);
+      snprintf(audio_threads[current_thread].client_queue_name, MAX_FILENAME_LENGTH,
+               "/stark-sound-client-%d", current_thread);
       if (mq_unlink(audio_threads[current_thread].client_queue_name) == -1) {
          // Checking but failure isn't important.
          //perror("Client: mq_unlink");
       }
       /* Create client message queue/read */
-      if ((audio_threads[current_thread].qd_client =
-           mq_open(audio_threads[current_thread].client_queue_name,
-                   O_RDONLY | O_CREAT, QUEUE_PERMISSIONS, &attr)) == -1) {
+      if ((audio_threads[current_thread].qd_client = mq_open(
+               audio_threads[current_thread].client_queue_name, O_RDONLY | O_CREAT,
+               QUEUE_PERMISSIONS, &attr)) == -1) {
          perror("Client: mq_open (client)");
       }
       /* server side */
-      if ((qd_clients[current_thread] =
-           mq_open(audio_threads[current_thread].client_queue_name, O_WRONLY)) == 1) {
+      if ((qd_clients[current_thread] = mq_open(audio_threads[current_thread].client_queue_name,
+                                                O_WRONLY)) == 1) {
          perror("Server: Not able to open client queue");
       }
       if ((audio_threads[current_thread].qd_server = mq_open(SERVER_QUEUE_NAME, O_WRONLY)) == -1) {
@@ -1738,8 +1709,8 @@ int main(int argc, char **argv)
       //audio_threads[current_thread].start_percent = start_percent;
       audio_threads[current_thread].stop = 1;
 
-      if (pthread_create
-          (&thread_handles[current_thread], NULL, audio_thread, &audio_threads[current_thread])) {
+      if (pthread_create(&thread_handles[current_thread], NULL, audio_thread,
+                         &audio_threads[current_thread])) {
          LOG_ERROR("Error creating thread [%d]", current_thread);
          return EXIT_FAILURE;
       }
@@ -1763,10 +1734,8 @@ int main(int argc, char **argv)
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
    // Create window with native dimensions
-   if ((window =
-        SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                         native_width, native_height,
-                         sdl_flags)) == NULL) {
+   if ((window = SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                  native_width, native_height, sdl_flags)) == NULL) {
       LOG_ERROR("SDL_CreateWindow() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
@@ -1799,9 +1768,8 @@ int main(int argc, char **argv)
    }
 
 #ifdef REFRESH_SYNC
-   if ((renderer =
-        SDL_CreateRenderer(window, -1,
-                           SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED)) == NULL) {
+   if ((renderer = SDL_CreateRenderer(
+            window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED)) == NULL) {
 #else
    if ((renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)) == NULL) {
 #endif
@@ -1840,30 +1808,34 @@ int main(int argc, char **argv)
    last_file_check = currTime;
 
 #ifndef ORIGINAL_RATIO
-   SDL_Rect v_src_rect = { this_hds->cam_crop_x, 0, this_hds->cam_crop_width, this_hds->cam_input_height };
+   SDL_Rect v_src_rect = { this_hds->cam_crop_x, 0, this_hds->cam_crop_width,
+                           this_hds->cam_input_height };
    SDL_Rect v_dst_rectL = { 0, 0, this_hds->eye_output_width, this_hds->eye_output_height };
-   SDL_Rect v_dst_rectR = { this_hds->eye_output_width, 0, this_hds->eye_output_width, this_hds->eye_output_height };
+   SDL_Rect v_dst_rectR = { this_hds->eye_output_width, 0, this_hds->eye_output_width,
+                            this_hds->eye_output_height };
 #else
-   double input_ratio = (double) this_hds->cam_input_height / this_hds->cam_input_width;
+   double input_ratio = (double)this_hds->cam_input_height / this_hds->cam_input_width;
    SDL_Rect v_src_rect = { 0, 0, this_hds->cam_input_width, this_hds->cam_input_height };
-   SDL_Rect v_dst_rectL = { 0, (this_hds->eye_output_height-(this_hds->eye_output_height*input_ratio))/2,
-                            this_hds->eye_output_width, this_hds->eye_output_height*input_ratio };
-   SDL_Rect v_dst_rectR = { this_hds->eye_output_width,
-                            (this_hds->eye_output_height-(this_hds->eye_output_height*input_ratio))/2,
-                            this_hds->eye_output_width, this_hds->eye_output_height*input_ratio };
+   SDL_Rect v_dst_rectL = {
+      0, (this_hds->eye_output_height - (this_hds->eye_output_height * input_ratio)) / 2,
+      this_hds->eye_output_width, this_hds->eye_output_height * input_ratio
+   };
+   SDL_Rect v_dst_rectR = {
+      this_hds->eye_output_width,
+      (this_hds->eye_output_height - (this_hds->eye_output_height * input_ratio)) / 2,
+      this_hds->eye_output_width, this_hds->eye_output_height * input_ratio
+   };
 #endif
 
 
-   textureL =
-       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
-                         this_hds->cam_input_width, this_hds->cam_input_height);
+   textureL = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
+                                this_hds->cam_input_width, this_hds->cam_input_height);
    if (textureL == NULL) {
       SDL_Log("SDL_CreateTexture() failed on textureL: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
-   textureR =
-       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
-                         this_hds->cam_input_width, this_hds->cam_input_height);
+   textureR = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
+                                this_hds->cam_input_width, this_hds->cam_input_height);
    if (textureR == NULL) {
       SDL_Log("SDL_CreateTexture() failed on textureR: %s\n", SDL_GetError());
       return EXIT_FAILURE;
@@ -1882,7 +1854,7 @@ int main(int argc, char **argv)
    mosquitto_lib_init();
 
    mosq = mosquitto_new(NULL, true, NULL);
-   if(mosq == NULL){
+   if (mosq == NULL) {
       LOG_ERROR("Error: Out of memory.");
       return EXIT_FAILURE;
    }
@@ -1895,7 +1867,7 @@ int main(int argc, char **argv)
    /* Connect to local MQTT server. */
    //rc = mosquitto_connect(mosq, "192.168.10.1", 1883, 60);
    rc = mosquitto_connect(mosq, "127.0.0.1", 1883, 60);
-   if(rc != MOSQ_ERR_SUCCESS){
+   if (rc != MOSQ_ERR_SUCCESS) {
       mosquitto_destroy(mosq);
       LOG_ERROR("Error: %s", mosquitto_strerror(rc));
       return EXIT_FAILURE;
@@ -1923,18 +1895,18 @@ int main(int argc, char **argv)
    oddataR.complete = 1;
    oddataR.processed = 1;
    oddataR.pix_data = NULL;
-   detect_enabled = 0;     /* Disabling due to bug. */
+   detect_enabled = 0; /* Disabling due to bug. */
    if (detect_enabled) {
-      if (init_detect(&oddataL.detect_obj, argc, argv, this_hds->cam_input_width, this_hds->cam_input_height))
-      {
+      if (init_detect(&oddataL.detect_obj, argc, argv, this_hds->cam_input_width,
+                      this_hds->cam_input_height)) {
          LOG_ERROR("Error initializing detect!!!");
          detect_enabled = 0;
       } else {
          if (intro_element.enabled) {
             play_intro(15, 1, NULL);
          }
-         if (init_detect(&oddataR.detect_obj, argc, argv, this_hds->cam_input_width, this_hds->cam_input_height))
-         {
+         if (init_detect(&oddataR.detect_obj, argc, argv, this_hds->cam_input_width,
+                         this_hds->cam_input_height)) {
             LOG_ERROR("Error initializing detect!!!");
             detect_enabled = 0;
          } else {
@@ -1945,7 +1917,8 @@ int main(int argc, char **argv)
    }
 
    if (!no_camera_mode) {
-      if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *) cam_type) != 0) {
+      if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *)cam_type) !=
+          0) {
          LOG_ERROR("Error creating video processing thread.");
          return EXIT_FAILURE;
       }
@@ -1968,7 +1941,8 @@ int main(int argc, char **argv)
          return EXIT_FAILURE;
       }
    } else {
-      if (pthread_create(&command_proc_thread, NULL, serial_command_processing_thread, (void *) usb_port) != 0) {
+      if (pthread_create(&command_proc_thread, NULL, serial_command_processing_thread,
+                         (void *)usb_port) != 0) {
          LOG_ERROR("Error creating command processing thread.");
          return EXIT_FAILURE;
       }
@@ -1997,161 +1971,163 @@ int main(int argc, char **argv)
 
       while (SDL_PollEvent(&event)) {
          switch (event.type) {
-         case SDL_KEYUP:
-            /* Check for hotkeys. */
-            curr_element = first_element;
-            while (curr_element != NULL) {
-               if (strncmp(curr_element->hotkey, "", 2) != 0) {
-                  //printf("KEY: %d, %d\n", event.key.keysym.sym,
-                  //       SDL_GetKeyFromName(curr_element->hotkey));
-                  if (event.key.keysym.sym == SDL_GetKeyFromName(curr_element->hotkey)) {
-                     curr_element->enabled = !curr_element->enabled;
-                     if (strncmp(curr_element->special_name, "detect", 6) == 0) {
-                        LOG_INFO("Changing detect status.");
-                        detect_enabled = !detect_enabled;
+            case SDL_KEYUP:
+               /* Check for hotkeys. */
+               curr_element = first_element;
+               while (curr_element != NULL) {
+                  if (strncmp(curr_element->hotkey, "", 2) != 0) {
+                     //printf("KEY: %d, %d\n", event.key.keysym.sym,
+                     //       SDL_GetKeyFromName(curr_element->hotkey));
+                     if (event.key.keysym.sym == SDL_GetKeyFromName(curr_element->hotkey)) {
+                        curr_element->enabled = !curr_element->enabled;
+                        if (strncmp(curr_element->special_name, "detect", 6) == 0) {
+                           LOG_INFO("Changing detect status.");
+                           detect_enabled = !detect_enabled;
+                        }
+                        LOG_INFO("Changing status.");
                      }
-                     LOG_INFO("Changing status.");
                   }
+
+                  curr_element = curr_element->next;
                }
 
-               curr_element = curr_element->next;
-            }
+               /* Handle hotkeys for HUD switching */
+               hud_screen *screen = get_hud_manager()->screens;
+               while (screen != NULL) {
+                  if (screen->hotkey[0] != '\0') {
+                     if (event.key.keysym.sym == SDL_GetKeyFromName(screen->hotkey)) {
+                        /* Use default transition settings when using hotkeys */
+                        switch_to_hud(screen, screen->transition_type);
+                        break;
+                     }
+                  }
+                  screen = screen->next;
+               }
 
-            /* Handle hotkeys for HUD switching */
-            hud_screen *screen = get_hud_manager()->screens;
-            while (screen != NULL) {
-               if (screen->hotkey[0] != '\0') {
-                  if (event.key.keysym.sym == SDL_GetKeyFromName(screen->hotkey)) {
-                     /* Use default transition settings when using hotkeys */
-                     switch_to_hud(screen, screen->transition_type);
+               /* Process special keys. */
+               switch (event.key.keysym.sym) {
+                  case SDLK_f:
+                     if (get_recording_state() != DISABLED) {
+                        LOG_WARNING("Unable to change window size while recording.");
+                     } else {
+                        if (fullscreen) {
+                           LOG_INFO("Switching to windowed mode.");
+                           SDL_SetWindowFullscreen(window, 0);
+                           SDL_ShowCursor(1);
+                        } else {
+                           LOG_INFO("Switching to fullscreen mode.");
+                           SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+                           SDL_ShowCursor(0);
+                        }
+                        SDL_GetWindowSize(window, &window_width, &window_height);
+                        fullscreen = !fullscreen;
+                     }
                      break;
-                  }
+
+                  case SDLK_p:  // 'P' for photo/screenshot
+                     LOG_INFO("Requesting full-resolution screenshot with overlay...");
+                     request_screenshot(1, 1, NULL,
+                                        SCREENSHOT_MANUAL);  // With overlay, full resolution
+                     break;
+
+                  case SDLK_o:  // 'O' for raw screenshot (without overlay)
+                     LOG_INFO("Requesting full-resolution raw camera screenshot...");
+                     request_screenshot(0, 1, NULL,
+                                        SCREENSHOT_MANUAL);  // Without overlay, full resolution
+                     break;
+
+                  case SDLK_r:
+                     if (get_recording_state() == DISABLED) {
+                        set_recording_state(RECORD);
+                        last_file_check = currTime;
+                        LOG_INFO("Starting recording.");
+                     } else {
+                        set_recording_state(DISABLED);
+                        last_size = last_last_size = -1;
+                        LOG_INFO("Stopping recording.");
+                     }
+                     break;
+
+                  case SDLK_s:
+                     if (get_recording_state() == DISABLED) {
+                        set_recording_state(STREAM);
+                        last_file_check = currTime;
+                        LOG_INFO("Starting streaming.");
+                     } else {
+                        set_recording_state(DISABLED);
+                        last_size = last_last_size = -1;
+                        LOG_INFO("Stopping streaming.");
+                     }
+                     break;
+
+                  case SDLK_t:
+                     if (get_recording_state() == DISABLED) {
+                        set_recording_state(RECORD_STREAM);
+                        last_file_check = currTime;
+                        LOG_INFO("Starting recording and streaming.");
+                     } else {
+                        set_recording_state(DISABLED);
+                        last_size = last_last_size = -1;
+                        LOG_INFO("Stopping recording and streaming.");
+                     }
+                     break;
+
+                  case SDLK_LEFT:
+                     this_hds->stereo_offset -= 10;
+                     LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
+                     break;
+
+                  case SDLK_RIGHT:
+                     this_hds->stereo_offset += 10;
+                     LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
+                     break;
+
+                  case SDLK_TAB:  // Tab key to cycle through HUDs
+                     switch_to_next_hud();
+                     break;
+
+                  case SDLK_EQUALS:
+                  case SDLK_KP_PLUS:
+                     change_map_zoom(1);
+                     break;
+
+                  case SDLK_MINUS:
+                  case SDLK_KP_MINUS:
+                     change_map_zoom(-1);
+                     break;
+
+                  case SDLK_m:
+                     cycle_map_type();  // Cycle through map types
+                     break;
+
+                  case SDLK_ESCAPE:
+                  case SDLK_q:
+                     quit = 1;
+                     break;
+
+                  default:
+                     break;
                }
-               screen = screen->next;
-            }
+               break;
+            case SDL_WINDOWEVENT:
+               if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                  int newWidth = event.window.data1;
+                  int newHeight = event.window.data2;
 
-            /* Process special keys. */
-            switch (event.key.keysym.sym) {
-            case SDLK_f:
-               if (get_recording_state() != DISABLED) {
-                  LOG_WARNING("Unable to change window size while recording.");
-               } else {
-                  if (fullscreen) {
-                     LOG_INFO("Switching to windowed mode.");
-                     SDL_SetWindowFullscreen(window, 0);
-                     SDL_ShowCursor(1);
-                  } else {
-                     LOG_INFO("Switching to fullscreen mode.");
-                     SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-                     SDL_ShowCursor(0);
-                  }
-                  SDL_GetWindowSize(window, &window_width, &window_height);
-                  fullscreen = !fullscreen;
+                  // Safely update the shared width and height
+                  pthread_mutex_lock(&windowSizeMutex);
+                  window_width = newWidth;
+                  window_height = newHeight;
+                  pthread_mutex_unlock(&windowSizeMutex);
+
+                  LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
                }
                break;
-
-            case SDLK_p: // 'P' for photo/screenshot
-               LOG_INFO("Requesting full-resolution screenshot with overlay...");
-               request_screenshot(1, 1, NULL, SCREENSHOT_MANUAL); // With overlay, full resolution
-               break;
-
-            case SDLK_o: // 'O' for raw screenshot (without overlay)
-               LOG_INFO("Requesting full-resolution raw camera screenshot...");
-               request_screenshot(0, 1, NULL, SCREENSHOT_MANUAL); // Without overlay, full resolution
-               break;
-
-            case SDLK_r:
-               if (get_recording_state() == DISABLED) {
-                  set_recording_state(RECORD);
-                  last_file_check = currTime;
-                  LOG_INFO("Starting recording.");
-               } else {
-                  set_recording_state(DISABLED);
-                  last_size = last_last_size = -1;
-                  LOG_INFO("Stopping recording.");
-               }
-               break;
-
-            case SDLK_s:
-               if (get_recording_state() == DISABLED) {
-                  set_recording_state(STREAM);
-                  last_file_check = currTime;
-                  LOG_INFO("Starting streaming.");
-               } else {
-                  set_recording_state(DISABLED);
-                  last_size = last_last_size = -1;
-                  LOG_INFO("Stopping streaming.");
-               }
-               break;
-
-            case SDLK_t:
-               if (get_recording_state() == DISABLED) {
-                  set_recording_state(RECORD_STREAM);
-                  last_file_check = currTime;
-                  LOG_INFO("Starting recording and streaming.");
-               } else {
-                  set_recording_state(DISABLED);
-                  last_size = last_last_size = -1;
-                  LOG_INFO("Stopping recording and streaming.");
-               }
-               break;
-
-            case SDLK_LEFT:
-               this_hds->stereo_offset -= 10;
-               LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
-               break;
-
-            case SDLK_RIGHT:
-               this_hds->stereo_offset += 10;
-               LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
-               break;
-
-            case SDLK_TAB:  // Tab key to cycle through HUDs
-               switch_to_next_hud();
-               break;
-
-            case SDLK_EQUALS:
-            case SDLK_KP_PLUS:
-               change_map_zoom(1);
-               break;
-
-            case SDLK_MINUS:
-            case SDLK_KP_MINUS:
-               change_map_zoom(-1);
-               break;
-
-            case SDLK_m:
-               cycle_map_type();      // Cycle through map types
-               break;
-
-            case SDLK_ESCAPE:
-            case SDLK_q:
+            case SDL_QUIT:
                quit = 1;
                break;
-
             default:
                break;
-            }
-            break;
-         case SDL_WINDOWEVENT:
-            if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                int newWidth = event.window.data1;
-                int newHeight = event.window.data2;
-
-                // Safely update the shared width and height
-                pthread_mutex_lock(&windowSizeMutex);
-                window_width = newWidth;
-                window_height = newHeight;
-                pthread_mutex_unlock(&windowSizeMutex);
-
-                LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
-            }
-            break;
-         case SDL_QUIT:
-            quit = 1;
-            break;
-         default:
-            break;
          }
       }
 
@@ -2174,73 +2150,80 @@ int main(int argc, char **argv)
       }
 
 #ifdef FPS_STATS
-      printf("FPS Stats: %03d, avg: %03.0f, min: %03.0f, max: %03.0f\n",
-             curr_fps, averageFrameRate, tracker.minFrameRate, tracker.maxFrameRate);
+      printf("FPS Stats: %03d, avg: %03.0f, min: %03.0f, max: %03.0f\n", curr_fps, averageFrameRate,
+             tracker.minFrameRate, tracker.maxFrameRate);
 #endif
 
       update_sim_data();
 
       /* Video Processing */
       if (!no_camera_mode) {
-      pthread_mutex_lock(&v_mutex);
-      if (video_posted) {
-         if (detect_enabled) {
+         pthread_mutex_lock(&v_mutex);
+         if (video_posted) {
+            if (detect_enabled) {
 #if defined(OD_PROPER_WAIT) && defined(USE_CUDA)
-            oddataL.pix_data = mapL[buffer_num].data;
-            oddataL.eye = 0;
-            cudaMemcpy(oddataL.detect_obj.d_image, oddataL.pix_data,
-                       oddataL.detect_obj.l_width * oddataL.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
-            detect_image(&oddataL.detect_obj, oddataL.pix_data, this_detect[oddataL.eye], MAX_DETECT);
+               oddataL.pix_data = mapL[buffer_num].data;
+               oddataL.eye = 0;
+               cudaMemcpy(oddataL.detect_obj.d_image, oddataL.pix_data,
+                          oddataL.detect_obj.l_width * oddataL.detect_obj.l_height * sizeof(uchar4),
+                          cudaMemcpyHostToDevice);
+               detect_image(&oddataL.detect_obj, oddataL.pix_data, this_detect[oddataL.eye],
+                            MAX_DETECT);
 
-            if (!single_cam) {
-               oddataR.pix_data = mapR[buffer_num].data;
-               oddataR.eye = 1;
-               cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
-                          oddataR.detect_obj.l_width * oddataR.detect_obj.l_height * sizeof(uchar4), cudaMemcpyHostToDevice);
-               detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye], MAX_DETECT);
-            }
-#else
-            if (single_cam) {
-               if (oddataL.processed == 1) {
-                  oddataL.pix_data = mapL[buffer_num].data;
-                  oddataL.eye = 0;
-                  oddataL.complete = 0;
-                  oddataL.processed = 0;
-                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
-               }
-            } else {
-               if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
-                  oddataL.pix_data = mapL[buffer_num].data;
-                  oddataL.eye = 0;
-                  oddataL.complete = 0;
-                  oddataL.processed = 0;
-                  pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
-
+               if (!single_cam) {
                   oddataR.pix_data = mapR[buffer_num].data;
                   oddataR.eye = 1;
-                  oddataR.complete = 0;
-                  oddataR.processed = 0;
-                  pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+                  cudaMemcpy(oddataR.detect_obj.d_image, oddataR.pix_data,
+                             oddataR.detect_obj.l_width * oddataR.detect_obj.l_height *
+                                 sizeof(uchar4),
+                             cudaMemcpyHostToDevice);
+                  detect_image(&oddataR.detect_obj, oddataR.pix_data, this_detect[oddataR.eye],
+                               MAX_DETECT);
                }
-            }
+#else
+               if (single_cam) {
+                  if (oddataL.processed == 1) {
+                     oddataL.pix_data = mapL[buffer_num].data;
+                     oddataL.eye = 0;
+                     oddataL.complete = 0;
+                     oddataL.processed = 0;
+                     pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+                  }
+               } else {
+                  if ((oddataL.processed == 1) && (oddataR.processed == 1)) {
+                     oddataL.pix_data = mapL[buffer_num].data;
+                     oddataL.eye = 0;
+                     oddataL.complete = 0;
+                     oddataL.processed = 0;
+                     pthread_create(&od_L_thread, NULL, object_detection_thread, &oddataL);
+
+                     oddataR.pix_data = mapR[buffer_num].data;
+                     oddataR.eye = 1;
+                     oddataR.complete = 0;
+                     oddataR.processed = 0;
+                     pthread_create(&od_R_thread, NULL, object_detection_thread, &oddataR);
+                  }
+               }
 #endif
-         }
+            }
 
-         SDL_UpdateTexture(textureL, NULL, mapL[buffer_num].data, this_hds->cam_input_width * 4);
-         SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectL);
+            SDL_UpdateTexture(textureL, NULL, mapL[buffer_num].data, this_hds->cam_input_width * 4);
+            SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectL);
 
-         if (single_cam) {
-            SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectR);
-         } else {
-            SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data, this_hds->cam_input_width * 4);
-            SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
-         }
+            if (single_cam) {
+               SDL_RenderCopy(renderer, textureL, &v_src_rect, &v_dst_rectR);
+            } else {
+               SDL_UpdateTexture(textureR, NULL, mapR[buffer_num].data,
+                                 this_hds->cam_input_width * 4);
+               SDL_RenderCopy(renderer, textureR, &v_src_rect, &v_dst_rectR);
+            }
 
 #ifdef DISPLAY_TIMING
-         last_ts_cap = (unsigned long) ts_cap[buffer_num].tv_sec * 1000000000 + ts_cap[buffer_num].tv_nsec;
+            last_ts_cap = (unsigned long)ts_cap[buffer_num].tv_sec * 1000000000 +
+                          ts_cap[buffer_num].tv_nsec;
 #endif
-      }
-      pthread_mutex_unlock(&v_mutex);
+         }
+         pthread_mutex_unlock(&v_mutex);
       } else {
          /* When in black background mode, simply render black rectangles as backgrounds */
          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -2256,11 +2239,11 @@ int main(int argc, char **argv)
 
 #ifdef DISPLAY_TIMING
          clock_gettime(CLOCK_REALTIME, &display_time);
-         present_time = (unsigned long) display_time.tv_sec * 1000000000 + display_time.tv_nsec;
+         present_time = (unsigned long)display_time.tv_sec * 1000000000 + display_time.tv_nsec;
          ts_count++;
          ts_total += (present_time - last_ts_cap) / 1000000;
          LOG_INFO("Display latency: %lu ms, avg: %lu ms", (present_time - last_ts_cap) / 1000000,
-                                                    ts_total / (unsigned long) ts_count);
+                  ts_total / (unsigned long)ts_count);
          LOG_INFO("ts_total: %lu ms, ts_count: %u", ts_total, ts_count);
 #endif
 
@@ -2271,13 +2254,13 @@ int main(int argc, char **argv)
 
             /* Is recording working? */
             video_out_data *this_vod = get_video_out_data();
-            if (((get_recording_state() == RECORD) || (get_recording_state() == RECORD_STREAM)) && 
-               this_vod->started && ((currTime - last_file_check) > 5000)) {
+            if (((get_recording_state() == RECORD) || (get_recording_state() == RECORD_STREAM)) &&
+                this_vod->started && ((currTime - last_file_check) > 5000)) {
                last_last_size = last_size;
                if (has_file_grown(this_vod->filename, &last_last_size)) {
                   if (!(active_alerts & ALERT_RECORDING)) {
                      LOG_ERROR("ERROR: %s: File size is not increasing. %ld ? %ld",
-                            this_vod->filename, last_last_size, last_size);
+                               this_vod->filename, last_last_size, last_size);
                      active_alerts |= ALERT_RECORDING;
                      mqttTextToSpeech("There is potentially and error with recording.");
                   }
@@ -2288,8 +2271,8 @@ int main(int argc, char **argv)
                last_file_check = currTime;
             }
 
-            this_vod->rgb_out_pixels[this_vod->write_index] =
-                malloc(window_width * RGB_OUT_SIZE * window_height);
+            this_vod->rgb_out_pixels[this_vod->write_index] = malloc(window_width * RGB_OUT_SIZE *
+                                                                     window_height);
             if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
                LOG_ERROR("Unable to malloc rgb frame 0.");
                return (2);
@@ -2306,8 +2289,8 @@ int main(int argc, char **argv)
             glFinish();
 
             if (OpenGL_RenderReadPixelsSync(renderer, NULL, PIXEL_FORMAT_OUT,
-                                     this_vod->rgb_out_pixels[this_vod->write_index],
-                                     window_width * RGB_OUT_SIZE) != 0 ) {
+                                            this_vod->rgb_out_pixels[this_vod->write_index],
+                                            window_width * RGB_OUT_SIZE) != 0) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
                /* Free the buffer on failure */
                free(this_vod->rgb_out_pixels[this_vod->write_index]);
@@ -2505,8 +2488,7 @@ int main(int argc, char **argv)
    LOG_INFO("Done.");
 #endif
 
-   if (detect_enabled)
-   {
+   if (detect_enabled) {
 #ifdef DEBUG_SHUTDOWN
       LOG_INFO("Waiting for detection to clean up.");
 #endif

@@ -23,6 +23,7 @@
 #define GAUGE_RENDERER_H
 
 #include <SDL2/SDL.h>
+
 #include "config_parser.h"
 
 /**
@@ -31,7 +32,7 @@
  *
  * This module provides gauge rendering capabilities for the Mirage HUD system.
  * Gauges are implemented as SPECIAL elements with special_name "gauge".
- * 
+ *
  * Supported gauge types:
  * - "linear" - Horizontal or vertical bar gauges
  * - "arc" - Circular arc gauges with needle (speedometer style)

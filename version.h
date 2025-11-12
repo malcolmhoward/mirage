@@ -23,6 +23,6 @@
 #define VERSION_H
 
 #define APP_NAME "Mirage"
-#define VERSION_NUMBER "1.0.0"
+#define VERSION_NUMBER "2.0.0"
 
-#endif // VERSION_H
+#endif  // VERSION_H
