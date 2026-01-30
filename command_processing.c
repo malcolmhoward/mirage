@@ -686,12 +686,20 @@ int parse_json_command(char *command_string, char *topic) {
             time_t r_time;
             struct tm *l_time = NULL;
             char datetime[16];
+            const char *request_id = NULL;
+
+            /* Extract request_id for OCP response correlation */
+            struct json_object *request_id_obj = NULL;
+            if (json_object_object_get_ex(parsed_json, "request_id", &request_id_obj)) {
+               request_id = json_object_get_string(request_id_obj);
+               LOG_INFO("Viewing command with request_id: %s", request_id);
+            }
 
             time(&r_time);
             l_time = localtime(&r_time);
             if (l_time != NULL) {
                strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
-               trigger_snapshot(datetime);
+               trigger_snapshot(datetime, request_id);
             } else {
                LOG_ERROR("Failed to get local time for snapshot");
             }
@@ -844,7 +852,7 @@ int parse_json_command(char *command_string, char *topic) {
                                        mqttTextToSpeech(temp_msg);
                                     } else {
                                        snprintf(temp_msg, sizeof(temp_msg) - 1,
-                                                "Requested HUD, \"%s\", not found.", hudName);
+                                                "Requested HUD, '%s', not found.", hudName);
                                        temp_msg[sizeof(temp_msg) - 1] = '\0';
                                        mqttTextToSpeech(temp_msg);
                                        LOG_ERROR(temp_msg);

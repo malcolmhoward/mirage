@@ -23,9 +23,12 @@
 
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
+#include <json-c/json.h>
 #include <mosquitto.h>
+#include <openssl/evp.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +58,7 @@ static int g_screenshot_requested = 0;
 static char g_screenshot_path[PATH_MAX + 29] = "";
 static int g_screenshot_with_overlay = 0;
 static screenshot_t g_screenshot_source = SCREENSHOT_MANUAL;
+static char g_screenshot_request_id[128] = ""; /* OCP request_id for response correlation */
 
 /* Recording path where screenshots are saved */
 static char record_path[PATH_MAX] = ".";
@@ -65,6 +69,222 @@ void set_screenshot_recording_path(const char *path) {
       strncpy(record_path, path, PATH_MAX - 1);
       record_path[PATH_MAX - 1] = '\0';
    }
+}
+
+/* Base64 encoding table */
+static const char base64_table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Encode binary data to base64 string.
+ * @param data Input binary data
+ * @param input_length Length of input data
+ * @return Heap-allocated base64 string (caller must free), or NULL on error
+ */
+static char *base64_encode(const unsigned char *data, size_t input_length) {
+   size_t output_length = 4 * ((input_length + 2) / 3);
+   char *encoded = malloc(output_length + 1);
+   if (!encoded) {
+      return NULL;
+   }
+
+   size_t i, j;
+   for (i = 0, j = 0; i < input_length;) {
+      uint32_t octet_a = i < input_length ? data[i++] : 0;
+      uint32_t octet_b = i < input_length ? data[i++] : 0;
+      uint32_t octet_c = i < input_length ? data[i++] : 0;
+      uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+      encoded[j++] = base64_table[(triple >> 18) & 0x3F];
+      encoded[j++] = base64_table[(triple >> 12) & 0x3F];
+      encoded[j++] = base64_table[(triple >> 6) & 0x3F];
+      encoded[j++] = base64_table[triple & 0x3F];
+   }
+
+   /* Add padding */
+   int mod = input_length % 3;
+   if (mod > 0) {
+      encoded[output_length - 1] = '=';
+      if (mod == 1) {
+         encoded[output_length - 2] = '=';
+      }
+   }
+
+   encoded[output_length] = '\0';
+   return encoded;
+}
+
+/**
+ * Read file contents into memory.
+ * @param filename Path to file
+ * @param size_out Output: file size
+ * @return Heap-allocated buffer (caller must free), or NULL on error
+ */
+static unsigned char *read_file_contents(const char *filename, size_t *size_out) {
+   FILE *fp = fopen(filename, "rb");
+   if (!fp) {
+      return NULL;
+   }
+
+   fseek(fp, 0, SEEK_END);
+   long size = ftell(fp);
+   fseek(fp, 0, SEEK_SET);
+
+   if (size <= 0) {
+      fclose(fp);
+      return NULL;
+   }
+
+   unsigned char *buffer = malloc(size);
+   if (!buffer) {
+      fclose(fp);
+      return NULL;
+   }
+
+   size_t read = fread(buffer, 1, size, fp);
+   fclose(fp);
+
+   if (read != (size_t)size) {
+      free(buffer);
+      return NULL;
+   }
+
+   *size_out = (size_t)size;
+   return buffer;
+}
+
+/* =============================================================================
+ * OCP v1.1 Helpers (timestamp, checksum)
+ * ============================================================================= */
+
+/* Hex nibble lookup table for efficient conversion */
+static const char hex_table[] = "0123456789abcdef";
+
+/**
+ * Get current Unix timestamp in milliseconds.
+ * Uses clock_gettime(CLOCK_REALTIME) for consistency with DAWN.
+ * @return Current time as milliseconds since epoch
+ */
+static int64_t get_timestamp_ms(void) {
+   struct timespec ts;
+   if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
+      return 0;
+   }
+   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/**
+ * Compute SHA256 hash of data and return as lowercase hex string.
+ * Uses EVP API (not deprecated in OpenSSL 3.0).
+ * @param data Data to hash
+ * @param len Length of data
+ * @return Heap-allocated 65-byte hex string (caller must free), or NULL on error
+ */
+static char *sha256_compute(const unsigned char *data, size_t len) {
+   if (!data || len == 0) {
+      return NULL;
+   }
+
+   EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+   if (!ctx) {
+      LOG_ERROR("sha256_compute: Failed to create EVP context");
+      return NULL;
+   }
+
+   unsigned char hash[EVP_MAX_MD_SIZE];
+   unsigned int hash_len = 0;
+
+   if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1 || EVP_DigestUpdate(ctx, data, len) != 1 ||
+       EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
+      LOG_ERROR("sha256_compute: SHA256 computation failed");
+      EVP_MD_CTX_free(ctx);
+      return NULL;
+   }
+
+   EVP_MD_CTX_free(ctx);
+
+   char *hex = malloc(hash_len * 2 + 1);
+   if (!hex) {
+      return NULL;
+   }
+
+   /* Convert using lookup table for efficiency */
+   for (unsigned int i = 0; i < hash_len; i++) {
+      hex[i * 2] = hex_table[(hash[i] >> 4) & 0x0F];
+      hex[i * 2 + 1] = hex_table[hash[i] & 0x0F];
+   }
+   hex[hash_len * 2] = '\0';
+
+   return hex;
+}
+
+/**
+ * Compute SHA256 hash of a file.
+ * Uses EVP API (not deprecated in OpenSSL 3.0).
+ * @param filepath Path to file
+ * @return Heap-allocated 65-byte hex string (caller must free), or NULL on error
+ */
+static char *sha256_file(const char *filepath) {
+   if (!filepath) {
+      return NULL;
+   }
+
+   FILE *f = fopen(filepath, "rb");
+   if (!f) {
+      LOG_WARNING("sha256_file: Cannot open file: %s", filepath);
+      return NULL;
+   }
+
+   EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+   if (!ctx) {
+      LOG_ERROR("sha256_file: Failed to create EVP context");
+      fclose(f);
+      return NULL;
+   }
+
+   if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
+      LOG_ERROR("sha256_file: Failed to initialize SHA256");
+      EVP_MD_CTX_free(ctx);
+      fclose(f);
+      return NULL;
+   }
+
+   unsigned char buffer[8192];
+   size_t bytes_read;
+   while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+      if (EVP_DigestUpdate(ctx, buffer, bytes_read) != 1) {
+         LOG_ERROR("sha256_file: Failed to update hash");
+         EVP_MD_CTX_free(ctx);
+         fclose(f);
+         return NULL;
+      }
+   }
+   fclose(f);
+
+   unsigned char hash[EVP_MAX_MD_SIZE];
+   unsigned int hash_len = 0;
+
+   if (EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
+      LOG_ERROR("sha256_file: Failed to finalize hash");
+      EVP_MD_CTX_free(ctx);
+      return NULL;
+   }
+
+   EVP_MD_CTX_free(ctx);
+
+   char *hex = malloc(hash_len * 2 + 1);
+   if (!hex) {
+      return NULL;
+   }
+
+   /* Convert using lookup table for efficiency */
+   for (unsigned int i = 0; i < hash_len; i++) {
+      hex[i * 2] = hex_table[(hash[i] >> 4) & 0x0F];
+      hex[i * 2 + 1] = hex_table[hash[i] & 0x0F];
+   }
+   hex[hash_len * 2] = '\0';
+
+   return hex;
 }
 
 /**
@@ -515,7 +735,7 @@ int take_screenshot(int with_overlay,
 /**
  * Takes a snapshot for AI processing and saves it to disk.
  */
-void trigger_snapshot(const char *datetime) {
+void trigger_snapshot(const char *datetime, const char *request_id) {
    hud_display_settings *this_hds = get_hud_display_settings();
    char snapshot_path[PATH_MAX + 29];
 
@@ -534,23 +754,165 @@ void trigger_snapshot(const char *datetime) {
    /* Format the filename with the timestamp */
    snprintf(snapshot_path, sizeof(snapshot_path), "%s/snapshot-%s.jpg", record_path, datetime);
 
+   /* Store request_id for OCP response correlation */
+   pthread_mutex_lock(&g_screenshot_mutex);
+   if (request_id && request_id[0] != '\0') {
+      strncpy(g_screenshot_request_id, request_id, sizeof(g_screenshot_request_id) - 1);
+      g_screenshot_request_id[sizeof(g_screenshot_request_id) - 1] = '\0';
+   } else {
+      g_screenshot_request_id[0] = '\0';
+   }
+   pthread_mutex_unlock(&g_screenshot_mutex);
+
    /* Queue the screenshot request based on configuration */
    request_screenshot(this_hds->snapshot_overlay, 0, snapshot_path, SCREENSHOT_MQTT);
 }
 
 /**
+ * Notifies the AI process that a "viewing" command has completed.
+ * Follows OASIS Communications Protocol (OCP) format.
+ *
+ * @param filename The path to the snapshot file
+ * @param request_id OCP request_id for correlation (can be NULL or empty)
+ */
+static void mqttViewingSnapshotOCP(const char *filename, const char *request_id) {
+   struct json_object *response = json_object_new_object();
+   if (!response) {
+      LOG_ERROR("Failed to create JSON response object");
+      return;
+   }
+
+   /* Required OCP fields */
+   json_object_object_add(response, "device", json_object_new_string("viewing"));
+   json_object_object_add(response, "action", json_object_new_string("completed"));
+   json_object_object_add(response, "status", json_object_new_string("success"));
+
+   /* Echo request_id if provided (OCP requirement) */
+   if (request_id && request_id[0] != '\0') {
+      json_object_object_add(response, "request_id", json_object_new_string(request_id));
+   }
+
+   /* OCP v1.1: Add timestamp */
+   json_object_object_add(response, "timestamp", json_object_new_int64(get_timestamp_ms()));
+
+   /* Check config for inline data mode */
+   if (get_vision_inline_data()) {
+      /* Read file and encode as base64 */
+      size_t file_size = 0;
+      unsigned char *file_data = read_file_contents(filename, &file_size);
+
+      if (file_data) {
+         /* OCP v1.1: Compute checksum of original data before encoding */
+         char *checksum = sha256_compute(file_data, file_size);
+
+         char *base64_data = base64_encode(file_data, file_size);
+         free(file_data);
+
+         if (base64_data) {
+            /* Create data object per OCP spec */
+            struct json_object *data_obj = json_object_new_object();
+            json_object_object_add(data_obj, "type", json_object_new_string("image/jpeg"));
+            json_object_object_add(data_obj, "encoding", json_object_new_string("base64"));
+            json_object_object_add(data_obj, "content", json_object_new_string(base64_data));
+            json_object_object_add(data_obj, "size", json_object_new_int64((int64_t)file_size));
+
+            /* OCP v1.1: Add checksum to data object */
+            if (checksum) {
+               json_object_object_add(data_obj, "checksum", json_object_new_string(checksum));
+            }
+
+            json_object_object_add(response, "data", data_obj);
+
+            /* Also include file path as fallback reference */
+            json_object_object_add(response, "value", json_object_new_string(filename));
+
+            free(base64_data);
+            LOG_INFO("Sending inline image data: %zu bytes", file_size);
+         } else {
+            /* Base64 encoding failed, fall back to file path */
+            json_object_object_add(response, "value", json_object_new_string(filename));
+            LOG_WARNING("Base64 encoding failed, sending file path instead");
+         }
+
+         if (checksum) {
+            free(checksum);
+         }
+      } else {
+         /* File read failed, fall back to file path */
+         json_object_object_add(response, "value", json_object_new_string(filename));
+         LOG_WARNING("Failed to read file for inline data, sending path instead");
+      }
+   } else {
+      /* File reference mode - just send the path */
+      json_object_object_add(response, "value", json_object_new_string(filename));
+
+      /* OCP v1.1: Add file checksum */
+      char *checksum = sha256_file(filename);
+      if (checksum) {
+         json_object_object_add(response, "checksum", json_object_new_string(checksum));
+         free(checksum);
+      }
+
+      LOG_INFO("Sending file reference: %s", filename);
+   }
+
+   const char *json_str = json_object_to_json_string(response);
+   LOG_INFO("OCP Response: %.200s%s", json_str, strlen(json_str) > 200 ? "..." : "");
+
+   mqttSendMessage("dawn", json_str);
+   json_object_put(response);
+}
+
+/**
+ * Sends an OCP-compliant error response for viewing command failures.
+ *
+ * @param request_id OCP request_id for correlation (can be NULL)
+ * @param error_code Short error code (e.g., "CAPTURE_FAILED")
+ * @param error_message Human-readable error description
+ */
+static void mqttViewingSnapshotErrorOCP(const char *request_id,
+                                        const char *error_code,
+                                        const char *error_message) {
+   struct json_object *response = json_object_new_object();
+   if (!response) {
+      LOG_ERROR("Failed to create JSON error response object");
+      return;
+   }
+
+   /* Required OCP fields */
+   json_object_object_add(response, "device", json_object_new_string("viewing"));
+   json_object_object_add(response, "action", json_object_new_string("completed"));
+   json_object_object_add(response, "status", json_object_new_string("error"));
+
+   /* Echo request_id if provided (OCP requirement) */
+   if (request_id && request_id[0] != '\0') {
+      json_object_object_add(response, "request_id", json_object_new_string(request_id));
+   }
+
+   /* OCP v1.1: Add timestamp */
+   json_object_object_add(response, "timestamp", json_object_new_int64(get_timestamp_ms()));
+
+   /* Error details per OCP spec */
+   struct json_object *error_obj = json_object_new_object();
+   json_object_object_add(error_obj, "code", json_object_new_string(error_code));
+   json_object_object_add(error_obj, "message", json_object_new_string(error_message));
+   json_object_object_add(response, "error", error_obj);
+
+   const char *json_str = json_object_to_json_string(response);
+   LOG_WARNING("OCP Error Response: %s", json_str);
+
+   mqttSendMessage("dawn", json_str);
+   json_object_put(response);
+}
+
+/**
  * Notifies the AI process that a "viewing" command has completed, providing a snapshot
  * filename for processing.
+ * @deprecated Use mqttViewingSnapshotOCP for OCP-compliant responses
  */
 void mqttViewingSnapshot(const char *filename) {
-   char mqtt_command[1024] = "";
-
-   /* Construct the MQTT command with the snapshot filename */
-   snprintf(mqtt_command, sizeof(mqtt_command),
-            "{ \"device\": \"viewing\", \"action\": \"completed\", \"value\": \"%s\" }", filename);
-   LOG_INFO("Sending: %s", mqtt_command);
-
-   mqttSendMessage("dawn", mqtt_command);
+   /* Use empty request_id for backwards compatibility */
+   mqttViewingSnapshotOCP(filename, NULL);
 }
 
 /**
@@ -566,6 +928,13 @@ void process_screenshot_requests(int no_camera_mode) {
       int full_resolution = (g_screenshot_requested & 2) ? 1 : 0;
       screenshot_t source = g_screenshot_source;
       char output_path[PATH_MAX + 31];
+      char request_id[128] = "";
+
+      /* Copy request_id to local variable */
+      if (g_screenshot_request_id[0] != '\0') {
+         strncpy(request_id, g_screenshot_request_id, sizeof(request_id) - 1);
+         request_id[sizeof(request_id) - 1] = '\0';
+      }
 
       /* Copy the path to a local variable */
       if (g_screenshot_path[0] != '\0') {
@@ -612,6 +981,7 @@ void process_screenshot_requests(int no_camera_mode) {
       g_screenshot_requested = 0;
       g_screenshot_path[0] = '\0';
       g_screenshot_source = SCREENSHOT_MANUAL;
+      g_screenshot_request_id[0] = '\0';
 
       pthread_mutex_unlock(&g_screenshot_mutex);
 
@@ -619,9 +989,16 @@ void process_screenshot_requests(int no_camera_mode) {
       int result = take_screenshot(with_overlay, no_camera_mode, full_resolution, output_path);
 
       /* Send notification if it was an MQTT request */
-      if (source == SCREENSHOT_MQTT && result == 0) {
-         LOG_INFO("Screenshot for MQTT. Sending...");
-         mqttViewingSnapshot(output_path);
+      if (source == SCREENSHOT_MQTT) {
+         if (result == 0) {
+            LOG_INFO("Screenshot for MQTT. Sending with request_id=%s",
+                     request_id[0] ? request_id : "(none)");
+            mqttViewingSnapshotOCP(output_path, request_id[0] ? request_id : NULL);
+         } else {
+            LOG_ERROR("Screenshot capture failed (result=%d)", result);
+            mqttViewingSnapshotErrorOCP(request_id[0] ? request_id : NULL, "CAPTURE_FAILED",
+                                        "Failed to capture screenshot from camera");
+         }
       }
    } else {
       pthread_mutex_unlock(&g_screenshot_mutex);

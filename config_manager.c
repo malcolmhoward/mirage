@@ -188,3 +188,7 @@ int set_inv_compass(int inv) {
 int get_snapshot_overlay(void) {
    return this_hds.snapshot_overlay;
 }
+
+int get_vision_inline_data(void) {
+   return this_hds.vision_inline_data;
+}

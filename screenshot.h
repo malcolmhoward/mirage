@@ -105,8 +105,9 @@ int take_screenshot(int with_overlay,
  *
  * @param datetime String containing the datetime for the snapshot filename (optional)
  *                 If NULL, a current timestamp will be generated
+ * @param request_id OCP request ID for response correlation (optional, can be NULL)
  */
-void trigger_snapshot(const char *datetime);
+void trigger_snapshot(const char *datetime, const char *request_id);
 
 /**
  * Process any pending screenshot requests in the main thread

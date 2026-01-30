@@ -653,6 +653,9 @@ int parse_json_config(const char *filename) {
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Snapshot Overlay") == 0) {
                   this_hds->snapshot_overlay = json_object_get_boolean(
                       json_object_iter_peek_value(&itSub));
+               } else if (strcmp(json_object_iter_peek_name(&itSub), "Vision Inline Data") == 0) {
+                  this_hds->vision_inline_data = json_object_get_boolean(
+                      json_object_iter_peek_value(&itSub));
                } else {
                   printf("%s\n", json_object_iter_peek_name(&itSub));
                }

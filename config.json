@@ -12,7 +12,8 @@
       "Stream Width": 800,
       "Stream Height": 400,
       "Stream Dest IP": "192.168.10.170",
-      "Snapshot Overlay": false
+      "Snapshot Overlay": true,
+      "Vision Inline Data": true
    },
    "HUDs": [
       {
@@ -451,7 +452,7 @@
          "dest_y": 952,
          "halign": "left",
          "angle": 0,
-         "layer": 1,
+         "layer": 2,
          "hotkey": "i",
          "enabled": 0,
          "huds": ["default"]

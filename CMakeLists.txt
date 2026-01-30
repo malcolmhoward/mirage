@@ -131,6 +131,10 @@ include_directories(${GLIB_INCLUDE_DIRS})
 pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 include_directories(${MOSQUITTO_INCLUDE_DIRS})
 
+# Crypto (for OCP checksum validation)
+find_package(OpenSSL REQUIRED)
+include_directories(${OPENSSL_INCLUDE_DIR})
+
 # OpenGL Support
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
@@ -171,6 +175,9 @@ set(LIBRARIES
 
   # Communications
   ${MOSQUITTO_LIBRARIES}
+
+  # Crypto
+  OpenSSL::Crypto
 
   # System
   pthread
