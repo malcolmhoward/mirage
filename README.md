@@ -216,9 +216,16 @@ sequenceDiagram
 
 ---
 
+## Related Projects
+
+- [S.C.O.P.E.](https://github.com/malcolmhoward/the-oasis-project-meta-repo) — O.A.S.I.S. coordination repository
+- [DAWN](https://github.com/The-OASIS-Project/dawn) — AI voice assistant
+- [AURA](https://github.com/The-OASIS-Project/aura) — Helmet sensor firmware
+- [SPARK](https://github.com/The-OASIS-Project/spark) — Hand/gauntlet firmware
+
 ## Contributing
 
-Contributions are welcome! MIRAGE is part of The OASIS Project and is licensed under GPLv3.
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
