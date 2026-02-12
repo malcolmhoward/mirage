@@ -1,0 +1,157 @@
+# Dockerfile.jetson - MIRAGE Production Container for NVIDIA Jetson
+#
+# Builds MIRAGE with GPU acceleration, Jetson Inference, and CUDA support.
+# Target platforms: Jetson Nano, Orin Nano, Xavier NX.
+#
+# Prerequisites:
+#   - JetPack SDK installed on host
+#   - NVIDIA Docker runtime (nvidia-docker2)
+#   - Hardware configured via jetson-io.py (SPI, CSI cameras)
+#
+# Usage:
+#   docker build -f Dockerfile.jetson -t mirage:jetson .
+#   docker run --rm -it --runtime nvidia --privileged \
+#     --network host \
+#     --device=/dev/spidev1.0 \
+#     --device=/dev/video0 \
+#     -v /tmp/.X11-unix:/tmp/.X11-unix \
+#     -e DISPLAY=$DISPLAY \
+#     mirage:jetson
+
+FROM nvcr.io/nvidia/l4t-base:r35.4.1
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# JetPack and build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
+    nvidia-jetpack \
+    && rm -rf /var/lib/apt/lists/*
+
+# MIRAGE dependencies
+RUN apt-get update && apt-get install -y \
+    libudev-dev \
+    libxext-dev \
+    libwebp-dev \
+    libpulse-dev \
+    libvorbis-dev \
+    libjson-c-dev \
+    libsamplerate0-dev \
+    libfreetype6-dev \
+    libcurl4-openssl-dev \
+    libmosquitto-dev \
+    mosquitto \
+    mosquitto-clients \
+    libsndfile1-dev \
+    libssl-dev \
+    libgd-dev \
+    libasound2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# SDL2 build dependencies
+RUN apt-get update && apt-get install -y \
+    libdrm-dev \
+    libgbm-dev \
+    libgl1-mesa-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev \
+    libibus-1.0-dev \
+    libdbus-1-dev \
+    libx11-dev \
+    libxrandr-dev \
+    libxcursor-dev \
+    libxinerama-dev \
+    libxi-dev \
+    libxss-dev \
+    libxxf86vm-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libharfbuzz-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# GStreamer
+RUN apt-get update && apt-get install -y \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-base \
+    && rm -rf /var/lib/apt/lists/*
+
+# OpenGL / GLEW
+RUN apt-get update && apt-get install -y \
+    libglew-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# SDL2_gfx
+RUN apt-get update && apt-get install -y \
+    libsdl2-gfx-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build SDL2 from source (Jetson-optimized)
+ENV SDL2_VERSION=2.28.2
+ENV SDL2_IMAGE_VERSION=2.6.3
+ENV SDL2_TTF_VERSION=2.20.2
+
+WORKDIR /tmp
+
+RUN wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz" \
+    && tar -xzf "SDL2-${SDL2_VERSION}.tar.gz" \
+    && cd "SDL2-${SDL2_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2-${SDL2_VERSION}"*
+
+RUN wget -q "https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL2_IMAGE_VERSION}/SDL2_image-${SDL2_IMAGE_VERSION}.tar.gz" \
+    && tar -xzf "SDL2_image-${SDL2_IMAGE_VERSION}.tar.gz" \
+    && cd "SDL2_image-${SDL2_IMAGE_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2_image-${SDL2_IMAGE_VERSION}"*
+
+RUN wget -q "https://github.com/libsdl-org/SDL_ttf/releases/download/release-${SDL2_TTF_VERSION}/SDL2_ttf-${SDL2_TTF_VERSION}.tar.gz" \
+    && tar -xzf "SDL2_ttf-${SDL2_TTF_VERSION}.tar.gz" \
+    && cd "SDL2_ttf-${SDL2_TTF_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2_ttf-${SDL2_TTF_VERSION}"*
+
+# Jetson Inference (GPU-accelerated object detection)
+RUN cd /opt \
+    && git clone --recursive --depth 1 https://github.com/dusty-nv/jetson-inference \
+    && cd jetson-inference \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig
+
+# Copy MIRAGE source
+WORKDIR /opt/mirage
+COPY . .
+
+# Build MIRAGE with Jetson Inference and CUDA support
+RUN mkdir -p build \
+    && cd build \
+    && cmake .. -DUSE_JETSON_INFERENCE=ON -DUSE_CUDA=ON -DPLATFORM=JETSON \
+    && make -j$(nproc)
+
+# Start mosquitto in background, then run MIRAGE
+CMD ["bash", "-c", "mosquitto -d && /opt/mirage/build/mirage"]

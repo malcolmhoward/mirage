@@ -211,6 +211,7 @@ sequenceDiagram
 | Document | Description |
 |----------|-------------|
 | **[GETTING_STARTED.md](GETTING_STARTED.md)** | Build instructions, first-run setup, MQTT and secrets configuration |
+| **[docs/DOCKER.md](docs/DOCKER.md)** | Docker development and deployment |
 | **[CODING_STYLE_GUIDE.md](CODING_STYLE_GUIDE.md)** | Code formatting and development standards |
 | **[secrets.json.example](secrets.json.example)** | Template for API keys and MQTT credentials |
 

@@ -138,6 +138,36 @@ int count = get_element_count();
 
 Elements are defined in `config.json` with type, position, size, layer. Bitmask-based HUD membership (up to 16 named screens). No code changes needed to add/remove elements.
 
+## Deployment
+
+### Docker
+
+Three platform-specific Dockerfiles, each self-contained:
+
+| Dockerfile | Platform | Key Flags |
+|-----------|----------|-----------|
+| `Dockerfile.dev` | x86/x64 (Ubuntu 22.04) | Default CMake |
+| `Dockerfile.jetson` | NVIDIA Jetson (L4T r35.4.1) | `-DUSE_JETSON_INFERENCE=ON -DUSE_CUDA=ON -DPLATFORM=JETSON` |
+| `Dockerfile.rpi` | Raspberry Pi ARM64 (Debian Bookworm) | `-DPLATFORM=RPI` |
+
+```bash
+# Build dev container
+docker build -f Dockerfile.dev -t mirage-dev .
+docker run --rm -it mirage-dev
+```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for full usage and troubleshooting.
+
+### Native Installation
+
+```bash
+sudo ./scripts/install-native.sh
+```
+
+The install script is a 9-step process: system update, dependency installation, SDL2 from source, AI frameworks, hardware configuration, user permissions, Python dependencies, systemd services, and verification. It detects the platform (Jetson, RPi, or generic Linux) automatically.
+
+- Tests use bats-core (`bats scripts/test-install.sh`)
+
 ## File Size Discipline
 
 - **1,500+ lines (C)**: flag as getting large.
