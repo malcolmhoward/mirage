@@ -1,0 +1,2 @@
+paho-mqtt==1.6.1
+oasis-simulation @ git+https://github.com/malcolmhoward/the-oasis-project-simulation-repo.git
