@@ -42,6 +42,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,6 +103,7 @@
 #include "armor.h"
 #include "audio.h"
 #include "command_processing.h"
+#include "component_status.h"
 #include "config_manager.h"
 #include "config_parser.h"
 #include "curl_download.h"
@@ -1413,6 +1415,7 @@ void display_help(int argc, char *argv[]) {
    printf("\n");
    printf("  -u, --usb              Connect via USB/serial.\n");
    printf("  -d, --device DEVICE    Specify the device for USB/serial connection.\n");
+   printf("  -H, --helmet-tcp[=PORT] Enable helmet TCP server (default port: 3000).\n");
    printf("  -c, --camera TYPE      Specify the camera type, csi or usb.\n");
    printf("  -n, --camcount [1/2]   Specify the number of cameras for display, 1 or 2.\n");
    printf("  -b, --black-background  Disable cameras and use black background (for UI "
@@ -1452,6 +1455,10 @@ int main(int argc, char **argv) {
    /* Serial Port */
    char usb_enable = 0;
    char usb_port[24] = USB_PORT;
+
+   /* Helmet TCP Server (disabled by default) */
+   int helmet_tcp_enable = 0;
+   int helmet_tcp_port = HELMET_PORT;
 
    int rc = -1;
 
@@ -1500,6 +1507,7 @@ int main(int argc, char **argv) {
     * c: - camera type, usb/csi
     * f  - fullscreen
     * h  - help text
+    * H:: - helmet TCP server with optional port
     * l  - log filename
     * n: - number of cameras
     * p: - path for recordings
@@ -1513,6 +1521,7 @@ int main(int argc, char **argv) {
                                            { "device", required_argument, NULL, 'd' },
                                            { "fullscreen", no_argument, NULL, 'f' },
                                            { "help", no_argument, NULL, 'h' },
+                                           { "helmet-tcp", optional_argument, NULL, 'H' },
                                            { "logfile", required_argument, NULL, 'l' },
                                            { "camcount", required_argument, NULL, 'n' },
                                            { "record_path", required_argument, NULL, 'p' },
@@ -1543,7 +1552,7 @@ int main(int argc, char **argv) {
    }
 
    while (1) {
-      opt = getopt_long(argc, argv, "bc:d:fhl:n:p:rstu", long_options, &option_index);
+      opt = getopt_long(argc, argv, "bc:d:fhH::l:n:p:rstu", long_options, &option_index);
 
       if (opt == -1) {
          break;
@@ -1569,6 +1578,16 @@ int main(int argc, char **argv) {
          case 'h':
             display_help(argc, argv);
             return EXIT_SUCCESS;
+         case 'H':
+            helmet_tcp_enable = 1;
+            if (optarg) {
+               helmet_tcp_port = atoi(optarg);
+               if (helmet_tcp_port <= 0 || helmet_tcp_port > 65535) {
+                  fprintf(stderr, "Invalid helmet TCP port: %s\n", optarg);
+                  return EXIT_FAILURE;
+               }
+            }
+            break;
          case 'l':
             log_filename = optarg;
             break;
@@ -1864,6 +1883,9 @@ int main(int argc, char **argv) {
    mosquitto_subscribe_callback_set(mosq, on_subscribe);
    mosquitto_message_callback_set(mosq, on_message);
 
+   /* Set Last Will and Testament for automatic offline notification */
+   component_status_set_lwt(mosq);
+
    /* Connect to local MQTT server. */
    //rc = mosquitto_connect(mosq, "192.168.10.1", 1883, 60);
    rc = mosquitto_connect(mosq, "127.0.0.1", 1883, 60);
@@ -1933,19 +1955,23 @@ int main(int argc, char **argv) {
       play_intro(15, 1, NULL);
    }
 
-   if (!usb_enable) {
-      strcpy(usb_port, "");
-
-      if (pthread_create(&command_proc_thread, NULL, socket_command_processing_thread, NULL) != 0) {
-         LOG_ERROR("Error creating command processing thread.");
-         return EXIT_FAILURE;
-      }
-   } else {
+   if (usb_enable) {
+      /* USB/Serial helmet communication */
       if (pthread_create(&command_proc_thread, NULL, serial_command_processing_thread,
                          (void *)usb_port) != 0) {
          LOG_ERROR("Error creating command processing thread.");
          return EXIT_FAILURE;
       }
+   } else if (helmet_tcp_enable) {
+      /* TCP socket helmet communication (use intptr_t to pass port as void*) */
+      strcpy(usb_port, "");
+      if (pthread_create(&command_proc_thread, NULL, socket_command_processing_thread,
+                         (void *)(intptr_t)helmet_tcp_port) != 0) {
+         LOG_ERROR("Error creating command processing thread.");
+         return EXIT_FAILURE;
+      }
+   } else {
+      LOG_INFO("No helmet command thread started (use -u for USB or -H for TCP)");
    }
 
    mqttTextToSpeech("Your hud is now online boss.");
@@ -2408,6 +2434,10 @@ int main(int argc, char **argv) {
 #endif
 
    cleanup_hud_manager();
+
+   /* Graceful component status shutdown */
+   component_status_publish_offline(mosq);
+   component_status_shutdown();
 
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Waiting on MQTT disconnect.");

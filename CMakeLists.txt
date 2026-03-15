@@ -63,6 +63,7 @@ set(SOURCE_FILES
     armor.c
     audio.c
     command_processing.c
+    component_status.c
     config_parser.c
     config_manager.c
     curl_download.c
@@ -72,6 +73,7 @@ set(SOURCE_FILES
     element_renderer.c
     frame_rate_tracker.c
     gauge_renderer.c
+    hud_discovery.c
     hud_manager.c
     image_utils.c
     logging.c

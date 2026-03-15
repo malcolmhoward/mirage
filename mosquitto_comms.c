@@ -24,9 +24,11 @@
 
 #include "armor.h"
 #include "command_processing.h"
+#include "component_status.h"
 #include "config_manager.h"
 #include "config_parser.h"
 #include "defines.h"
+#include "hud_discovery.h"
 #include "logging.h"
 
 /* Mosquitto STUFF */
@@ -75,6 +77,15 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
 
       this_element = this_element->next;
    }
+
+   /* Initialize HUD discovery (subscribes to request topic) */
+   if (hud_discovery_init(mosq) == 0) {
+      /* Publish discovery information (retained) */
+      hud_discovery_publish(mosq);
+   }
+
+   /* Initialize component status (subscribes to dawn/status, publishes online, starts heartbeat) */
+   component_status_init(mosq);
 }
 
 /* Callback called when the broker sends a SUBACK in response to a SUBSCRIBE. */
@@ -110,6 +121,20 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    payload[msg->payloadlen] = '\0';
 
    //LOG_INFO("%s %d %s", msg->topic, msg->qos, (char *)msg->payload);
+
+   /* Handle HUD discovery requests */
+   if (strcmp(msg->topic, HUD_DISCOVERY_TOPIC_REQUEST) == 0) {
+      hud_discovery_handle_request(mosq, payload);
+      free(payload);
+      return;
+   }
+
+   /* Handle Dawn status messages (component keepalive) */
+   if (strcmp(msg->topic, STATUS_TOPIC_DAWN) == 0) {
+      component_status_handle_message(msg->topic, payload, msg->payloadlen);
+      free(payload);
+      return;
+   }
 
    // Check if this is a helmet command that needs to be forwarded to serial
    if (strcmp(msg->topic, "helmet") == 0) {

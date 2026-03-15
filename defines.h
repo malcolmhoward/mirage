@@ -28,7 +28,7 @@
 //#define DISPLAY_TIMING
 //#define OD_PROPER_WAIT
 //#define FPS_STATS
-//#define REFRESH_SYNC
+#define REFRESH_SYNC
 //#define ORIGINAL_RATIO
 
 /* This is per eye/display. */
@@ -204,7 +204,6 @@
       * 1 - Fixed.                                  \
       */
 
-#define SNAPSHOT_NOOVERLAY  /* When we capture a snapshot (for ML) do we include the overlay? */
 #define SNAPSHOT_WIDTH 512  /* Width for ML snapshot */
 #define SNAPSHOT_HEIGHT 512 /* Height for the ML snapshot */
 #define SNAPSHOT_QUALITY 90 /* Quality setting 0-100 for the JPG snapshot */

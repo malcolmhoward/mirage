@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <json-c/json.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -1421,6 +1422,12 @@ void *socket_command_processing_thread(void *arg) {
    int addrlen = sizeof(address);
    char buffer[MAX_SERIAL_BUFFER_LENGTH] = { 0 };
 
+   /* Get port from argument (passed as intptr_t cast to void*) */
+   int port = (int)(intptr_t)arg;
+   if (port <= 0 || port > 65535) {
+      port = HELMET_PORT; /* Default fallback */
+   }
+
    // Creating socket file descriptor
    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
       LOG_ERROR("Socket creation failed.");
@@ -1436,7 +1443,7 @@ void *socket_command_processing_thread(void *arg) {
 
    address.sin_family = AF_INET;
    address.sin_addr.s_addr = INADDR_ANY;
-   address.sin_port = htons(HELMET_PORT);
+   address.sin_port = htons(port);
 
    // Binding the socket to the network address and port
    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
@@ -1452,7 +1459,7 @@ void *socket_command_processing_thread(void *arg) {
       return NULL;
    }
 
-   LOG_INFO("Server is listening on port %d\n", HELMET_PORT);
+   LOG_INFO("Helmet TCP server listening on port %d", port);
 
    while (!checkShutdown()) {
       fd_set readfds;
