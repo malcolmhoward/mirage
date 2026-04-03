@@ -2388,8 +2388,10 @@ int main(int argc, char **argv) {
 
    LOG_INFO("Waiting on command processing thread to stop.");
 #endif
-   //pthread_join(command_proc_thread, NULL); // TODO: This is hanging.
-   pthread_cancel(command_proc_thread);
+   if (command_proc_thread != 0) {
+      //pthread_join(command_proc_thread, NULL); // TODO: This is hanging.
+      pthread_cancel(command_proc_thread);
+   }
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
 
