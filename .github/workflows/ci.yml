@@ -46,7 +46,7 @@ jobs:
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libjson-c-dev libcurl4-openssl-dev libssl-dev \
             libmosquitto-dev libvorbis-dev libasound2-dev \
-            libglew-dev libgd-dev libx11-dev
+            libglew-dev libgd-dev libx11-dev libunwind-dev
 
       - name: Configure
         run: cmake --preset ci
