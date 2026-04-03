@@ -21,8 +21,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-CLANG_FORMAT="clang-format"
+# Configuration — require clang-format-14 for consistent formatting across all platforms
+CLANG_FORMAT="clang-format-14"
 CONFIG_FILE=".clang-format"
 
 # File extensions to format
@@ -32,7 +32,7 @@ CPP_EXTENSIONS=("cpp" "hpp" "cc" "cxx" "hh" "hxx")
 # Directories and files to exclude (add more as needed)
 EXCLUDE_DIRS=(
    ".git"
-   "build"
+   "build*"
    "cmake-build-debug"
    "cmake-build-release"
    ".vscode"
@@ -43,9 +43,7 @@ EXCLUDE_DIRS=(
    "external"
 )
 
-EXCLUDE_FILES=(
-   "json.hpp"  # Third-party library
-)
+EXCLUDE_FILES=()
 
 ###############################################################################
 # Functions
@@ -63,12 +61,14 @@ OPTIONS:
    -v, --verbose       Show detailed output
    -c, --config FILE   Use alternate config file (default: .clang-format)
    --check             Check if files are formatted (exit 1 if not)
+   --changed           Only format files changed since last commit or staged
 
 EXAMPLES:
    $0                  Format all files in current directory
    $0 src/             Format all files in src/ directory
    $0 --dry-run        Show what would be changed without formatting
    $0 --check          Check if code is properly formatted (CI mode)
+   $0 --changed        Format only uncommitted/staged files (fast)
 
 USAGE
 }
@@ -91,15 +91,24 @@ log_error() {
 
 check_clang_format() {
    if ! command -v "$CLANG_FORMAT" &> /dev/null; then
-      log_error "clang-format not found. Please install it:"
-      echo "  Ubuntu/Debian: sudo apt-get install clang-format"
-      echo "  macOS:         brew install clang-format"
-      echo "  Fedora:        sudo dnf install clang-tools-extra"
+      log_error "clang-format-14 not found. This project requires clang-format version 14."
+      echo "  Ubuntu/Debian: sudo apt-get install clang-format-14"
+      echo "  macOS:         brew install clang-format@14"
+      echo ""
+      echo "  Note: Other versions produce different output. Version 14 is required"
+      echo "  for consistent formatting across all development platforms."
       exit 1
    fi
-   
+
    local version
    version=$($CLANG_FORMAT --version | grep -oP '\d+\.\d+' | head -1)
+   local major
+   major=$(echo "$version" | cut -d. -f1)
+   if [ "$major" != "14" ]; then
+      log_error "clang-format version 14 required, found version $version"
+      echo "  Install with: sudo apt-get install clang-format-14"
+      exit 1
+   fi
    log_info "Using clang-format version $version"
 }
 
@@ -107,7 +116,7 @@ should_exclude_dir() {
    local dir=$1
    local basename
    basename=$(basename "$dir")
-   
+
    for exclude in "${EXCLUDE_DIRS[@]}"; do
       if [[ "$basename" == "$exclude" ]]; then
          return 0
@@ -120,7 +129,7 @@ should_exclude_file() {
    local file=$1
    local basename
    basename=$(basename "$file")
-   
+
    for exclude in "${EXCLUDE_FILES[@]}"; do
       if [[ "$basename" == "$exclude" ]]; then
          return 0
@@ -132,7 +141,7 @@ should_exclude_file() {
 is_c_file() {
    local file=$1
    local ext="${file##*.}"
-   
+
    for e in "${C_EXTENSIONS[@]}"; do
       if [[ "$ext" == "$e" ]]; then
          return 0
@@ -144,7 +153,7 @@ is_c_file() {
 is_cpp_file() {
    local file=$1
    local ext="${file##*.}"
-   
+
    for e in "${CPP_EXTENSIONS[@]}"; do
       if [[ "$ext" == "$e" ]]; then
          return 0
@@ -158,12 +167,12 @@ format_file() {
    local dry_run=$2
    local check_mode=$3
    local verbose=$4
-   
+
    if should_exclude_file "$file"; then
       [[ $verbose -eq 1 ]] && log_warning "Skipping excluded file: $file"
       return 0
    fi
-   
+
    if [[ $check_mode -eq 1 ]]; then
       # Check mode: see if file needs formatting
       if ! $CLANG_FORMAT --style=file:"$CONFIG_FILE" --dry-run --Werror "$file" &> /dev/null; then
@@ -173,7 +182,7 @@ format_file() {
       [[ $verbose -eq 1 ]] && log_success "OK: $file"
       return 0
    fi
-   
+
    if [[ $dry_run -eq 1 ]]; then
       # Dry run: show what would change
       if ! $CLANG_FORMAT --style=file:"$CONFIG_FILE" --dry-run --Werror "$file" &> /dev/null; then
@@ -188,7 +197,7 @@ format_file() {
          return 1
       fi
    fi
-   
+
    return 0
 }
 
@@ -197,16 +206,16 @@ find_and_format() {
    local dry_run=$2
    local check_mode=$3
    local verbose=$4
-   
+
    local count=0
    local failed=0
-   
+
    # Build find command to exclude directories
    local exclude_opts=()
    for dir in "${EXCLUDE_DIRS[@]}"; do
       exclude_opts+=(-path "*/$dir" -prune -o)
    done
-   
+
    # Find all C/C++ files
    while IFS= read -r -d '' file; do
       if is_c_file "$file" || is_cpp_file "$file"; then
@@ -217,7 +226,7 @@ find_and_format() {
          fi
       fi
    done < <(find "$target_dir" "${exclude_opts[@]}" -type f -print0)
-   
+
    echo ""
    if [[ $check_mode -eq 1 ]]; then
       if [[ $failed -eq 0 ]]; then
@@ -239,6 +248,78 @@ find_and_format() {
    fi
 }
 
+format_changed_files() {
+   local dry_run=$1
+   local check_mode=$2
+   local verbose=$3
+
+   # Get changed C/C++ files (staged + unstaged + untracked)
+   local c_files=()
+
+   while IFS= read -r file; do
+      [[ -z "$file" || ! -f "$file" ]] && continue
+      if is_c_file "$file" || is_cpp_file "$file"; then
+         should_exclude_file "$file" && continue
+         # Check if file is inside an excluded directory
+         local skip=0
+         for dir in "${EXCLUDE_DIRS[@]}"; do
+            if [[ "$file" == *"/$dir/"* || "$file" == "$dir/"* ]]; then
+               skip=1
+               break
+            fi
+         done
+         [[ $skip -eq 1 ]] && continue
+         c_files+=("$file")
+      fi
+   done < <(git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
+
+   # Deduplicate
+   local -A seen
+   local unique_c=()
+   for f in "${c_files[@]}"; do
+      if [[ -z "${seen[$f]:-}" ]]; then
+         seen[$f]=1
+         unique_c+=("$f")
+      fi
+   done
+
+   # Format C/C++ files
+   echo "=== Formatting C/C++ (changed files) ==="
+   if [[ ${#unique_c[@]} -eq 0 ]]; then
+      log_info "No changed C/C++ files"
+      return 0
+   fi
+
+   local count=0
+   local failed=0
+   for file in "${unique_c[@]}"; do
+      if format_file "$file" "$dry_run" "$check_mode" "$verbose"; then
+         ((count++))
+      else
+         ((failed++))
+      fi
+   done
+   echo ""
+   if [[ $check_mode -eq 1 ]]; then
+      if [[ $failed -eq 0 ]]; then
+         log_success "All $count changed files are properly formatted"
+         return 0
+      else
+         log_error "$failed of $count changed files need formatting"
+         return 1
+      fi
+   elif [[ $dry_run -eq 1 ]]; then
+      log_info "Dry run complete. Checked $count changed files."
+   else
+      if [[ $failed -eq 0 ]]; then
+         log_success "Successfully formatted $count changed files"
+      else
+         log_error "Failed to format $failed of $count changed files"
+         return 1
+      fi
+   fi
+}
+
 ###############################################################################
 # Main
 ###############################################################################
@@ -248,7 +329,8 @@ main() {
    local dry_run=0
    local check_mode=0
    local verbose=0
-   
+   local changed_only=0
+
    # Parse arguments
    while [[ $# -gt 0 ]]; do
       case $1 in
@@ -262,6 +344,10 @@ main() {
             ;;
          --check)
             check_mode=1
+            shift
+            ;;
+         --changed)
+            changed_only=1
             shift
             ;;
          -v|--verbose)
@@ -283,36 +369,45 @@ main() {
             ;;
       esac
    done
-   
+
    # Check if target directory exists
    if [[ ! -d "$target_dir" ]]; then
       log_error "Directory not found: $target_dir"
       exit 1
    fi
-   
+
    # Check if config file exists
    if [[ ! -f "$CONFIG_FILE" ]]; then
       log_error "Config file not found: $CONFIG_FILE"
       log_info "Create a .clang-format file or specify one with --config"
       exit 1
    fi
-   
+
    # Check for clang-format
    check_clang_format
-   
+
    # Show what we're doing
-   if [[ $dry_run -eq 1 ]]; then
+   if [[ $changed_only -eq 1 ]]; then
+      log_info "CHANGED MODE: Formatting only uncommitted/staged files"
+   elif [[ $dry_run -eq 1 ]]; then
       log_info "DRY RUN: Checking what would be formatted in: $target_dir"
    elif [[ $check_mode -eq 1 ]]; then
       log_info "CHECK MODE: Verifying formatting in: $target_dir"
    else
       log_info "Formatting C/C++ files in: $target_dir"
    fi
-   
+
    log_info "Using config: $CONFIG_FILE"
    echo ""
-   
-   # Do the work
+
+   if [[ $changed_only -eq 1 ]]; then
+      if ! format_changed_files "$dry_run" "$check_mode" "$verbose"; then
+         exit 1
+      fi
+      exit 0
+   fi
+
+   # Format C/C++ files
    if find_and_format "$target_dir" "$dry_run" "$check_mode" "$verbose"; then
       exit 0
    else

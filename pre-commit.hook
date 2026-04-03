@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Pre-commit hook to ensure code is formatted with clang-format
-# Install: cp pre-commit.hook .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Pre-commit hook to ensure code is formatted with clang-format-14
+# Install: ./install-git-hooks.sh
 #
 
 # Change to repository root
@@ -13,30 +13,14 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Running clang-format check...${NC}"
+echo -e "${YELLOW}Running clang-format check on changed files...${NC}"
 
-# Get list of staged C/C++ files
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|h|hpp)$')
-
-if [ -z "$STAGED_FILES" ]; then
-   echo -e "${GREEN}No C/C++ files to format.${NC}"
-   exit 0
-fi
-
-# Check if format_code.sh exists
-if [ ! -f "./format_code.sh" ]; then
-   echo -e "${RED}ERROR: format_code.sh not found!${NC}"
-   exit 1
-fi
-
-# Check if files need formatting
-./format_code.sh --check > /dev/null 2>&1
-FORMAT_RESULT=$?
-
-if [ $FORMAT_RESULT -ne 0 ]; then
+# Delegate to format_code.sh --changed --check
+if ! ./format_code.sh --changed --check; then
+   echo ""
    echo -e "${RED}ERROR: Code is not properly formatted!${NC}"
    echo -e "${YELLOW}Please run:${NC}"
-   echo -e "  ./format_code.sh"
+   echo -e "  ./format_code.sh --changed"
    echo -e "${YELLOW}Then stage the changes and commit again.${NC}"
    echo ""
    echo -e "${YELLOW}Or to bypass this check (not recommended):${NC}"

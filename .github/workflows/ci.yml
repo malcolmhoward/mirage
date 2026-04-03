@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job 1: Format Check (~30s)
+  # Runs on ubuntu-22.04 which has clang-format-14 available
+  # -------------------------------------------------------------------------
+  format-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Install clang-format-14
+        run: sudo apt-get update && sudo apt-get install -y clang-format-14
+
+      - name: Check formatting
+        run: ./format_code.sh --check
+
+  # -------------------------------------------------------------------------
+  # Job 2: Build (~2 min)
+  # Verifies the project compiles on ubuntu-22.04
+  # -------------------------------------------------------------------------
+  build:
+    needs: format-check
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential pkg-config \
+            libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-gfx-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libjson-c-dev libcurl4-openssl-dev libssl-dev \
+            libmosquitto-dev libvorbis-dev libasound2-dev \
+            libglew-dev libgd-dev libx11-dev
+
+      - name: Configure
+        run: cmake --preset ci
+
+      - name: Build
+        run: make -C build-ci -j"$(nproc)"

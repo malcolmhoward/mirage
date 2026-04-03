@@ -1,2 +1,26 @@
-build/
+# Build directories
+build*/
+
+# Secrets and API keys
+secrets.h
 googleapi.key
+
+# IDE directories
+.vscode/
+.idea/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.db
+
+# Backup files
+*.bak
+*.sav
+
+# Node modules (future-proofing)
+node_modules/
+
+# OS files
+.DS_Store

@@ -58,32 +58,51 @@ endif()
 add_definitions(-DPLATFORM_${PLATFORM})
 message(STATUS "Building for platform: ${PLATFORM}")
 
+# Include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
 # Set source files
 set(SOURCE_FILES
-    armor.c
-    audio.c
-    command_processing.c
-    component_status.c
-    config_parser.c
-    config_manager.c
-    curl_download.c
-    data_sources.c
-    detect.cpp
-    devices.c
-    element_renderer.c
-    frame_rate_tracker.c
-    gauge_renderer.c
-    hud_discovery.c
-    hud_manager.c
-    image_utils.c
-    logging.c
-    mirage.c
-    mosquitto_comms.c
-    recording.c
-    screenshot.c
-    sim_data.c
-    system_metrics.c
-    utils.c)
+    # core
+    src/core/mirage.c
+
+    # config
+    src/config/config_parser.c
+    src/config/config_manager.c
+
+    # util
+    src/util/curl_download.c
+    src/util/data_sources.c
+    src/util/image_utils.c
+    src/util/logging.c
+    src/util/sim_data.c
+    src/util/utils.c
+
+    # hardware
+    src/hardware/armor.c
+    src/hardware/detect.cpp
+    src/hardware/devices.c
+    src/hardware/frame_rate_tracker.c
+    src/hardware/system_metrics.c
+
+    # rendering
+    src/rendering/element_renderer.c
+    src/rendering/gauge_renderer.c
+
+    # media
+    src/media/audio.c
+    src/media/recording.c
+    src/media/screenshot.c
+
+    # ui
+    src/ui/hud_manager.c
+
+    # comm
+    src/comm/command_processing.c
+    src/comm/component_status.c
+    src/comm/hud_discovery.c
+    src/comm/mosquitto_comms.c
+)
 
 # Set C compiler and flags
 set(CMAKE_C_COMPILER gcc)
@@ -202,10 +221,5 @@ endif()
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} ${LIBRARIES})
 
-# Add a custom target for indent
-add_custom_target(
-  indent 
-  COMMAND indent -linux -nut -i3 -l100 ${SOURCE_FILES}
-)
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
