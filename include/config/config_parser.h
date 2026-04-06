@@ -91,6 +91,70 @@ typedef enum {
 /* Map type string representations - declare as extern */
 extern const char *MAP_TYPE_STRINGS[];
 
+/* Dynamic text source IDs for O(1) dispatch in the render loop.
+ * Resolved once at config parse time from the element's text string. */
+typedef enum {
+   TEXT_SOURCE_STATIC = 0, /* No dynamic source -- render text as-is */
+   TEXT_SOURCE_FPS,
+   TEXT_SOURCE_DATETIME,
+   TEXT_SOURCE_GPSTIME,
+   TEXT_SOURCE_SYSTIME,
+   TEXT_SOURCE_AINAME,
+   TEXT_SOURCE_CPU,
+   TEXT_SOURCE_SYSTEM_TEMP,
+   TEXT_SOURCE_SYSTEM_TEMP_F,
+   TEXT_SOURCE_MEM,
+   TEXT_SOURCE_HELMTEMP,
+   TEXT_SOURCE_HELMTEMP_F,
+   TEXT_SOURCE_HELMHUM,
+   TEXT_SOURCE_AIRQUALITY,
+   TEXT_SOURCE_AIRQUALITYDESC,
+   TEXT_SOURCE_TVOC,
+   TEXT_SOURCE_ECO2,
+   TEXT_SOURCE_CO2,
+   TEXT_SOURCE_CO2QUALITY,
+   TEXT_SOURCE_CO2ECO2DIFF,
+   TEXT_SOURCE_CO2SOURCEANALYSIS,
+   TEXT_SOURCE_HEATINDEX_C,
+   TEXT_SOURCE_DEWPOINT,
+   TEXT_SOURCE_FAN,
+   TEXT_SOURCE_BATTERY_LEVEL,
+   TEXT_SOURCE_BATTERY_STATUS,
+   TEXT_SOURCE_BATTERY_STATUS_REASON,
+   TEXT_SOURCE_BATTERY_CELLS_CONFIG,
+   TEXT_SOURCE_BATTERY_FAULT_COUNT,
+   TEXT_SOURCE_BATTERY_CRITICAL_FAULTS,
+   TEXT_SOURCE_BATTERY_WARNING_FAULTS,
+   TEXT_SOURCE_BATTERY_INFO_FAULTS,
+   TEXT_SOURCE_BATTERY_ALL_FAULTS,
+   TEXT_SOURCE_BATTERY_TIME,
+   TEXT_SOURCE_BATTERY_TIME_MIN,
+   TEXT_SOURCE_BATTERY_VOLTAGE,
+   TEXT_SOURCE_BATTERY_CURRENT,
+   TEXT_SOURCE_BATTERY_POWER,
+   TEXT_SOURCE_BATTERY_TEMP,
+   TEXT_SOURCE_BATTERY_CHEMISTRY,
+   TEXT_SOURCE_BATTERY_CAPACITY,
+   TEXT_SOURCE_BATTERY_CELLS,
+   TEXT_SOURCE_LATLON,
+   TEXT_SOURCE_PITCH,
+   TEXT_SOURCE_COMPASS,
+   TEXT_SOURCE_LOG,
+   TEXT_SOURCE_ALERT,
+   TEXT_SOURCE_COUNT /* Always last */
+} text_source_t;
+
+/**
+ * @brief Resolve a text element's dynamic source string to an enum ID.
+ *
+ * Called once at config parse time so the render loop can use a switch
+ * instead of 47+ strcmp() calls per frame.
+ *
+ * @param text The element's text field (e.g., "*FPS*", "*BATTERY_LEVEL*")
+ * @return The corresponding text_source_t enum value, or TEXT_SOURCE_STATIC
+ */
+text_source_t resolve_text_source(const char *text);
+
 /* Parent data type for all UI elements. Not all fields are used for all types. */
 typedef struct _element {
    element_t type;
@@ -124,6 +188,7 @@ typedef struct _element {
    /* Text elements */
    char text[MAX_TEXT_LENGTH];
    char last_rendered_text[MAX_TEXT_LENGTH];
+   text_source_t text_source_id; /* Resolved at parse time for O(1) render dispatch */
    char font[MAX_FILENAME_LENGTH * 2];
    SDL_Color font_color;
    TTF_Font *ttf_font;

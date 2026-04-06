@@ -305,410 +305,438 @@ void render_text_element(element *curr_element) {
       last_log = currTime;
    }
 
-   /* Process dynamic text content */
-   if (strcmp("*FPS*", curr_element->text) == 0) {
-      /* FPS display */
-      snprintf(render_text, MAX_TEXT_LENGTH, "Current FPS: %d", (int)averageFrameRate);
-   } else if (strcmp("*DATETIME*", curr_element->text) == 0) {
-      /* Date/time display */
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s %s", this_gps->date, this_gps->time);
-   } else if (strcmp("*GPSTIME*", curr_element->text) == 0) {
-      /* TODO: Use Google API to convert GPS location into correct local time. */
-      /* https://maps.googleapis.com/maps/api/timezone/json?language=es&location=39.6034810%2C-119.6822510&timestamp=1331766000&key=GoogleAPIKey
-       */
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_gps->time);
-   } else if (strcmp("*SYSTIME*", curr_element->text) == 0) {
-      time_t stime;
-      struct tm *ltime;
-      stime = time(NULL);
-      ltime = localtime(&stime);
-      snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d", ltime->tm_hour, ltime->tm_min,
-               ltime->tm_sec);
-   } else if (strcmp("*AINAME*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
-   } else if (strcmp("*CPU*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_loadavg());
-   } else if (strcmp("*SYSTEM_TEMP*", curr_element->text) == 0) {
-      if (system_metrics.system_temp_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°C", system_metrics.system_temperature);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-°C");
+   /* Process dynamic text content via O(1) enum dispatch */
+   switch (curr_element->text_source_id) {
+      case TEXT_SOURCE_FPS:
+         snprintf(render_text, MAX_TEXT_LENGTH, "Current FPS: %d", (int)averageFrameRate);
+         break;
+      case TEXT_SOURCE_DATETIME:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s %s", this_gps->date, this_gps->time);
+         break;
+      case TEXT_SOURCE_GPSTIME:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_gps->time);
+         break;
+      case TEXT_SOURCE_SYSTIME: {
+         time_t stime;
+         struct tm *ltime;
+         stime = time(NULL);
+         ltime = localtime(&stime);
+         snprintf(render_text, MAX_TEXT_LENGTH, "%02d:%02d:%02d", ltime->tm_hour, ltime->tm_min,
+                  ltime->tm_sec);
+         break;
       }
-   } else if (strcmp("*SYSTEM_TEMP_F*", curr_element->text) == 0) {
-      if (system_metrics.system_temp_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°F",
-                  system_metrics.system_temperature * 9 / 5 + 32.0);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-°F");
-      }
-   } else if (strcmp("*MEM*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_mem_usage());
-   } else if (strcmp("*HELMTEMP*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°C", this_enviro->temp);
-   } else if (strcmp("*HELMTEMP_F*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f°F", this_enviro->temp * 9 / 5 + 32.0);
-   } else if (strcmp("*HELMHUM*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%02.0f%%", this_enviro->humidity);
-
-   } else if (strcmp("*AIRQUALITY*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
-   } else if (strcmp("*AIRQUALITYDESC*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->air_quality_description);
-   } else if (strcmp("*TVOC*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->tvoc_ppb);
-   } else if (strcmp("*ECO2*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->eco2_ppm);
-   } else if (strcmp("*CO2*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->co2_ppm);
-   } else if (strcmp("*CO2QUALITY*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_quality_description);
-   } else if (strcmp("*CO2ECO2DIFF*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03d", this_enviro->co2_eco2_diff);
-   } else if (strcmp("*CO2SOURCEANALYSIS*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_source_analysis);
-   } else if (strcmp("*HEATINDEX_C*", curr_element->text) == 0) {
-      if (this_enviro->heat_index_c > 0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "N/A");
-      }
-   } else if (strcmp("*DEWPOINT*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
-   } else if (strcmp("*FAN*", curr_element->text) == 0) {
-      int fan_percent = get_fan_load_percent();
-      snprintf(render_text, MAX_TEXT_LENGTH, "%03d%%", fan_percent);
-   } else if (strcmp("*BATTERY_LEVEL*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f%%", system_metrics.battery_level);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-%%");
-      }
-   } else if (strcmp("*BATTERY_STATUS*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_status);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "UNKNOWN");
-      }
-   } else if (strcmp("*BATTERY_STATUS_REASON*", curr_element->text) == 0) {
-      if (system_metrics.power_available && strlen(system_metrics.status_reason) > 0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.status_reason);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "No status information");
-      }
-   } else if (strcmp("*BATTERY_CELLS_CONFIG*", curr_element->text) == 0) {
-      if (system_metrics.power_available && system_metrics.battery_cells_series > 0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%dS%dP", system_metrics.battery_cells_series,
-                  system_metrics.battery_cells_parallel > 0 ? system_metrics.battery_cells_parallel
-                                                            : 1);
-      } else if (system_metrics.power_available && system_metrics.battery_cells > 0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--S--P");
-      }
-   } else if (strcmp("*BATTERY_FAULT_COUNT*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         if (system_metrics.critical_fault_count > 0) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "CRIT:%d WARN:%d INFO:%d",
-                     system_metrics.critical_fault_count, system_metrics.warning_fault_count,
-                     system_metrics.info_fault_count);
-         } else if (system_metrics.warning_fault_count > 0) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "WARN:%d INFO:%d",
-                     system_metrics.warning_fault_count, system_metrics.info_fault_count);
-         } else if (system_metrics.info_fault_count > 0) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "INFO:%d", system_metrics.info_fault_count);
+      case TEXT_SOURCE_AINAME:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", get_ai_name());
+         break;
+      case TEXT_SOURCE_CPU:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_loadavg());
+         break;
+      case TEXT_SOURCE_SYSTEM_TEMP:
+         if (system_metrics.system_temp_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°C", system_metrics.system_temperature);
          } else {
-            snprintf(render_text, MAX_TEXT_LENGTH, "No faults");
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-°C");
          }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--");
+         break;
+      case TEXT_SOURCE_SYSTEM_TEMP_F:
+         if (system_metrics.system_temp_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°F",
+                     system_metrics.system_temperature * 9 / 5 + 32.0);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-°F");
+         }
+         break;
+      case TEXT_SOURCE_MEM:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0Lf%%", get_mem_usage());
+         break;
+      case TEXT_SOURCE_HELMTEMP:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f°C", this_enviro->temp);
+         break;
+      case TEXT_SOURCE_HELMTEMP_F:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f°F", this_enviro->temp * 9 / 5 + 32.0);
+         break;
+      case TEXT_SOURCE_HELMHUM:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%02.0f%%", this_enviro->humidity);
+         break;
+      case TEXT_SOURCE_AIRQUALITY:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->air_quality);
+         break;
+      case TEXT_SOURCE_AIRQUALITYDESC:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->air_quality_description);
+         break;
+      case TEXT_SOURCE_TVOC:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->tvoc_ppb);
+         break;
+      case TEXT_SOURCE_ECO2:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->eco2_ppm);
+         break;
+      case TEXT_SOURCE_CO2:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03.0f", this_enviro->co2_ppm);
+         break;
+      case TEXT_SOURCE_CO2QUALITY:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_quality_description);
+         break;
+      case TEXT_SOURCE_CO2ECO2DIFF:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03d", this_enviro->co2_eco2_diff);
+         break;
+      case TEXT_SOURCE_CO2SOURCEANALYSIS:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", this_enviro->co2_source_analysis);
+         break;
+      case TEXT_SOURCE_HEATINDEX_C:
+         if (this_enviro->heat_index_c > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->heat_index_c);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "N/A");
+         }
+         break;
+      case TEXT_SOURCE_DEWPOINT:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", this_enviro->dew_point);
+         break;
+      case TEXT_SOURCE_FAN: {
+         int fan_percent = get_fan_load_percent();
+         snprintf(render_text, MAX_TEXT_LENGTH, "%03d%%", fan_percent);
+         break;
       }
-   } else if (strcmp("*BATTERY_CRITICAL_FAULTS*", curr_element->text) == 0) {
-      if (system_metrics.power_available && system_metrics.critical_fault_count > 0) {
-         /* Concatenate all critical fault messages */
-         render_text[0] = '\0';
-         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count; i++) {
-            if (strlen(system_metrics.critical_faults[i]) > 0) {
-               if (i > 0) {
-                  /* Use a newline character instead of comma-space */
-                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
-               }
-               strncat(render_text, system_metrics.critical_faults[i],
-                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
+      case TEXT_SOURCE_BATTERY_LEVEL:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f%%", system_metrics.battery_level);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-%%");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_STATUS:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_status);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "UNKNOWN");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_STATUS_REASON:
+         if (system_metrics.power_available && strlen(system_metrics.status_reason) > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.status_reason);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "No status information");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_CELLS_CONFIG:
+         if (system_metrics.power_available && system_metrics.battery_cells_series > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%dS%dP", system_metrics.battery_cells_series,
+                     system_metrics.battery_cells_parallel > 0
+                         ? system_metrics.battery_cells_parallel
+                         : 1);
+         } else if (system_metrics.power_available && system_metrics.battery_cells > 0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--S--P");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_FAULT_COUNT:
+         if (system_metrics.power_available) {
+            if (system_metrics.critical_fault_count > 0) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "CRIT:%d WARN:%d INFO:%d",
+                        system_metrics.critical_fault_count, system_metrics.warning_fault_count,
+                        system_metrics.info_fault_count);
+            } else if (system_metrics.warning_fault_count > 0) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "WARN:%d INFO:%d",
+                        system_metrics.warning_fault_count, system_metrics.info_fault_count);
+            } else if (system_metrics.info_fault_count > 0) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "INFO:%d", system_metrics.info_fault_count);
+            } else {
+               snprintf(render_text, MAX_TEXT_LENGTH, "No faults");
             }
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--");
          }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "No critical faults");
-      }
-   } else if (strcmp("*BATTERY_WARNING_FAULTS*", curr_element->text) == 0) {
-      if (system_metrics.power_available && system_metrics.warning_fault_count > 0) {
-         /* Concatenate all warning fault messages */
-         render_text[0] = '\0';
-         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
-            if (strlen(system_metrics.warning_faults[i]) > 0) {
-               if (i > 0) {
-                  /* Use a newline character instead of comma-space */
-                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
-               }
-               strncat(render_text, system_metrics.warning_faults[i],
-                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
-            }
-         }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "No warning faults");
-      }
-   } else if (strcmp("*BATTERY_INFO_FAULTS*", curr_element->text) == 0) {
-      if (system_metrics.power_available && system_metrics.info_fault_count > 0) {
-         /* Concatenate all info fault messages */
-         render_text[0] = '\0';
-         for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
-            if (strlen(system_metrics.info_faults[i]) > 0) {
-               if (i > 0) {
-                  /* Use a newline character instead of comma-space */
-                  char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
-               }
-               strncat(render_text, system_metrics.info_faults[i],
-                       MAX_TEXT_LENGTH - strlen(render_text) - 1);
-            }
-         }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "No info faults");
-      }
-   } else if (strcmp("*BATTERY_ALL_FAULTS*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         /* Initialize with empty string */
-         render_text[0] = '\0';
-         int has_faults = 0;
-         char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
-
-         /* Add critical faults with section header */
-         if (system_metrics.critical_fault_count > 0) {
+         break;
+      case TEXT_SOURCE_BATTERY_CRITICAL_FAULTS:
+         if (system_metrics.power_available && system_metrics.critical_fault_count > 0) {
+            render_text[0] = '\0';
             for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count; i++) {
                if (strlen(system_metrics.critical_faults[i]) > 0) {
-                  /* Add indentation for better readability */
-                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  if (i > 0) {
+                     char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
                   strncat(render_text, system_metrics.critical_faults[i],
                           MAX_TEXT_LENGTH - strlen(render_text) - 1);
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
-            has_faults = 1;
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "No critical faults");
          }
-
-         /* Add warning faults with section header */
-         if (system_metrics.warning_fault_count > 0) {
+         break;
+      case TEXT_SOURCE_BATTERY_WARNING_FAULTS:
+         if (system_metrics.power_available && system_metrics.warning_fault_count > 0) {
+            render_text[0] = '\0';
             for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
                if (strlen(system_metrics.warning_faults[i]) > 0) {
-                  /* Add indentation for better readability */
-                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  if (i > 0) {
+                     char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
                   strncat(render_text, system_metrics.warning_faults[i],
                           MAX_TEXT_LENGTH - strlen(render_text) - 1);
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
-            has_faults = 1;
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "No warning faults");
          }
-
-         /* Add info faults with section header */
-         if (system_metrics.info_fault_count > 0) {
+         break;
+      case TEXT_SOURCE_BATTERY_INFO_FAULTS:
+         if (system_metrics.power_available && system_metrics.info_fault_count > 0) {
+            render_text[0] = '\0';
             for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
                if (strlen(system_metrics.info_faults[i]) > 0) {
-                  /* Add indentation for better readability */
-                  strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  if (i > 0) {
+                     char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
                   strncat(render_text, system_metrics.info_faults[i],
                           MAX_TEXT_LENGTH - strlen(render_text) - 1);
-                  strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
                }
             }
-            has_faults = 1;
-         }
-
-         /* If no faults were found, display a message */
-         if (!has_faults) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "No battery faults");
-         }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "Battery not available");
-      }
-   } else if (strcmp("*BATTERY_TIME*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         if (system_metrics.charge_state == CHARGE_STATE_CHARGING) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "CHARGING");
-         } else if (system_metrics.charge_state == CHARGE_STATE_IDLE) {
-            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "IDLE");
          } else {
-            snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);
+            snprintf(render_text, MAX_TEXT_LENGTH, "No info faults");
          }
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--:--");
-      }
-   } else if (strcmp("*BATTERY_TIME_MIN*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", system_metrics.time_remaining_min);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-");
-      }
-   } else if (strcmp("*BATTERY_VOLTAGE*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f V", system_metrics.battery_voltage);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- V");
-      }
-   } else if (strcmp("*BATTERY_CURRENT*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f A", system_metrics.battery_current);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- A");
-      }
-   } else if (strcmp("*BATTERY_POWER*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f W", system_metrics.battery_consumption);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-- W");
-      }
-   } else if (strcmp("*BATTERY_TEMP*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f°C", system_metrics.battery_temperature);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--.-°C");
-      }
-   } else if (strcmp("*BATTERY_CHEMISTRY*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_chemistry);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "UNKN");
-      }
-   } else if (strcmp("*BATTERY_CAPACITY*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f mAh", system_metrics.battery_capacity_mah);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "---- mAh");
-      }
-   } else if (strcmp("*BATTERY_CELLS*", curr_element->text) == 0) {
-      if (system_metrics.power_available) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "--S");
-      }
-   } else if (strcmp("*LATLON*", curr_element->text) == 0) {
-      if (this_gps->latitudeDegrees != 0.0) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f", this_gps->latitudeDegrees,
-                  this_gps->longitudeDegrees);
-      } else {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s", this_gps->latitude,
-                  this_gps->lat, this_gps->longitude, this_gps->lon);
-      }
-   } else if (strcmp("*PITCH*", curr_element->text) == 0) {
-      snprintf(render_text, MAX_TEXT_LENGTH, "%d",
-               (int)this_motion->pitch + (int)this_hds->pitch_offset);
-   } else if (strcmp("*COMPASS*", curr_element->text) == 0) {
-      if ((this_motion->heading > 337.5) || (this_motion->heading <= 22.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "N");
-      } else if ((this_motion->heading > 22.5) && (this_motion->heading <= 67.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NE");
-      } else if ((this_motion->heading > 67.5) && (this_motion->heading <= 112.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "E");
-      } else if ((this_motion->heading > 112.5) && (this_motion->heading <= 157.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SE");
-      } else if ((this_motion->heading > 157.5) && (this_motion->heading <= 202.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "S");
-      } else if ((this_motion->heading > 202.5) && (this_motion->heading <= 247.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SW");
-      } else if ((this_motion->heading > 247.5) && (this_motion->heading <= 292.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "W");
-      } else if ((this_motion->heading > 292.5) && (this_motion->heading <= 337.5)) {
-         snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NW");
-      }
-   } else if (strcmp("*LOG*", curr_element->text) == 0) {
-      static unsigned int last_log_generation = 0;  // Track the last log generation we rendered
-      unsigned int current_log_generation = get_log_generation();
+         break;
+      case TEXT_SOURCE_BATTERY_ALL_FAULTS: {
+         if (system_metrics.power_available) {
+            render_text[0] = '\0';
+            int has_faults = 0;
+            char delimiter[2] = { LINE_BREAK_DELIMITER, '\0' };
 
-      // Only redraw if log has changed
-      if (last_log_generation != current_log_generation) {
-         last_log_generation = current_log_generation;
+            if (system_metrics.critical_fault_count > 0) {
+               for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.critical_fault_count;
+                    i++) {
+                  if (strlen(system_metrics.critical_faults[i]) > 0) {
+                     strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, system_metrics.critical_faults[i],
+                             MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
+               }
+               has_faults = 1;
+            }
 
-         // Clear and recreate texture
-         if (curr_element->texture != NULL) {
-            SDL_DestroyTexture(curr_element->texture);
-            curr_element->texture = NULL;
+            if (system_metrics.warning_fault_count > 0) {
+               for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.warning_fault_count; i++) {
+                  if (strlen(system_metrics.warning_faults[i]) > 0) {
+                     strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, system_metrics.warning_faults[i],
+                             MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
+               }
+               has_faults = 1;
+            }
+
+            if (system_metrics.info_fault_count > 0) {
+               for (int i = 0; i < MAX_FAULT_COUNT && i < system_metrics.info_fault_count; i++) {
+                  if (strlen(system_metrics.info_faults[i]) > 0) {
+                     strncat(render_text, "  ", MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, system_metrics.info_faults[i],
+                             MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                     strncat(render_text, delimiter, MAX_TEXT_LENGTH - strlen(render_text) - 1);
+                  }
+               }
+               has_faults = 1;
+            }
+
+            if (!has_faults) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "No battery faults");
+            }
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "Battery not available");
          }
-         if (curr_element->surface != NULL) {
-            SDL_FreeSurface(curr_element->surface);
-            curr_element->surface = NULL;
+         break;
+      }
+      case TEXT_SOURCE_BATTERY_TIME:
+         if (system_metrics.power_available) {
+            if (system_metrics.charge_state == CHARGE_STATE_CHARGING) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "%s", "CHARGING");
+            } else if (system_metrics.charge_state == CHARGE_STATE_IDLE) {
+               snprintf(render_text, MAX_TEXT_LENGTH, "%s", "IDLE");
+            } else {
+               snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.time_remaining_fmt);
+            }
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--:--");
          }
+         break;
+      case TEXT_SOURCE_BATTERY_TIME_MIN:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f", system_metrics.time_remaining_min);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_VOLTAGE:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f V", system_metrics.battery_voltage);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-- V");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_CURRENT:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f A", system_metrics.battery_current);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-- A");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_POWER:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.2f W", system_metrics.battery_consumption);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-- W");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_TEMP:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.1f°C", system_metrics.battery_temperature);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--.-°C");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_CHEMISTRY:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", system_metrics.battery_chemistry);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "UNKN");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_CAPACITY:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.0f mAh",
+                     system_metrics.battery_capacity_mah);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "---- mAh");
+         }
+         break;
+      case TEXT_SOURCE_BATTERY_CELLS:
+         if (system_metrics.power_available) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%dS", system_metrics.battery_cells);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "--S");
+         }
+         break;
+      case TEXT_SOURCE_LATLON:
+         if (this_gps->latitudeDegrees != 0.0) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f, %0.02f", this_gps->latitudeDegrees,
+                     this_gps->longitudeDegrees);
+         } else {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%0.02f%s, %0.02f%s", this_gps->latitude,
+                     this_gps->lat, this_gps->longitude, this_gps->lon);
+         }
+         break;
+      case TEXT_SOURCE_PITCH:
+         snprintf(render_text, MAX_TEXT_LENGTH, "%d",
+                  (int)this_motion->pitch + (int)this_hds->pitch_offset);
+         break;
+      case TEXT_SOURCE_COMPASS:
+         if ((this_motion->heading > 337.5) || (this_motion->heading <= 22.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "N");
+         } else if ((this_motion->heading > 22.5) && (this_motion->heading <= 67.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NE");
+         } else if ((this_motion->heading > 67.5) && (this_motion->heading <= 112.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "E");
+         } else if ((this_motion->heading > 112.5) && (this_motion->heading <= 157.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SE");
+         } else if ((this_motion->heading > 157.5) && (this_motion->heading <= 202.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "S");
+         } else if ((this_motion->heading > 202.5) && (this_motion->heading <= 247.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "SW");
+         } else if ((this_motion->heading > 247.5) && (this_motion->heading <= 292.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "W");
+         } else if ((this_motion->heading > 292.5) && (this_motion->heading <= 337.5)) {
+            snprintf(render_text, MAX_TEXT_LENGTH, "%s", "NW");
+         }
+         break;
+      case TEXT_SOURCE_LOG: {
+         static unsigned int last_log_generation = 0;
+         unsigned int current_log_generation = get_log_generation();
 
-         // Use configurable dimensions with defaults if not specified
-         int log_width = curr_element->width > 0 ? curr_element->width : DEFAULT_LOG_WIDTH;
-         int log_height = curr_element->height > 0 ? curr_element->height : DEFAULT_LOG_HEIGHT;
+         if (last_log_generation != current_log_generation) {
+            last_log_generation = current_log_generation;
 
-         curr_element->surface = SDL_CreateRGBSurface(0, log_width, log_height, 32, 0, 0, 0, 0);
-         SDL_SetColorKey(curr_element->surface, SDL_TRUE,
-                         SDL_MapRGB(curr_element->surface->format, 0, 0, SDL_ALPHA_TRANSPARENT));
+            if (curr_element->texture != NULL) {
+               SDL_DestroyTexture(curr_element->texture);
+               curr_element->texture = NULL;
+            }
+            if (curr_element->surface != NULL) {
+               SDL_FreeSurface(curr_element->surface);
+               curr_element->surface = NULL;
+            }
 
-         // Get the index of the oldest entry
-         int start_idx = get_next_log_row();
+            int log_width = curr_element->width > 0 ? curr_element->width : DEFAULT_LOG_WIDTH;
+            int log_height = curr_element->height > 0 ? curr_element->height : DEFAULT_LOG_HEIGHT;
 
-         for (int ii = 0; ii < LOG_ROWS; ii++) {
-            int idx = (start_idx + ii) % LOG_ROWS;  // Wrap around when needed
+            curr_element->surface = SDL_CreateRGBSurface(0, log_width, log_height, 32, 0, 0, 0, 0);
+            SDL_SetColorKey(curr_element->surface, SDL_TRUE,
+                            SDL_MapRGB(curr_element->surface->format, 0, 0, SDL_ALPHA_TRANSPARENT));
 
-            if (strcmp("", raw_log[idx]) != 0) {
-               SDL_Surface *tmpsfc = NULL;
-               SDL_Rect tmprect;
+            int start_idx = get_next_log_row();
 
-               tmpsfc = TTF_RenderUTF8_Blended(curr_element->ttf_font, raw_log[idx],
-                                               curr_element->font_color);
-               if (tmpsfc != NULL) {
-                  tmprect.x = 0;
-                  tmprect.y = ii * curr_element->font_size;
-                  tmprect.w = tmpsfc->w;
-                  tmprect.h = tmpsfc->h;
+            for (int ii = 0; ii < LOG_ROWS; ii++) {
+               int idx = (start_idx + ii) % LOG_ROWS;
 
-                  SDL_BlitSurface(tmpsfc, NULL, curr_element->surface, &tmprect);
-                  SDL_FreeSurface(tmpsfc);
+               if (strcmp("", raw_log[idx]) != 0) {
+                  SDL_Surface *tmpsfc = NULL;
+                  SDL_Rect tmprect;
+
+                  tmpsfc = TTF_RenderUTF8_Blended(curr_element->ttf_font, raw_log[idx],
+                                                  curr_element->font_color);
+                  if (tmpsfc != NULL) {
+                     tmprect.x = 0;
+                     tmprect.y = ii * curr_element->font_size;
+                     tmprect.w = tmpsfc->w;
+                     tmprect.h = tmpsfc->h;
+
+                     SDL_BlitSurface(tmpsfc, NULL, curr_element->surface, &tmprect);
+                     SDL_FreeSurface(tmpsfc);
+                  }
+               }
+            }
+
+            curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
+            if (curr_element->texture == NULL) {
+               LOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
+            } else {
+               curr_element->dst_rect.w = curr_element->surface->w;
+               curr_element->dst_rect.h = curr_element->surface->h;
+
+               if (strcmp("left", curr_element->halign) == 0) {
+                  /* Left-aligned text - no change needed */
+               } else if (strcmp("center", curr_element->halign) == 0) {
+                  curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
+               } else if (strcmp("right", curr_element->halign) == 0) {
+                  curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
                }
             }
          }
 
-         /* Create texture from the prepared surface */
-         curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
-         if (curr_element->texture == NULL) {
-            LOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
-         } else {
-            /* Update destination rectangle dimensions to match the surface */
-            curr_element->dst_rect.w = curr_element->surface->w;
-            curr_element->dst_rect.h = curr_element->surface->h;
+         strcpy(render_text, " ");
+         break;
+      }
+      case TEXT_SOURCE_ALERT: {
+         char alert_text[MAX_TEXT_LENGTH] = "";
 
-            /* Position calculations need to happen here as in the standard path */
-            if (strcmp("left", curr_element->halign) == 0) {
-               /* Left-aligned text - no change needed */
-            } else if (strcmp("center", curr_element->halign) == 0) {
-               curr_element->dst_rect.x = curr_element->dest_x - (curr_element->dst_rect.w / 2);
-            } else if (strcmp("right", curr_element->halign) == 0) {
-               curr_element->dst_rect.x = curr_element->dest_x - curr_element->dst_rect.w;
+         for (int k = 0; k < ALERT_MAX; k++) {
+            if (active_alerts & alert_messages[k].flag) {
+               /* TODO: Bounds checking */
+               strcat(alert_text, alert_messages[k].message);
             }
          }
+
+         snprintf(render_text, MAX_TEXT_LENGTH, "%s", alert_text);
+         break;
       }
-
-      /* Set render_text to a space to prevent it from being recreated in the standard path */
-      strcpy(render_text, " ");
-   } else if (strcmp("*ALERT*", curr_element->text) == 0) {
-      char alert_text[MAX_TEXT_LENGTH] = "";
-
-      for (int k = 0; k < ALERT_MAX; k++) {
-         if (active_alerts & alert_messages[k].flag) {
-            /* TODO: Bounds checking */
-            strcat(alert_text, alert_messages[k].message);
-         }
-      }
-
-      snprintf(render_text, MAX_TEXT_LENGTH, "%s", alert_text);
-      alert_text[0] = '\0';
-   } else {
-      strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH - 1);
-      render_text[MAX_TEXT_LENGTH - 1] = '\0';
-   }
+      default:
+         /* TEXT_SOURCE_STATIC or unknown -- render text as-is */
+         strncpy(render_text, curr_element->text, MAX_TEXT_LENGTH - 1);
+         render_text[MAX_TEXT_LENGTH - 1] = '\0';
+         break;
+   } /* end switch */
 
    /* Prevent empty text */
    if (strlen(render_text) == 0) {
@@ -1709,7 +1737,6 @@ void validate_detection(void) {
 void render_detect_element(element *curr_element) {
    SDL_Rect detect_src_l, detect_src_r;
    SDL_Rect dst_rect_l, dst_rect_r;
-   SDL_Texture *detect_text_texture = NULL;
    int r_offset = 0, l_offset = 0;
    hud_display_settings *this_hds = get_hud_display_settings();
    SDL_Renderer *renderer = get_sdl_renderer();
@@ -1799,57 +1826,72 @@ void render_detect_element(element *curr_element) {
          SDL_RenderCopy(renderer, curr_element->texture, &detect_src_l, &dst_rect_l);
          SDL_RenderCopy(renderer, curr_element->texture, &detect_src_r, &dst_rect_r);
 
-         /* Render text labels for detections */
-         curr_element->surface = TTF_RenderUTF8_Blended(curr_element->ttf_font,
-                                                        this_detect_sorted[0][j].description,
-                                                        curr_element->font_color);
-         if (curr_element->surface != NULL) {
-            detect_text_texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
+         /* Render text labels for detections (cached to avoid per-frame TTF + GPU upload) */
+         {
+            static SDL_Texture *detect_label_cache[MAX_DETECT] = { 0 };
+            static char detect_label_text[MAX_DETECT][256] = { { 0 } };
+            static int detect_label_w[MAX_DETECT] = { 0 };
+            static int detect_label_h[MAX_DETECT] = { 0 };
 
-            detect_src_r.w = detect_src_l.w = curr_element->surface->w;
-            detect_src_r.h = detect_src_l.h = curr_element->surface->h;
-            detect_src_r.x = detect_src_l.x = 0;
-            detect_src_r.y = detect_src_l.y = 0;
-
-            /* Position text labels */
-            dst_rect_l.x = this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
-                           (curr_element->this_anim.current_frame->source_size_w / 2) -
-                           this_hds->cam_crop_x + curr_element->center_x_offset +
-                           curr_element->text_x_offset;
-
-            dst_rect_l.y = this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
-                           (curr_element->this_anim.current_frame->source_size_h / 2) +
-                           curr_element->center_y_offset + curr_element->text_y_offset;
-
-            dst_rect_r.x = this_hds->eye_output_width + this_detect_sorted[1][j].left +
-                           (this_detect_sorted[1][j].width / 2) -
-                           (curr_element->this_anim.current_frame->source_size_w / 2) -
-                           this_hds->cam_crop_x + curr_element->center_x_offset +
-                           curr_element->text_x_offset;
-
-            dst_rect_r.y = this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
-                           (curr_element->this_anim.current_frame->source_size_h / 2) +
-                           curr_element->center_y_offset + curr_element->text_y_offset;
-
-            dst_rect_l.w = dst_rect_r.w = curr_element->surface->w;
-            dst_rect_l.h = dst_rect_r.h = curr_element->surface->h;
-
-            /* Handle text wrapping at screen edges */
-            if ((dst_rect_l.x + dst_rect_l.w) > this_hds->eye_output_width) {
-               l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
-               detect_src_l.w -= l_offset;
-               dst_rect_l.w = detect_src_l.w;
+            /* Regenerate texture only when description changes */
+            if (strncmp(detect_label_text[j], this_detect_sorted[0][j].description, 255) != 0) {
+               if (detect_label_cache[j] != NULL) {
+                  SDL_DestroyTexture(detect_label_cache[j]);
+                  detect_label_cache[j] = NULL;
+               }
+               SDL_Surface *label_sfc = TTF_RenderUTF8_Blended(curr_element->ttf_font,
+                                                               this_detect_sorted[0][j].description,
+                                                               curr_element->font_color);
+               if (label_sfc != NULL) {
+                  detect_label_cache[j] = SDL_CreateTextureFromSurface(renderer, label_sfc);
+                  detect_label_w[j] = label_sfc->w;
+                  detect_label_h[j] = label_sfc->h;
+                  SDL_FreeSurface(label_sfc);
+               }
+               strncpy(detect_label_text[j], this_detect_sorted[0][j].description, 255);
+               detect_label_text[j][255] = '\0';
             }
 
-            /* Render detection text labels */
-            SDL_RenderCopy(renderer, detect_text_texture, &detect_src_l, &dst_rect_l);
-            SDL_RenderCopy(renderer, detect_text_texture, &detect_src_r, &dst_rect_r);
+            if (detect_label_cache[j] != NULL) {
+               detect_src_r.w = detect_src_l.w = detect_label_w[j];
+               detect_src_r.h = detect_src_l.h = detect_label_h[j];
+               detect_src_r.x = detect_src_l.x = 0;
+               detect_src_r.y = detect_src_l.y = 0;
 
-            /* Cleanup text textures */
-            SDL_DestroyTexture(detect_text_texture);
-            detect_text_texture = NULL;
-            SDL_FreeSurface(curr_element->surface);
-            curr_element->surface = NULL;
+               /* Position text labels */
+               dst_rect_l.x = this_detect_sorted[0][j].left + (this_detect_sorted[0][j].width / 2) -
+                              (curr_element->this_anim.current_frame->source_size_w / 2) -
+                              this_hds->cam_crop_x + curr_element->center_x_offset +
+                              curr_element->text_x_offset;
+
+               dst_rect_l.y = this_detect_sorted[0][j].top + (this_detect_sorted[0][j].height / 2) -
+                              (curr_element->this_anim.current_frame->source_size_h / 2) +
+                              curr_element->center_y_offset + curr_element->text_y_offset;
+
+               dst_rect_r.x = this_hds->eye_output_width + this_detect_sorted[1][j].left +
+                              (this_detect_sorted[1][j].width / 2) -
+                              (curr_element->this_anim.current_frame->source_size_w / 2) -
+                              this_hds->cam_crop_x + curr_element->center_x_offset +
+                              curr_element->text_x_offset;
+
+               dst_rect_r.y = this_detect_sorted[1][j].top + (this_detect_sorted[1][j].height / 2) -
+                              (curr_element->this_anim.current_frame->source_size_h / 2) +
+                              curr_element->center_y_offset + curr_element->text_y_offset;
+
+               dst_rect_l.w = dst_rect_r.w = detect_label_w[j];
+               dst_rect_l.h = dst_rect_r.h = detect_label_h[j];
+
+               /* Handle text wrapping at screen edges */
+               if ((dst_rect_l.x + dst_rect_l.w) > this_hds->eye_output_width) {
+                  l_offset = dst_rect_l.x + dst_rect_l.w - this_hds->eye_output_width;
+                  detect_src_l.w -= l_offset;
+                  dst_rect_l.w = detect_src_l.w;
+               }
+
+               /* Render detection text labels */
+               SDL_RenderCopy(renderer, detect_label_cache[j], &detect_src_l, &dst_rect_l);
+               SDL_RenderCopy(renderer, detect_label_cache[j], &detect_src_r, &dst_rect_r);
+            }
          }
       }
    }
@@ -2012,14 +2054,20 @@ void render_hud_elements(void) {
 
       /* In transition between HUDs */
       Uint32 elapsed = SDL_GetTicks() - hud_mgr->transition_start_time;
-      hud_mgr->transition_progress = (float)elapsed / hud_mgr->transition_duration_ms;
+      float t = (float)elapsed / hud_mgr->transition_duration_ms;
+      if (t > 1.0f) {
+         t = 1.0f;
+      }
+
+      /* Smoothstep easing: ease-in-out S-curve for polished transitions */
+      hud_mgr->transition_progress = t * t * (3.0f - 2.0f * t);
 
       /* Ensure minimum progress to avoid full opacity flash */
       if (hud_mgr->transition_progress < 0.02f) {
          hud_mgr->transition_progress = 0.02f; /* Start at 2% progress minimum */
       }
 
-      if (hud_mgr->transition_progress >= 1.0) {
+      if (t >= 1.0f) {
          /* Transition finished */
          hud_mgr->transition_from = NULL;
          hud_mgr->transition_progress = 0.0;

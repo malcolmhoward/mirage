@@ -40,6 +40,7 @@
 #include "config/config_manager.h"
 #include "config/defines.h"
 #include "config/secrets.h"
+#include "core/mirage.h"
 #include "util/logging.h"
 #include "util/utils.h"
 

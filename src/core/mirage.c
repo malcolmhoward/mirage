@@ -2393,6 +2393,18 @@ int main(int argc, char **argv) {
 #ifdef DEBUG_SHUTDOWN
    LOG_INFO("Done.");
 
+   LOG_INFO("Stopping MQTT before freeing elements.");
+#endif
+   /* Publish offline status and stop MQTT before freeing elements -- the
+    * mosquitto loop thread calls registerArmor() which walks the element
+    * list. If we free first, it dereferences freed memory. */
+   component_status_publish_offline(mosq);
+   component_status_shutdown();
+   mosquitto_disconnect(mosq);
+   mosquitto_loop_stop(mosq, false);
+#ifdef DEBUG_SHUTDOWN
+   LOG_INFO("Done.");
+
    LOG_INFO("Freeing elements.");
 #endif
    /* Free elements. */
@@ -2435,23 +2447,7 @@ int main(int argc, char **argv) {
 
    cleanup_hud_manager();
 
-   /* Graceful component status shutdown */
-   component_status_publish_offline(mosq);
-   component_status_shutdown();
-
-#ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting on MQTT disconnect.");
-#endif
-   mosquitto_disconnect(mosq);
-#ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
-
-   LOG_INFO("Waiting on MQTT loop stop.");
-#endif
-   mosquitto_loop_stop(mosq, false);
-#ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
-#endif
+   /* MQTT already stopped before free_elements above */
 
    if (!no_camera_mode) {
 #ifdef DEBUG_SHUTDOWN

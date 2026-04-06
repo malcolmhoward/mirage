@@ -38,6 +38,68 @@ static time_t config_last_modified = 0; /* When was the config file last checked
 
 extern alert_t active_alerts;
 
+/* Lookup table for resolving text source strings to enum IDs at parse time. */
+static const struct {
+   const char *key;
+   text_source_t id;
+} text_source_map[] = {
+   { "*FPS*", TEXT_SOURCE_FPS },
+   { "*DATETIME*", TEXT_SOURCE_DATETIME },
+   { "*GPSTIME*", TEXT_SOURCE_GPSTIME },
+   { "*SYSTIME*", TEXT_SOURCE_SYSTIME },
+   { "*AINAME*", TEXT_SOURCE_AINAME },
+   { "*CPU*", TEXT_SOURCE_CPU },
+   { "*SYSTEM_TEMP*", TEXT_SOURCE_SYSTEM_TEMP },
+   { "*SYSTEM_TEMP_F*", TEXT_SOURCE_SYSTEM_TEMP_F },
+   { "*MEM*", TEXT_SOURCE_MEM },
+   { "*HELMTEMP*", TEXT_SOURCE_HELMTEMP },
+   { "*HELMTEMP_F*", TEXT_SOURCE_HELMTEMP_F },
+   { "*HELMHUM*", TEXT_SOURCE_HELMHUM },
+   { "*AIRQUALITY*", TEXT_SOURCE_AIRQUALITY },
+   { "*AIRQUALITYDESC*", TEXT_SOURCE_AIRQUALITYDESC },
+   { "*TVOC*", TEXT_SOURCE_TVOC },
+   { "*ECO2*", TEXT_SOURCE_ECO2 },
+   { "*CO2*", TEXT_SOURCE_CO2 },
+   { "*CO2QUALITY*", TEXT_SOURCE_CO2QUALITY },
+   { "*CO2ECO2DIFF*", TEXT_SOURCE_CO2ECO2DIFF },
+   { "*CO2SOURCEANALYSIS*", TEXT_SOURCE_CO2SOURCEANALYSIS },
+   { "*HEATINDEX_C*", TEXT_SOURCE_HEATINDEX_C },
+   { "*DEWPOINT*", TEXT_SOURCE_DEWPOINT },
+   { "*FAN*", TEXT_SOURCE_FAN },
+   { "*BATTERY_LEVEL*", TEXT_SOURCE_BATTERY_LEVEL },
+   { "*BATTERY_STATUS*", TEXT_SOURCE_BATTERY_STATUS },
+   { "*BATTERY_STATUS_REASON*", TEXT_SOURCE_BATTERY_STATUS_REASON },
+   { "*BATTERY_CELLS_CONFIG*", TEXT_SOURCE_BATTERY_CELLS_CONFIG },
+   { "*BATTERY_FAULT_COUNT*", TEXT_SOURCE_BATTERY_FAULT_COUNT },
+   { "*BATTERY_CRITICAL_FAULTS*", TEXT_SOURCE_BATTERY_CRITICAL_FAULTS },
+   { "*BATTERY_WARNING_FAULTS*", TEXT_SOURCE_BATTERY_WARNING_FAULTS },
+   { "*BATTERY_INFO_FAULTS*", TEXT_SOURCE_BATTERY_INFO_FAULTS },
+   { "*BATTERY_ALL_FAULTS*", TEXT_SOURCE_BATTERY_ALL_FAULTS },
+   { "*BATTERY_TIME*", TEXT_SOURCE_BATTERY_TIME },
+   { "*BATTERY_TIME_MIN*", TEXT_SOURCE_BATTERY_TIME_MIN },
+   { "*BATTERY_VOLTAGE*", TEXT_SOURCE_BATTERY_VOLTAGE },
+   { "*BATTERY_CURRENT*", TEXT_SOURCE_BATTERY_CURRENT },
+   { "*BATTERY_POWER*", TEXT_SOURCE_BATTERY_POWER },
+   { "*BATTERY_TEMP*", TEXT_SOURCE_BATTERY_TEMP },
+   { "*BATTERY_CHEMISTRY*", TEXT_SOURCE_BATTERY_CHEMISTRY },
+   { "*BATTERY_CAPACITY*", TEXT_SOURCE_BATTERY_CAPACITY },
+   { "*BATTERY_CELLS*", TEXT_SOURCE_BATTERY_CELLS },
+   { "*LATLON*", TEXT_SOURCE_LATLON },
+   { "*PITCH*", TEXT_SOURCE_PITCH },
+   { "*COMPASS*", TEXT_SOURCE_COMPASS },
+   { "*LOG*", TEXT_SOURCE_LOG },
+   { "*ALERT*", TEXT_SOURCE_ALERT },
+};
+
+text_source_t resolve_text_source(const char *text) {
+   for (size_t i = 0; i < sizeof(text_source_map) / sizeof(text_source_map[0]); i++) {
+      if (strcmp(text, text_source_map[i].key) == 0) {
+         return text_source_map[i].id;
+      }
+   }
+   return TEXT_SOURCE_STATIC;
+}
+
 /**
  * @brief Validates that a JSON config file is parseable without applying changes.
  *
@@ -972,6 +1034,7 @@ int parse_json_config(const char *filename) {
                         if (tmpobj3 != NULL) {
                            strncpy(curr_element->text, json_object_get_string(tmpobj3),
                                    MAX_TEXT_LENGTH);
+                           curr_element->text_source_id = resolve_text_source(curr_element->text);
                         }
 
                         json_object_object_get_ex(tmpobj2, "font", &tmpobj3);

@@ -24,9 +24,11 @@
 
 #include <glib-2.0/glib.h>
 #include <gst/gst.h>
+#include <limits.h>
+#include <pthread.h>
+#include <stdio.h>
 
 #include "config/defines.h"
-#include "core/mirage.h"
 
 // Supported recoding and streaming states
 typedef enum {
