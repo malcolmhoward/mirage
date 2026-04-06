@@ -22,6 +22,7 @@
 #include "config/config_parser.h"
 
 #include <json-c/json.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <sys/stat.h>
 
@@ -36,7 +37,7 @@ const char *MAP_TYPE_STRINGS[] = { "hybrid", "satellite", "roadmap", "terrain" }
 
 static time_t config_last_modified = 0; /* When was the config file last checked? */
 
-extern alert_t active_alerts;
+extern _Atomic alert_t active_alerts;
 
 /* Lookup table for resolving text source strings to enum IDs at parse time. */
 static const struct {

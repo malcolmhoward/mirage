@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,15 +56,15 @@ extern od_data oddataL, oddataR;
 extern pthread_t od_L_thread, od_R_thread;
 
 // detection elements
-extern int detect_enabled;
+extern _Atomic int detect_enabled;
 extern detect this_detect[2][MAX_DETECT];
 extern detect this_detect_sorted[2][MAX_DETECT];
 
 // alert elements
-extern alert_t active_alerts;
+extern _Atomic alert_t active_alerts;
 extern const struct Alert alert_messages[];
 
-extern double averageFrameRate;
+extern _Atomic double averageFrameRate;
 
 #define LINE_BREAK_DELIMITER '\n'  // Using newline character as our delimiter
 #define LINE_SPACING_FACTOR 1.2f   // Multiplier for line spacing (1.2 is standard)

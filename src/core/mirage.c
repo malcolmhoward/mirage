@@ -42,6 +42,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,10 +143,10 @@ static int cam1_id = -1, cam2_id = -1;      /* Camera IDs for CSI or USB */
 
 static struct mosquitto *mosq = NULL; /* MQTT pointer */
 
-static int quit = 0;    /* Global to sync exiting of threads */
-int detect_enabled = 0; /* Is object detection enabled? */
+static _Atomic int quit = 0;    /* Global to sync exiting of threads */
+_Atomic int detect_enabled = 0; /* Is object detection enabled? */
 
-double averageFrameRate = 0.0;
+_Atomic double averageFrameRate = 0.0;
 static int curr_fps = 60;
 
 static unsigned int config_check_interval = 5000; /* Check every 5000ms (5s) */
@@ -188,11 +189,14 @@ gps this_gps = { .time = "00:00:00",
                  .altitude = 0.0,
                  .satellites = 0 };
 
-/* AI */
+/* AI - double-buffered for lock-free thread safety.
+ * Writer fills the inactive buffer, then atomically swaps the index.
+ * Readers always see a complete, consistent string. */
 #define AI_NAME_MAX_LENGTH 32
 #define AI_STATE_MAX_LENGTH 18 /* This is actually defined by the states in DAWN. */
-static char aiName[AI_NAME_MAX_LENGTH] = "";
-static char aiState[AI_STATE_MAX_LENGTH] = "";
+static char aiName[2][AI_NAME_MAX_LENGTH] = { "", "" };
+static char aiState[2][AI_STATE_MAX_LENGTH] = { "", "" };
+static _Atomic int ai_buf_idx = 0; /* Index of the buffer readers should use */
 
 /* Audio */
 extern thread_info audio_threads[NUM_AUDIO_THREADS];
@@ -206,7 +210,7 @@ const struct Alert alert_messages[ALERT_MAX] = { { ALERT_RECORDING, "ERROR: Reco
 static unsigned int config_alert_start_time = 0;
 static const unsigned int config_alert_duration = 5000;  // 5 seconds
 
-alert_t active_alerts = ALERT_NONE;
+_Atomic alert_t active_alerts = ALERT_NONE;
 
 element default_element = { .type = STATIC,
                             .enabled = 0,
@@ -469,23 +473,25 @@ void mqttViewingSnapshot(const char *filename);
  * Updates the AI assistant name and state.
  */
 void process_ai_state(const char *newAIName, const char *newAIState) {
-   snprintf(aiName, AI_NAME_MAX_LENGTH, "%s", newAIName);
-   snprintf(aiState, AI_STATE_MAX_LENGTH, "%s", newAIState);
+   int write_idx = 1 - atomic_load(&ai_buf_idx); /* Write to inactive buffer */
+   snprintf(aiName[write_idx], AI_NAME_MAX_LENGTH, "%s", newAIName);
+   snprintf(aiState[write_idx], AI_STATE_MAX_LENGTH, "%s", newAIState);
+   atomic_store(&ai_buf_idx, write_idx); /* Swap: readers now see new data */
 }
 
 /*
  * Returns the AI given name for sending back MQTT messages.
  */
 const char *get_ai_name(void) {
-   return (const char *)aiName;
-};
+   return (const char *)aiName[atomic_load(&ai_buf_idx)];
+}
 
 /*
  * Returns the current AI state that was last send by the AI.
  */
 const char *get_ai_state(void) {
-   return (const char *)aiState;
-};
+   return (const char *)aiState[atomic_load(&ai_buf_idx)];
+}
 
 /*
  * Returns the current FPS calculation from the main loop.

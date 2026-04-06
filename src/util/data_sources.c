@@ -21,6 +21,7 @@
 
 #include "util/data_sources.h"
 
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,7 @@
 #include "util/sim_data.h"
 
 /* External reference to FPS counter */
-extern double averageFrameRate;
+extern _Atomic double averageFrameRate;
 
 int is_dynamic_source(const char *source) {
    if (!source || strlen(source) < 3) {
