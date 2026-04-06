@@ -41,10 +41,24 @@
  * @param userp User pointer (struct curl_data*)
  * @return Number of bytes processed
  */
+#define MAX_DOWNLOAD_SIZE (16 * 1024 * 1024) /* 16 MB limit for map tiles */
+
 static size_t write_data(void *contents, size_t size, size_t nmemb, void *userp) {
-   size_t realsize = size * nmemb;
    struct curl_data *mem = (struct curl_data *)userp;
    char *ptr;
+
+   /* Overflow check on multiplication */
+   if (nmemb > 0 && size > SIZE_MAX / nmemb) {
+      LOG_ERROR("Download size overflow");
+      return 0;
+   }
+   size_t realsize = size * nmemb;
+
+   /* Bound total download size */
+   if (mem->size + realsize > MAX_DOWNLOAD_SIZE) {
+      LOG_ERROR("Download exceeds %d byte limit", MAX_DOWNLOAD_SIZE);
+      return 0;
+   }
 
    /* No need for mutex here as this is called by curl_easy_perform
     * which is already protected by mutex in the calling function */

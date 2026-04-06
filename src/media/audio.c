@@ -34,6 +34,7 @@
 #include "core/mirage.h"
 #include "media/audio.h"
 #include "util/logging.h"
+#include "util/string_utils.h"
 
 thread_info audio_threads[NUM_AUDIO_THREADS];
 mqd_t qd_clients[NUM_AUDIO_THREADS];
@@ -89,7 +90,7 @@ void *audio_thread(void *arg) {
          LOG_INFO("\tfilename: \"%s\"", in_data->filename);
          LOG_INFO("\tstart_percent: %f", in_data->start_percent);
 #endif
-         strcpy(this_thread->filename, in_data->filename);
+         safe_strncpy(this_thread->filename, in_data->filename, sizeof(this_thread->filename));
          this_thread->start_percent = in_data->start_percent;
       } else {
          //printf("Empty msg received.\n");
@@ -100,13 +101,14 @@ void *audio_thread(void *arg) {
       /* Process Input */
       input_file = fopen(this_thread->filename, "r");
       if (input_file == NULL) {
-         LOG_ERROR("[%d] Unable to open file: %s\n", this_thread->thread_id, this_thread->filename);
-         return NULL;
+         LOG_ERROR("[%d] Unable to open file: %s", this_thread->thread_id, this_thread->filename);
+         continue;
       }
 
       if (ov_open(input_file, &vf, NULL, 0) < 0) {
-         LOG_ERROR("[%d] Input does not appear to be an Ogg bitstream.\n", this_thread->thread_id);
-         return NULL;
+         LOG_ERROR("[%d] Input does not appear to be an Ogg bitstream.", this_thread->thread_id);
+         fclose(input_file);
+         continue;
       }
 
       /* Setup Output Device */
@@ -264,12 +266,10 @@ int process_audio_command(int command, char *file, double start_percent) {
    switch (command) {
       case SOUND_PLAY:
          /* Find open thread. */
-         while (current_thread < NUM_AUDIO_THREADS) {
-            if (audio_threads[++current_thread].stop == 1) {
+         for (current_thread = 0; current_thread < NUM_AUDIO_THREADS; current_thread++) {
+            if (audio_threads[current_thread].stop == 1) {
                break;
             }
-
-            current_thread++;
          }
 
          if (current_thread < NUM_AUDIO_THREADS) {

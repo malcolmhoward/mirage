@@ -230,9 +230,9 @@ int main(int argc, char **argv) {
 
          // update the status bar
          char str[256];
-         sprintf(str, "TensorRT %i.%i.%i | %s | Network %.0f FPS", NV_TENSORRT_MAJOR,
-                 NV_TENSORRT_MINOR, NV_TENSORRT_PATCH, precisionTypeToStr(net->GetPrecision()),
-                 net->GetNetworkFPS());
+         snprintf(str, sizeof(str), "TensorRT %i.%i.%i | %s | Network %.0f FPS", NV_TENSORRT_MAJOR,
+                  NV_TENSORRT_MINOR, NV_TENSORRT_PATCH, precisionTypeToStr(net->GetPrecision()),
+                  net->GetNetworkFPS());
          output->SetStatus(str);
 
          // check if the user quit

@@ -393,8 +393,8 @@ void *video_next_thread(void *arg) {
       return NULL;
    }
 
-   // Log pipeline string for debugging
-   printf("Creating pipeline: %s", descr);
+   // Log pipeline creation without exposing stream keys
+   LOG_INFO("Creating GStreamer pipeline (length=%zu)", strlen(descr));
 
    pipeline = gst_parse_launch(descr, &error);
    if (error != NULL) {

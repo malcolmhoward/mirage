@@ -140,7 +140,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    if (strcmp(msg->topic, "helmet") == 0) {
       // Forward the message to serial if connected
       LOG_INFO("Received 'helmet' message to forward.");
-      forward_helmet_command_to_serial((char *)msg->payload);
+      forward_helmet_command_to_serial(payload);
    }
 
    if (strcmp(msg->topic, "hud") != 0) {
@@ -150,7 +150,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
       registerArmor(msg->topic);
    }
 
-   parse_json_command((char *)msg->payload, (char *)msg->topic);
+   parse_json_command(payload, (char *)msg->topic);
 
    free(payload);
 }

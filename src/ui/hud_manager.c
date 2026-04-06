@@ -152,7 +152,7 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
 /* Switch to a different HUD with specified transition */
 void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
    if (this_screen == NULL) {
-      LOG_ERROR("Invalid HD passed for transition.");
+      LOG_ERROR("Invalid HUD passed for transition.");
       return;
    }
 

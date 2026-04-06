@@ -1974,7 +1974,7 @@ void render_element_with_scale(element *curr_element, float scale, float alpha) 
    curr_element->in_transition = 1;
    curr_element->transition_alpha = alpha;
 
-   int original_scale = curr_element->scale;
+   float original_scale = curr_element->scale;
    curr_element->scale = scale;
 
    /* Save original dimensions and position */

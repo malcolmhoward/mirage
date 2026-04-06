@@ -1064,7 +1064,7 @@ TTF_Font *get_local_font(char *font_name, int font_size) {
    }
 
    strncpy(this_font->font, font_name, MAX_FILENAME_LENGTH * 2 - 1);
-   font_list->font[MAX_FILENAME_LENGTH * 2 - 1] = '\0';
+   this_font->font[MAX_FILENAME_LENGTH * 2 - 1] = '\0';
    this_font->font_size = font_size;
    this_font->next = NULL;
 
@@ -1472,8 +1472,6 @@ int main(int argc, char **argv) {
    unsigned int ts_count = 0;
    struct timespec display_time = { .tv_sec = 0, .tv_nsec = 0 };
 #endif
-
-   init_video_out_data();
 
    local_font *this_font = NULL;
 

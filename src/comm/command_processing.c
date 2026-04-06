@@ -45,6 +45,7 @@
 #include "media/screenshot.h"
 #include "ui/hud_manager.h"
 #include "util/logging.h"
+#include "util/string_utils.h"
 
 #define SERVER_TIMEOUT 10
 
@@ -946,7 +947,7 @@ int parse_json_command(char *command_string, char *topic) {
 
 /* Append a command we received into raw log buffer. */
 void log_command(char *command) {
-   strncpy(raw_log[next_log_row], command, LOG_LINE_LENGTH);
+   safe_strncpy(raw_log[next_log_row], command, LOG_LINE_LENGTH);
    next_log_row++;
    if (next_log_row >= LOG_ROWS) {
       next_log_row = 0;
