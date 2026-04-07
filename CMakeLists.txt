@@ -69,6 +69,7 @@ set(SOURCE_FILES
     # config
     src/config/config_parser.c
     src/config/config_manager.c
+    src/config/config_secrets.c
 
     # util
     src/util/curl_download.c

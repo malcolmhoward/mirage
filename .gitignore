@@ -2,6 +2,7 @@
 build*/
 
 # Secrets and API keys
+secrets.json
 secrets.h
 googleapi.key
 

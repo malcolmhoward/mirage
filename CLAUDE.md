@@ -98,11 +98,12 @@ The system uses multiple threads for concurrent processing:
 - `mirage.c/h` - Main entry point, thread coordination, SDL renderer
 - `hud_manager.c/h` - HUD state management and element lifecycle
 - `element_renderer.c/h` - Renders individual HUD elements (static, animated, text, special)
-- `gauge_renderer.c/h` - Dynamic gauge drawing (car-like gauges)
-- `config_parser.c/h` - JSON configuration file parsing, element/animation structures
-- `config_manager.c/h` - Runtime configuration management with auto-refresh (5s polling)
+- `gauge_renderer.c/h` - Dynamic gauge drawing with frame-rate independent smoothing
+- `config_parser.c/h` - JSON configuration file parsing, element/animation structures, text source resolution
+- `config_manager.c/h` - Runtime configuration management with auto-refresh (5s polling), MQTT settings
+- `config_secrets.c/h` - Runtime secrets loader (API keys, MQTT credentials from `secrets.json`)
 - `mosquitto_comms.c/h` - MQTT communication with other OASIS components
-- `recording.c/h` - GStreamer-based video recording and streaming
+- `recording.c/h` - GStreamer-based video recording and streaming, PulseAudio device validation
 - `screenshot.c/h` - Screenshot and snapshot capture (async, for AI vision)
 - `audio.c/h` - Audio playback via POSIX message queue (8 concurrent threads)
 - `command_processing.c/h` - USB/Serial input handling
@@ -111,6 +112,7 @@ The system uses multiple threads for concurrent processing:
 - `component_status.c/h` - OCP component keepalive protocol
 - `system_metrics.c/h` - CPU/memory/temperature monitoring
 - `logging.c/h` - Centralized logging with file/line/function tracking
+- `string_utils.h` - Safe string utilities (`safe_strncpy`, ported from DAWN common lib)
 
 ### Communication
 
@@ -128,11 +130,31 @@ Controlled via `PLATFORM` CMake variable (AUTO, JETSON, RPI):
 
 ### Configuration
 
-- `config.json` - Runtime configuration (camera settings, HUD elements, fonts, paths). Hot-reloads every 5 seconds.
+- `config.json` - Runtime configuration (camera settings, HUD elements, fonts, paths, MQTT). Hot-reloads every 5 seconds.
 - `config-720p.json` - Alternative 720p resolution config
+- `secrets.json` - Runtime API keys and MQTT credentials (gitignored, loaded at startup). Copy `secrets.json.example` to get started.
 - `defines.h` - Compile-time settings (camera resolution, display dimensions, GStreamer pipelines, feature flags)
-- `secrets.h` - API keys and credentials (gitignored)
 - `version.h` - Version number (manually maintained)
+
+**MQTT Configuration** (`config.json` "mqtt" section + `secrets.json`):
+```json
+// config.json
+"mqtt": {
+   "host": "127.0.0.1",
+   "port": 1883,
+   "tls": false,
+   "tls_ca_cert": "",
+   "tls_cert_path": "",
+   "tls_key_path": ""
+}
+
+// secrets.json
+{
+   "mqtt_username": "",
+   "mqtt_password": ""
+}
+```
+Mirrors DAWN's pattern: connection settings in config, credentials in secrets. Auth and TLS are optional -- if `mqtt_username` is empty, a warning is logged. If `tls` is false, connects without encryption. All fields have safe defaults.
 
 ## Coding Standards
 
@@ -188,6 +210,16 @@ When working with shared resources:
 - **MQTT Callbacks**: Run in Mosquitto's loop thread, route via topic matching
 - **Audio Playback**: Isolated via POSIX message queues (8 threads, no shared state)
 - **Object Detection**: Separate threads per eye, read-only access to frames
+- **Atomic flags**: `quit`, `detect_enabled`, `active_alerts`, `averageFrameRate` are `_Atomic` for safe cross-thread access
+- **AI state**: `aiName`/`aiState` use double-buffering with atomic index swap (lock-free, no torn reads)
+- **Video buffers**: `v_mutex` protects frame buffer rotation; triple-buffered with pre-allocated pool
+- **Window size**: Protected by `windowSizeMutex`
+- **Shutdown order**: MQTT loop is stopped before element list is freed (prevents use-after-free in `registerArmor`)
+
+**Not yet synchronized** (benign in practice):
+- Sensor structs (`motion`, `enviro`, `gps`, `system_metrics`) -- written by MQTT thread, read by render thread. Torn reads show momentarily wrong sensor values, not crashes.
+- Detection arrays -- object detection is disabled. Needs double-buffered results when re-enabled.
+- Log buffer -- generation counter prevents stale renders.
 
 ### File Size Monitoring
 
@@ -263,10 +295,10 @@ Change camera resolution by uncommenting ONE option in `defines.h`:
 ## Important Files to Know
 
 **Configuration:**
-- `config.json`: Runtime HUD configuration (64KB, hot-reloads)
+- `config.json`: Runtime HUD configuration (64KB, hot-reloads), includes MQTT settings
 - `config-720p.json`: Alternative 720p config
+- `secrets.json`: API keys and MQTT credentials (gitignored, copy from `secrets.json.example`)
 - `defines.h`: Compile-time settings (resolution, encoding, features)
-- `secrets.h`: API keys (gitignored)
 - `version.h`: App version (manually maintained)
 
 **Code Formatting:**
@@ -290,11 +322,30 @@ Change camera resolution by uncommenting ONE option in `defines.h`:
 ## Known Issues and TODOs
 
 1. Object detection deprecated (Jetson Inference integration is outdated)
-2. `mirage.c` at 2,546 lines -- needs modular extraction
-3. `element_renderer.c` at 2,212 lines -- should split by renderer type
+2. `mirage.c` at ~2,600 lines -- needs modular extraction (extern coupling, god module)
+3. `element_renderer.c` at ~2,200 lines -- should split by renderer type
 4. No unit tests yet
-5. Flat file structure (all sources in root) -- reorganization planned
-6. `mirage.h` <-> `recording.h` circular dependency (works but should use forward declarations)
+5. Element struct (~250 lines) carries all fields for all types -- consider union/subtype pattern
+6. Sensor structs (`motion`, `enviro`, `gps`, `system_metrics`) not synchronized across threads (benign but technically UB)
+7. TCP command socket (`-H` flag) has no authentication -- redesign with WebSocket+auth when needed
+8. Audio subsystem needs redesign (PCM device open/close per playback, Ogg-only)
+
+**Recently Completed:**
+- Source tree reorganized from flat root into `src/` and `include/` with 8 categories
+- Circular `recording.h` <-> `mirage.h` dependency resolved
+- GitHub Actions CI (format-check + build)
+- Thread safety: atomic flags, double-buffered AI state, correct shutdown order
+- Text element rendering: O(1) enum dispatch replacing 47+ strcmp chain
+- Detection label texture caching (was creating/destroying per frame)
+- Secrets migrated from compile-time `secrets.h` to runtime `secrets.json`
+- MQTT auth (username/password) and TLS support mirroring DAWN
+- MQTT broker host/port configurable in `config.json`
+- PulseAudio device validation before recording (prevents silent 0-byte files)
+- Pre-allocated frame buffers for recording (eliminates per-frame malloc)
+- Frame-rate independent gauge smoothing with configurable factor
+- Smoothstep easing on HUD transitions
+- `safe_strncpy` utility (ported from DAWN common lib)
+- Numerous buffer overflow, null-termination, and shutdown crash fixes
 
 ## Development Lifecycle
 

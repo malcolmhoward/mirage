@@ -90,6 +90,8 @@ MIRAGE communicates with other OASIS components over MQTT:
 - **JSON-Driven** — All HUD layout, elements, fonts, and display settings in `config.json`.
 - **Hot Reload** — Configuration file monitored every 5 seconds; changes applied without restart.
 - **Per-Resolution Configs** — Separate config files for different display resolutions (e.g., `config-720p.json`).
+- **Runtime Secrets** — API keys and MQTT credentials loaded from `secrets.json` (gitignored, copy from `secrets.json.example`).
+- **MQTT Security** — Optional username/password authentication and TLS encryption, configurable without rebuilding.
 
 ### Audio
 
@@ -118,6 +120,11 @@ See **[GETTING_STARTED.md](GETTING_STARTED.md)** for full installation, build, a
 ### Quick Build (if dependencies are already installed)
 
 ```bash
+# Using CMake presets (recommended)
+cmake --preset debug
+make -C build-debug -j$(nproc)
+
+# Or traditional build
 mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
@@ -203,8 +210,9 @@ sequenceDiagram
 
 | Document | Description |
 |----------|-------------|
-| **[GETTING_STARTED.md](GETTING_STARTED.md)** | Build instructions and first-run setup |
+| **[GETTING_STARTED.md](GETTING_STARTED.md)** | Build instructions, first-run setup, MQTT and secrets configuration |
 | **[CODING_STYLE_GUIDE.md](CODING_STYLE_GUIDE.md)** | Code formatting and development standards |
+| **[secrets.json.example](secrets.json.example)** | Template for API keys and MQTT credentials |
 
 ---
 

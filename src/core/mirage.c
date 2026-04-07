@@ -38,6 +38,7 @@
 #define _GNU_SOURCE
 /* Std C */
 #include <ctype.h>
+#include <errno.h>
 #include <getopt.h>
 #include <math.h>
 #include <pthread.h>
@@ -106,8 +107,8 @@
 #include "comm/mosquitto_comms.h"
 #include "config/config_manager.h"
 #include "config/config_parser.h"
+#include "config/config_secrets.h"
 #include "config/defines.h" /* Out of order due to dependencies */
-#include "config/secrets.h"
 #include "config/version.h"
 #include "core/mirage.h"
 #include "hardware/armor.h"
@@ -1820,6 +1821,10 @@ int main(int argc, char **argv) {
    }
 
    LOG_INFO("Initial configuration loaded successfully");
+
+   /* Load secrets (API keys) from secrets.json -- non-fatal if missing */
+   secrets_load("secrets.json");
+
    last_file_check = currTime;
 
 #ifndef ORIGINAL_RATIO
@@ -1879,15 +1884,67 @@ int main(int argc, char **argv) {
    mosquitto_subscribe_callback_set(mosq, on_subscribe);
    mosquitto_message_callback_set(mosq, on_message);
 
+   /* Set reconnect parameters (min delay, max delay, exponential backoff) */
+   mosquitto_reconnect_delay_set(mosq, 2, 30, true);
+
+   /* Set MQTT authentication if credentials are configured */
+   if (get_mqtt_username()[0] != '\0') {
+      rc = mosquitto_username_pw_set(mosq, get_mqtt_username(),
+                                     get_mqtt_password()[0] != '\0' ? get_mqtt_password() : NULL);
+      if (rc != MOSQ_ERR_SUCCESS) {
+         LOG_ERROR("Failed to set MQTT credentials: %s", mosquitto_strerror(rc));
+         LOG_ERROR("  Hint: Check mqtt_username/mqtt_password in secrets.json");
+      } else {
+         LOG_INFO("MQTT authentication configured for user: %s", get_mqtt_username());
+      }
+   } else {
+      LOG_WARNING("========================================");
+      LOG_WARNING("MQTT: No authentication configured.");
+      LOG_WARNING("Configure mqtt_username/mqtt_password in secrets.json");
+      LOG_WARNING("========================================");
+   }
+
+   /* Configure MQTT TLS if enabled */
+   if (get_mqtt_tls()) {
+      const char *ca = get_mqtt_tls_ca_cert()[0] ? get_mqtt_tls_ca_cert() : NULL;
+      const char *cert = get_mqtt_tls_cert_path()[0] ? get_mqtt_tls_cert_path() : NULL;
+      const char *key = get_mqtt_tls_key_path()[0] ? get_mqtt_tls_key_path() : NULL;
+
+      /* Validate cert files are readable before passing to mosquitto */
+      const char *paths[] = { ca, cert, key };
+      const char *labels[] = { "CA cert", "client cert", "client key" };
+      int tls_ok = 1;
+      for (int i = 0; i < 3; i++) {
+         if (paths[i] && access(paths[i], R_OK) != 0) {
+            LOG_ERROR("MQTT TLS %s not readable: %s (%s)", labels[i], paths[i], strerror(errno));
+            tls_ok = 0;
+         }
+      }
+
+      if (!tls_ok) {
+         LOG_ERROR("MQTT TLS certificate files not accessible -- connecting without TLS");
+      } else {
+         rc = mosquitto_tls_set(mosq, ca, NULL, cert, key, NULL);
+         if (rc != MOSQ_ERR_SUCCESS) {
+            LOG_ERROR("MQTT TLS setup failed: %s -- connecting without TLS",
+                      mosquitto_strerror(rc));
+         } else {
+            LOG_INFO("MQTT TLS enabled (CA: %s)", ca ? ca : "system default");
+         }
+      }
+   }
+
    /* Set Last Will and Testament for automatic offline notification */
    component_status_set_lwt(mosq);
 
-   /* Connect to local MQTT server. */
-   //rc = mosquitto_connect(mosq, "192.168.10.1", 1883, 60);
-   rc = mosquitto_connect(mosq, "127.0.0.1", 1883, 60);
+   /* Connect to MQTT server (host/port from config.json, defaults to 127.0.0.1:1883) */
+   LOG_INFO("Connecting to MQTT broker at %s:%d", get_mqtt_host(), get_mqtt_port());
+   rc = mosquitto_connect(mosq, get_mqtt_host(), get_mqtt_port(), 60);
    if (rc != MOSQ_ERR_SUCCESS) {
       mosquitto_destroy(mosq);
       LOG_ERROR("Error: %s", mosquitto_strerror(rc));
+      LOG_ERROR("  Hint: Check Mosquitto is running: sudo systemctl status mosquitto");
+      LOG_ERROR("  Hint: Verify mqtt host/port in config.json (default: 127.0.0.1:1883)");
       return EXIT_FAILURE;
    }
 

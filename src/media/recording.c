@@ -39,8 +39,8 @@
 #include <unistd.h>
 
 #include "config/config_manager.h"
+#include "config/config_secrets.h"
 #include "config/defines.h"
-#include "config/secrets.h"
 #include "core/mirage.h"
 #include "util/logging.h"
 #include "util/utils.h"
@@ -494,7 +494,7 @@ void *video_next_thread(void *arg) {
       LOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE, this_vod.filename, YOUTUBE_STREAM_KEY);
+                 RECORD_PULSE_AUDIO_DEVICE, this_vod.filename, get_youtube_stream_key());
    } else if (this_vod.output == RECORD) {
       LOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, window_width, window_height,
@@ -503,7 +503,7 @@ void *video_next_thread(void *arg) {
    } else if (this_vod.output == STREAM) {
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE, YOUTUBE_STREAM_KEY);
+                 RECORD_PULSE_AUDIO_DEVICE, get_youtube_stream_key());
    } else {
       LOG_ERROR("Invalid destination passed.");
       this_vod.output = DISABLED;

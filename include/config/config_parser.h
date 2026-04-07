@@ -288,6 +288,8 @@ typedef struct _element {
    int gauge_thickness;                      /* Line thickness for ring gauges */
    int gauge_ticks;                          /* Number of tick marks (arc gauges) */
    int gauge_smooth;                         /* Enable smooth interpolation */
+   float gauge_smooth_factor;                /* Smoothing speed (0.0-1.0, default 0.2) */
+   unsigned int gauge_last_update_ms;        /* Last frame time for delta-time smoothing */
    int gauge_glow;                           /* Enable glow effect */
    float gauge_display_value;                /* Smoothed value for rendering */
    int gauge_show_value;                     /* Show numeric value label (0/1) */

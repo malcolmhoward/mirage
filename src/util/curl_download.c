@@ -112,7 +112,7 @@ void *image_download_thread(void *arg) {
 
       /* Check if it's time for an update */
       if (should_refresh) {
-         LOG_INFO("image_download_thread should_refresh received.");
+         //LOG_INFO("image_download_thread should_refresh received.");
 
          /* Lock the mutex before modifying shared data */
          pthread_mutex_lock(&this_data->mutex);

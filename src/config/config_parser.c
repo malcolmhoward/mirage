@@ -726,6 +726,33 @@ int parse_json_config(const char *filename) {
             }
          }
 
+         /* Parse MQTT section */
+         if (strcmp(json_object_iter_peek_name(&it), "mqtt") == 0) {
+            struct json_object *mqtt_obj = json_object_iter_peek_value(&it);
+            struct json_object *mqtt_val = NULL;
+
+            if (json_object_object_get_ex(mqtt_obj, "host", &mqtt_val) && mqtt_val != NULL) {
+               set_mqtt_host(json_object_get_string(mqtt_val));
+            }
+            if (json_object_object_get_ex(mqtt_obj, "port", &mqtt_val) && mqtt_val != NULL) {
+               set_mqtt_port(json_object_get_int(mqtt_val));
+            }
+            if (json_object_object_get_ex(mqtt_obj, "tls", &mqtt_val) && mqtt_val != NULL) {
+               set_mqtt_tls(json_object_get_boolean(mqtt_val));
+            }
+            if (json_object_object_get_ex(mqtt_obj, "tls_ca_cert", &mqtt_val) && mqtt_val != NULL) {
+               set_mqtt_tls_ca_cert(json_object_get_string(mqtt_val));
+            }
+            if (json_object_object_get_ex(mqtt_obj, "tls_cert_path", &mqtt_val) &&
+                mqtt_val != NULL) {
+               set_mqtt_tls_cert_path(json_object_get_string(mqtt_val));
+            }
+            if (json_object_object_get_ex(mqtt_obj, "tls_key_path", &mqtt_val) &&
+                mqtt_val != NULL) {
+               set_mqtt_tls_key_path(json_object_get_string(mqtt_val));
+            }
+         }
+
          /* Parse HUDs section */
          if (strcmp(json_object_iter_peek_name(&it), "HUDs") == 0) {
             tmpobj = json_object_iter_peek_value(&it);
@@ -1396,10 +1423,16 @@ int parse_json_config(const char *filename) {
                               curr_element->gauge_ticks = json_object_get_int(tmpobj3);
                            }
 
-                           /* Parse smooth interpolation flag */
+                           /* Parse smooth interpolation flag and factor */
                            json_object_object_get_ex(tmpobj2, "gauge_smooth", &tmpobj3);
                            if (tmpobj3 != NULL) {
                               curr_element->gauge_smooth = json_object_get_int(tmpobj3);
+                           }
+                           curr_element->gauge_smooth_factor = 0.2f; /* Default */
+                           json_object_object_get_ex(tmpobj2, "gauge_smooth_factor", &tmpobj3);
+                           if (tmpobj3 != NULL) {
+                              curr_element->gauge_smooth_factor = (float)json_object_get_double(
+                                  tmpobj3);
                            }
 
                            /* Parse glow effect flag */

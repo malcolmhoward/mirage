@@ -27,6 +27,7 @@
 
 #include "config/defines.h"
 #include "util/logging.h"
+#include "util/string_utils.h"
 
 /* Default image and font paths. These are configurable in the config file. */
 static char IMAGE_PATH[MAX_FILENAME_LENGTH] = IMAGE_PATH_DEFAULT;
@@ -191,4 +192,60 @@ int get_snapshot_overlay(void) {
 
 int get_vision_inline_data(void) {
    return this_hds.vision_inline_data;
+}
+
+/* MQTT connection settings */
+static char mqtt_host[64] = "127.0.0.1";
+static int mqtt_port = 1883;
+static int mqtt_tls = 0;
+static char mqtt_tls_ca_cert[1024] = "";
+static char mqtt_tls_cert_path[1024] = "";
+static char mqtt_tls_key_path[1024] = "";
+
+const char *get_mqtt_host(void) {
+   return mqtt_host;
+}
+
+int get_mqtt_port(void) {
+   return mqtt_port;
+}
+
+void set_mqtt_host(const char *host) {
+   safe_strncpy(mqtt_host, host, sizeof(mqtt_host));
+}
+
+void set_mqtt_port(int port) {
+   mqtt_port = port;
+}
+
+int get_mqtt_tls(void) {
+   return mqtt_tls;
+}
+
+void set_mqtt_tls(int enabled) {
+   mqtt_tls = enabled;
+}
+
+const char *get_mqtt_tls_ca_cert(void) {
+   return mqtt_tls_ca_cert;
+}
+
+void set_mqtt_tls_ca_cert(const char *path) {
+   safe_strncpy(mqtt_tls_ca_cert, path, sizeof(mqtt_tls_ca_cert));
+}
+
+const char *get_mqtt_tls_cert_path(void) {
+   return mqtt_tls_cert_path;
+}
+
+void set_mqtt_tls_cert_path(const char *path) {
+   safe_strncpy(mqtt_tls_cert_path, path, sizeof(mqtt_tls_cert_path));
+}
+
+const char *get_mqtt_tls_key_path(void) {
+   return mqtt_tls_key_path;
+}
+
+void set_mqtt_tls_key_path(const char *path) {
+   safe_strncpy(mqtt_tls_key_path, path, sizeof(mqtt_tls_key_path));
 }

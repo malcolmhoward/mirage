@@ -226,33 +226,56 @@ Rebuild after changing.
 
 MIRAGE requires an MQTT broker for communication with DAWN and other OASIS components.
 
-### Start Mosquitto
-
 ```bash
-# Ensure mosquitto is running
 sudo systemctl enable mosquitto
 sudo systemctl start mosquitto
 ```
 
-The default configuration connects to `127.0.0.1:1883` (localhost, no authentication). If your MQTT broker is on a different host, edit the `mosquitto_connect` call in `mirage.c`.
+For the complete MQTT setup guide covering broker installation, authentication, TLS certificates, and configuration for all OASIS components, see the **[MQTT Setup Guide](https://github.com/The-OASIS-Project/dawn/blob/main/docs/MQTT_SETUP.md)** in the DAWN repository.
+
+Quick reference for MIRAGE-specific config:
+
+**`config.json`:**
+```json
+"mqtt": {
+   "host": "127.0.0.1",
+   "port": 8883,
+   "tls": true,
+   "tls_ca_cert": "/etc/mosquitto/certs/ca.crt"
+}
+```
+
+**`secrets.json`:**
+```json
+{
+   "mqtt_username": "oasis",
+   "mqtt_password": "your-password"
+}
+```
+
+The defaults connect to `127.0.0.1:1883` with no authentication. If no credentials are configured, MIRAGE logs a warning but connects normally.
 
 ---
 
 ## 9. Configure Secrets
 
-MIRAGE uses API keys for Google Maps (map element) and YouTube (streaming). Copy the template and fill in your keys:
+MIRAGE uses API keys for Google Maps (map element) and YouTube (streaming), loaded at runtime from `secrets.json`. Copy the template and fill in your keys:
 
 ```bash
-cp secrets.h.sav secrets.h
+cp secrets.json.example secrets.json
 ```
 
-Edit `secrets.h`:
-```c
-#define YOUTUBE_STREAM_KEY "your-youtube-stream-key"
-#define GOOGLE_API_KEY "your-google-maps-api-key"
+Edit `secrets.json`:
+```json
+{
+   "youtube_stream_key": "your-youtube-stream-key",
+   "google_api_key": "your-google-maps-api-key",
+   "mqtt_username": "",
+   "mqtt_password": ""
+}
 ```
 
-> **Important**: `secrets.h` should be in `.gitignore` and never committed to version control.
+> **Important**: `secrets.json` is in `.gitignore` and must never be committed to version control.
 
 The Google API key needs the **Maps Static API** enabled in the Google Cloud Console. Restrict the key to that API and your device's IP address.
 

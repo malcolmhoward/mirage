@@ -37,8 +37,8 @@
 #include "comm/command_processing.h"
 #include "config/config_manager.h"
 #include "config/config_parser.h"
+#include "config/config_secrets.h"
 #include "config/defines.h"
-#include "config/secrets.h"
 #include "core/mirage.h"
 #include "hardware/armor.h"
 #include "hardware/devices.h"
@@ -940,7 +940,7 @@ void render_map_element(element *curr_element) {
 
    snprintf(map_data.url, 512, GOOGLE_MAPS_API, lat, lon, curr_element->width, curr_element->height,
             MAP_TYPE_STRINGS[curr_element->map_type], curr_element->map_zoom, lat, lon,
-            GOOGLE_API_KEY);
+            get_google_api_key());
 
    if (map_thread_started == 0) {
       map_data.update_interval_sec = curr_element->update_interval_sec > 0

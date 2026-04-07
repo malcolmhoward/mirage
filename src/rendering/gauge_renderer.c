@@ -37,17 +37,26 @@
 #include "util/logging.h"
 
 /**
- * @brief Smooth interpolation for gauge values
+ * @brief Frame-rate independent smooth interpolation for gauge values.
+ *
+ * Uses exponential decay so the smoothing rate is consistent regardless
+ * of frame rate. At 60fps or 30fps, the gauge reaches the target at
+ * the same wall-clock speed.
  *
  * @param current Current displayed value
  * @param target Target value to reach
- * @param smooth_factor Interpolation speed (0.0-1.0, higher = faster)
+ * @param base_factor Interpolation speed at 60fps (0.0-1.0, higher = faster)
+ * @param dt_sec Delta time since last frame in seconds
  * @return Interpolated value
  */
-static float smooth_gauge_value(float current, float target, float smooth_factor) {
-   /* Simple lerp: current + (target - current) * factor */
-   /* Higher factor = faster response (0.3 = smooth, 0.1 = very smooth) */
-   return current + (target - current) * smooth_factor;
+static float smooth_gauge_value(float current, float target, float base_factor, float dt_sec) {
+   /* Clamp dt to avoid jumps on long pauses (e.g., window minimized) */
+   if (dt_sec > 0.25f) {
+      dt_sec = 0.25f;
+   }
+   /* Frame-rate independent: factor = 1 - (1 - base)^(dt * 60) */
+   float factor = 1.0f - powf(1.0f - base_factor, dt_sec * 60.0f);
+   return current + (target - current) * factor;
 }
 
 /**
@@ -509,15 +518,20 @@ static void render_linear_gauge(element *curr_element) {
    /* Smooth value interpolation */
    float target_value = resolve_data_source_float(curr_element->gauge_value_source);
 
-   /* Apply smooth interpolation if enabled */
+   /* Apply frame-rate independent smooth interpolation if enabled */
    if (curr_element->gauge_smooth) {
+      Uint32 now = SDL_GetTicks();
+      float dt = (now - curr_element->gauge_last_update_ms) / 1000.0f;
+      curr_element->gauge_last_update_ms = now;
+
       /* First frame: initialize display value */
       if (curr_element->gauge_display_value == 0.0f && target_value != 0.0f) {
          curr_element->gauge_display_value = target_value;
       } else {
-         /* Smooth interpolation (0.2 = nice smooth speed) */
          curr_element->gauge_display_value = smooth_gauge_value(curr_element->gauge_display_value,
-                                                                target_value, 0.2f);
+                                                                target_value,
+                                                                curr_element->gauge_smooth_factor,
+                                                                dt);
       }
       curr_element->gauge_current_value = curr_element->gauge_display_value;
    } else {
@@ -632,15 +646,20 @@ static void render_ring_gauge(element *curr_element) {
    /* Smooth value interpolation */
    float target_value = resolve_data_source_float(curr_element->gauge_value_source);
 
-   /* Apply smooth interpolation if enabled */
+   /* Apply frame-rate independent smooth interpolation if enabled */
    if (curr_element->gauge_smooth) {
+      Uint32 now = SDL_GetTicks();
+      float dt = (now - curr_element->gauge_last_update_ms) / 1000.0f;
+      curr_element->gauge_last_update_ms = now;
+
       /* First frame: initialize display value */
       if (curr_element->gauge_display_value == 0.0f && target_value != 0.0f) {
          curr_element->gauge_display_value = target_value;
       } else {
-         /* Smooth interpolation (0.2 = nice smooth speed) */
          curr_element->gauge_display_value = smooth_gauge_value(curr_element->gauge_display_value,
-                                                                target_value, 0.2f);
+                                                                target_value,
+                                                                curr_element->gauge_smooth_factor,
+                                                                dt);
       }
       curr_element->gauge_current_value = curr_element->gauge_display_value;
    } else {
@@ -761,15 +780,20 @@ static void render_arc_gauge(element *curr_element) {
    /* Smooth value interpolation */
    float target_value = resolve_data_source_float(curr_element->gauge_value_source);
 
-   /* Apply smooth interpolation if enabled */
+   /* Apply frame-rate independent smooth interpolation if enabled */
    if (curr_element->gauge_smooth) {
+      Uint32 now = SDL_GetTicks();
+      float dt = (now - curr_element->gauge_last_update_ms) / 1000.0f;
+      curr_element->gauge_last_update_ms = now;
+
       /* First frame: initialize display value */
       if (curr_element->gauge_display_value == 0.0f && target_value != 0.0f) {
          curr_element->gauge_display_value = target_value;
       } else {
-         /* Smooth interpolation (0.2 = nice smooth speed) */
          curr_element->gauge_display_value = smooth_gauge_value(curr_element->gauge_display_value,
-                                                                target_value, 0.2f);
+                                                                target_value,
+                                                                curr_element->gauge_smooth_factor,
+                                                                dt);
       }
       curr_element->gauge_current_value = curr_element->gauge_display_value;
    } else {

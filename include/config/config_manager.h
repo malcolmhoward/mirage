@@ -83,4 +83,20 @@ int set_inv_compass(int inv);
 int get_snapshot_overlay(void);
 int get_vision_inline_data(void);
 
+/* MQTT connection settings (from config.json "mqtt" section) */
+const char *get_mqtt_host(void);
+int get_mqtt_port(void);
+void set_mqtt_host(const char *host);
+void set_mqtt_port(int port);
+
+/* MQTT TLS settings */
+int get_mqtt_tls(void);
+void set_mqtt_tls(int enabled);
+const char *get_mqtt_tls_ca_cert(void);
+void set_mqtt_tls_ca_cert(const char *path);
+const char *get_mqtt_tls_cert_path(void);
+void set_mqtt_tls_cert_path(const char *path);
+const char *get_mqtt_tls_key_path(void);
+void set_mqtt_tls_key_path(const char *path);
+
 #endif  // CONFIG_MANAGER_H
