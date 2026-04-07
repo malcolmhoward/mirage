@@ -156,8 +156,8 @@
 #define TARGET_RECORDING_FPS 30
 #define TARGET_RECORDING_FRAME_DURATION_US (1000000 / TARGET_RECORDING_FPS)
 
-#define RECORD_PULSE_AUDIO_DEVICE                                                            \
-   "alsa_output.usb-KTMicro_TX_96Khz_USB_Audio_2022-08-08-0000-0000-0000--00.analog-stereo." \
+#define RECORD_PULSE_AUDIO_DEVICE                                                             \
+   "alsa_output.usb-Creative_Technology_Ltd_Sound_Blaster_Play__3_00128226-00.analog-stereo." \
    "monitor"
 
 // New York City, NY

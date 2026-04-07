@@ -148,6 +148,10 @@ include_directories(${GSTREAMER_INCLUDE_DIRS})
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 include_directories(${GLIB_INCLUDE_DIRS})
 
+# Audio (PulseAudio for recording device validation)
+pkg_check_modules(PULSE REQUIRED libpulse)
+include_directories(${PULSE_INCLUDE_DIRS})
+
 # Communications
 pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 include_directories(${MOSQUITTO_INCLUDE_DIRS})
@@ -176,6 +180,7 @@ set(LIBRARIES
   # Audio
   ${VORBISFILE_LIBRARIES}
   ${ALSA_LIBRARIES}
+  ${PULSE_LIBRARIES}
 
   # Core
   ${JSONC_LIBRARIES}

@@ -48,6 +48,7 @@ typedef struct _video_out_data {
    int write_index; /* Index for the buffer being written to */
 
    void *rgb_out_pixels[3];
+   size_t frame_buf_size; /* Size of each pre-allocated frame buffer (0 = not allocated) */
 
    GstElement *pipeline;
 
@@ -104,6 +105,9 @@ void set_video_recording_path(const char *path);
 
 /* Initialize the p_mutex in video_out_data at program start */
 void init_video_out_data(void);
+
+/* Ensure frame buffers are pre-allocated for the given size */
+int ensure_frame_buffers(size_t needed_size);
 
 /* Cleanup the p_mutex in video_out_data at program exit */
 void cleanup_video_out_data(void);

@@ -29,6 +29,7 @@
 #include <gst/gst.h>
 #include <limits.h>
 #include <pthread.h>
+#include <pulse/pulseaudio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,10 +79,43 @@ void init_video_out_data(void) {
    this_vod.read_index = 2;
    this_vod.write_index = 1;
 
-   /* Initialize buffers to NULL */
+   /* Initialize buffers to NULL -- pre-allocated on first use */
    this_vod.rgb_out_pixels[0] = NULL;
    this_vod.rgb_out_pixels[1] = NULL;
    this_vod.rgb_out_pixels[2] = NULL;
+   this_vod.frame_buf_size = 0;
+}
+
+/**
+ * @brief Ensure all 3 triple-buffer frame buffers are pre-allocated.
+ *
+ * Called from the render loop before pixel readback. If the window size
+ * has changed since last allocation, the buffers are reallocated.
+ * This eliminates per-frame malloc/free (~2.7MB per frame at 720p).
+ *
+ * @param needed_size Size in bytes for one frame buffer
+ * @return SUCCESS if buffers are ready, FAILURE on allocation error
+ */
+int ensure_frame_buffers(size_t needed_size) {
+   video_out_data *vod = &this_vod;
+
+   if (vod->frame_buf_size == needed_size) {
+      return SUCCESS; /* Already the right size */
+   }
+
+   /* (Re)allocate all 3 buffers */
+   for (int i = 0; i < 3; i++) {
+      void *new_buf = realloc(vod->rgb_out_pixels[i], needed_size);
+      if (new_buf == NULL) {
+         LOG_ERROR("Failed to allocate frame buffer %d (%zu bytes)", i, needed_size);
+         return FAILURE;
+      }
+      vod->rgb_out_pixels[i] = new_buf;
+   }
+
+   vod->frame_buf_size = needed_size;
+   LOG_INFO("Frame buffers (re)allocated: 3 x %zu bytes", needed_size);
+   return SUCCESS;
 }
 
 /* Cleanup the p_mutex in video_out_data at program exit */
@@ -93,6 +127,7 @@ void cleanup_video_out_data(void) {
          this_vod.rgb_out_pixels[i] = NULL;
       }
    }
+   this_vod.frame_buf_size = 0;
 
    pthread_mutex_destroy(&this_vod.p_mutex);
 }
@@ -248,6 +283,84 @@ void stop_feed(GstElement *source, void *data) {
    feed_me = 0;
 }
 
+/**
+ * @brief Check if a PulseAudio source (recording device) exists.
+ *
+ * Uses the PulseAudio synchronous mainloop API to query by name.
+ * Returns quickly -- connects, queries, disconnects.
+ *
+ * @param source_name PulseAudio source name to look up
+ * @return 1 if the source exists, 0 if not found or on error
+ */
+static void pulse_source_info_cb(pa_context *ctx,
+                                 const pa_source_info *info,
+                                 int eol,
+                                 void *userdata) {
+   int *found = (int *)userdata;
+   if (!eol && info != NULL) {
+      *found = 1;
+   }
+}
+
+static void pulse_context_state_cb(pa_context *ctx, void *userdata) {
+   int *ready = (int *)userdata;
+   switch (pa_context_get_state(ctx)) {
+      case PA_CONTEXT_READY:
+         *ready = 1;
+         break;
+      case PA_CONTEXT_FAILED:
+      case PA_CONTEXT_TERMINATED:
+         *ready = -1;
+         break;
+      default:
+         break;
+   }
+}
+
+static int pulse_source_exists(const char *source_name) {
+   pa_mainloop *ml = pa_mainloop_new();
+   if (ml == NULL) {
+      return 0;
+   }
+
+   pa_context *ctx = pa_context_new(pa_mainloop_get_api(ml), "mirage-device-check");
+   if (ctx == NULL) {
+      pa_mainloop_free(ml);
+      return 0;
+   }
+
+   int ready = 0;
+   pa_context_set_state_callback(ctx, pulse_context_state_cb, &ready);
+
+   if (pa_context_connect(ctx, NULL, PA_CONTEXT_NOFLAGS, NULL) < 0) {
+      pa_context_unref(ctx);
+      pa_mainloop_free(ml);
+      return 0;
+   }
+
+   /* Wait for connection */
+   while (ready == 0) {
+      pa_mainloop_iterate(ml, 1, NULL);
+   }
+
+   int found = 0;
+   if (ready == 1) {
+      pa_operation *op = pa_context_get_source_info_by_name(ctx, source_name, pulse_source_info_cb,
+                                                            &found);
+      if (op != NULL) {
+         while (pa_operation_get_state(op) == PA_OPERATION_RUNNING) {
+            pa_mainloop_iterate(ml, 1, NULL);
+         }
+         pa_operation_unref(op);
+      }
+   }
+
+   pa_context_disconnect(ctx);
+   pa_context_unref(ctx);
+   pa_mainloop_free(ml);
+   return found;
+}
+
 static gboolean bus_message_handler(GstBus *bus, GstMessage *message, gpointer data) {
    video_out_data *vod = (video_out_data *)data;
 
@@ -365,6 +478,16 @@ void *video_next_thread(void *arg) {
    snprintf(this_vod.filename, sizeof(this_vod.filename), "%s/ironman-vid-%s.mp4", record_path,
             datetime);
 #endif
+
+   /* Validate that the PulseAudio recording device exists.
+    * If it doesn't, GStreamer's pulsesrc stalls indefinitely waiting for data,
+    * which blocks the entire recording pipeline (no frames get pushed). */
+   if (!pulse_source_exists(RECORD_PULSE_AUDIO_DEVICE)) {
+      LOG_ERROR("PulseAudio device not found: %s", RECORD_PULSE_AUDIO_DEVICE);
+      LOG_ERROR("Recording aborted -- update RECORD_PULSE_AUDIO_DEVICE in defines.h");
+      this_vod.output = DISABLED;
+      return NULL;
+   }
 
    /* Build pipeline description based on output type */
    if (this_vod.output == RECORD_STREAM) {

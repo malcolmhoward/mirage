@@ -711,10 +711,8 @@ int play_intro(int frames, int clear, int *finished) {
          Uint32 start = 0, stop = 0;
 #endif
 
-         this_vod->rgb_out_pixels[this_vod->write_index] = malloc(window_width * RGB_OUT_SIZE *
-                                                                  window_height);
-         if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
-            LOG_ERROR("Unable to malloc rgb frame 0.");
+         if (ensure_frame_buffers((size_t)window_width * RGB_OUT_SIZE * window_height) != SUCCESS) {
+            LOG_ERROR("Unable to allocate frame buffers.");
             return 2;
          }
 #ifdef ENCODE_TIMING
@@ -724,8 +722,6 @@ int play_intro(int frames, int clear, int *finished) {
                                           this_vod->rgb_out_pixels[this_vod->write_index],
                                           window_width * RGB_OUT_SIZE) != 0) {
             LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
-            free(this_vod->rgb_out_pixels[this_vod->write_index]);
-            this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
 #ifdef ENCODE_TIMING
          } else {
             stop = SDL_GetTicks();
@@ -742,10 +738,6 @@ int play_intro(int frames, int clear, int *finished) {
          }
 
          pthread_mutex_lock(&this_vod->p_mutex);
-         if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
-            free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
-            this_vod->rgb_out_pixels[this_vod->buffer_num] = NULL;
-         }
          rotate_triple_buffer_indices(this_vod);
          pthread_mutex_unlock(&this_vod->p_mutex);
 
@@ -2301,10 +2293,10 @@ int main(int argc, char **argv) {
                last_file_check = currTime;
             }
 
-            this_vod->rgb_out_pixels[this_vod->write_index] = malloc(window_width * RGB_OUT_SIZE *
-                                                                     window_height);
-            if (this_vod->rgb_out_pixels[this_vod->write_index] == NULL) {
-               LOG_ERROR("Unable to malloc rgb frame 0.");
+            /* Ensure pre-allocated frame buffers are the right size */
+            if (ensure_frame_buffers((size_t)window_width * RGB_OUT_SIZE * window_height) !=
+                SUCCESS) {
+               LOG_ERROR("Unable to allocate frame buffers.");
                return (2);
             }
 
@@ -2322,9 +2314,7 @@ int main(int argc, char **argv) {
                                             this_vod->rgb_out_pixels[this_vod->write_index],
                                             window_width * RGB_OUT_SIZE) != 0) {
                LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
-               /* Free the buffer on failure */
-               free(this_vod->rgb_out_pixels[this_vod->write_index]);
-               this_vod->rgb_out_pixels[this_vod->write_index] = NULL;
+               /* Buffer is pre-allocated, no free needed -- just skip this frame */
 #ifdef ENCODE_TIMING
             } else {
                stop = SDL_GetTicks();
@@ -2341,12 +2331,8 @@ int main(int argc, char **argv) {
             }
 
             pthread_mutex_lock(&this_vod->p_mutex);
-            if (this_vod->rgb_out_pixels[this_vod->buffer_num] != NULL) {
-               free(this_vod->rgb_out_pixels[this_vod->buffer_num]);
-               this_vod->rgb_out_pixels[this_vod->buffer_num] = NULL;
-            }
-
-            /* Rotate indices */
+            /* Buffers are pre-allocated -- no free/malloc per frame.
+             * Just rotate indices so the consumer reads the latest frame. */
             rotate_triple_buffer_indices(this_vod);
 
             pthread_mutex_unlock(&this_vod->p_mutex);
