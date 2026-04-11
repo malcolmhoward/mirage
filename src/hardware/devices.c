@@ -45,48 +45,41 @@ long double get_mem_usage(void) {
 }
 
 /* Get the wifi signal level from the wireless driver.
- * This returns 0-9 for display purposes. */
+ * Reads dBm from /proc/net/wireless and maps to 0-9 for display. */
 int get_wifi_signal_level(void) {
    FILE *fp = NULL;
-   char buf[125];
-   char *found = NULL;
-   char s_signal[7];
-   int signal = -1;
-   int level = 0; /* 0-9 based on -30 to -90 dBm) */
+   char buf[256];
+   int level = 0;
 
-   fp = fopen("/proc/net/dev", "r");
+   fp = fopen("/proc/net/wireless", "r");
    if (fp == NULL) {
       LOG_ERROR("No wireless found.");
       return 0;
    }
 
-   while (fgets(buf, 125, fp) != NULL) {
-      if ((found = strstr(buf, get_wifi_dev_name())) != NULL) {
+   const char *dev_name = get_wifi_dev_name();
+   while (fgets(buf, sizeof(buf), fp) != NULL) {
+      if (strstr(buf, dev_name) != NULL) {
+         /* Format: "iface: status link. level. noise ..."
+          * Fields are space-separated after the interface name. */
+         char *colon = strchr(buf, ':');
+         if (colon != NULL) {
+            int status;
+            double link, dbm;
+            if (sscanf(colon + 1, "%d %lf %lf", &status, &link, &dbm) == 3) {
+               /* Map dBm to 0-9: -90 dBm = 0, -30 dBm = 9 */
+               level = (int)(((dbm - -90.0) * 9.0) / (-30.0 - -90.0));
+               if (level > 9)
+                  level = 9;
+               if (level < 0)
+                  level = 0;
+            }
+         }
          break;
       }
    }
 
    fclose(fp);
-
-   if (found != NULL) {
-      memset((void *)s_signal, '\0', 7);
-      strncpy(s_signal, &found[19], 6);
-      signal = atoi(s_signal);
-
-      // Map from 0-9. Arduino map equation.
-      if (signal == 0) {
-         level = 0;
-      } else if (signal > 0) {
-         level = round((double)signal / 10.0);
-      } else {
-         level = (signal - -90) * (9 - 0) / (-30 - -90) + 0;
-      }
-   }
-   //printf("Wireless signal: %d, level :%d\n", signal, level);
-   if (level > 9)
-      level = 9;
-   if (level < 0)
-      level = 0;
 
    return level;
 }
