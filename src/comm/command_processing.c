@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 /* Serial Port */
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <termios.h>
@@ -41,7 +42,6 @@
 #include "core/mirage.h"
 #include "hardware/armor.h"
 #include "hardware/system_metrics.h"
-#include "media/audio.h"
 #include "media/screenshot.h"
 #include "ui/hud_manager.h"
 #include "util/logging.h"
@@ -410,10 +410,8 @@ int parse_json_command(char *command_string, char *topic) {
    char text[2048] = "";
    int alreadySpoke = 0;
 
-   /* For audio processing. */
-   int command = 0;
+   /* For audio forwarding. */
    char filename[MAX_FILENAME_LENGTH] = "";
-   double start_percent = 0.0;
 
    motion *this_motion = get_motion_dev();
    enviro *this_enviro = get_enviro_dev();
@@ -643,10 +641,8 @@ int parse_json_command(char *command_string, char *topic) {
                }
             }
          } else if (strcmp("audio", tmpstr) == 0) {
-            /* Audio */
-            command = 0;
+            /* Audio - forward to DAWN via MQTT */
             filename[0] = '\0';
-            start_percent = 0.0;
 
             if (!json_object_object_get_ex(parsed_json, "command", &tmpobj)) {
                LOG_WARNING("Audio command missing 'command' field");
@@ -654,32 +650,20 @@ int parse_json_command(char *command_string, char *topic) {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr == NULL) {
                   LOG_WARNING("Audio command field is not a string");
-               } else if (strcmp(tmpstr, "play") == 0) {
-                  command = SOUND_PLAY;
+               } else if (strcmp(tmpstr, "play") == 0 || strcmp(tmpstr, "stop") == 0) {
                   if (json_object_object_get_ex(parsed_json, "arg1", &tmpobj)) {
-                     tmpstr = json_object_get_string(tmpobj);
-                     if (tmpstr != NULL) {
-                        strncpy(filename, tmpstr, MAX_FILENAME_LENGTH - 1);
-                        filename[MAX_FILENAME_LENGTH - 1] = '\0';
+                     const char *fname = json_object_get_string(tmpobj);
+                     if (fname != NULL) {
+                        /* Defense-in-depth: reject path traversal before forwarding */
+                        if (strchr(fname, '/') || strchr(fname, '\\') || strstr(fname, "..")) {
+                           LOG_ERROR("Audio: path traversal rejected: %s", fname);
+                        } else {
+                           strncpy(filename, fname, MAX_FILENAME_LENGTH - 1);
+                           filename[MAX_FILENAME_LENGTH - 1] = '\0';
+                           mqttSoundEffect(tmpstr, filename);
+                        }
                      }
                   }
-
-                  if (json_object_object_get_ex(parsed_json, "arg2", &tmpobj)) {
-                     start_percent = json_object_get_double(tmpobj);
-                  }
-
-                  process_audio_command(command, filename, start_percent);
-               } else if (strcmp(tmpstr, "stop") == 0) {
-                  command = SOUND_STOP;
-                  if (json_object_object_get_ex(parsed_json, "arg1", &tmpobj)) {
-                     tmpstr = json_object_get_string(tmpobj);
-                     if (tmpstr != NULL) {
-                        strncpy(filename, tmpstr, MAX_FILENAME_LENGTH - 1);
-                        filename[MAX_FILENAME_LENGTH - 1] = '\0';
-                     }
-                  }
-
-                  process_audio_command(command, filename, start_percent);
                } else {
                   LOG_WARNING("Unrecognized audio command: %s", tmpstr);
                }

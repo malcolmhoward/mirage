@@ -21,7 +21,6 @@
 
 /* Threading Information */
 /* vid_out_thread    - Video output processing. Disk and/or streaming.
- * thread_handles[#] - NUM_AUDIO_THREADS number of audio threads.
  * video_proc_thread - Video input processing. Cameras to SDL.
  * command_proc_thread - USB/Serial input handling.
  * od_[LR]_thread    - If object detection is enabled. These will handle
@@ -63,13 +62,10 @@
 /* Vorbis */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
-#include "vorbis/codec.h"
-#include "vorbisfile.h"
 #pragma GCC diagnostic pop
 
 /* POSIX Message Queue */
 #include <fcntl.h>
-#include <mqueue.h>
 #include <sys/stat.h>
 
 /* SDL2 */
@@ -115,7 +111,6 @@
 #include "hardware/devices.h"
 #include "hardware/frame_rate_tracker.h"
 #include "hardware/system_metrics.h"
-#include "media/audio.h"
 #include "media/recording.h"
 #include "media/screenshot.h"
 #include "rendering/element_renderer.h"
@@ -199,10 +194,6 @@ static char aiName[2][AI_NAME_MAX_LENGTH] = { "", "" };
 static char aiState[2][AI_STATE_MAX_LENGTH] = { "", "" };
 static _Atomic int ai_buf_idx = 0; /* Index of the buffer readers should use */
 
-/* Audio */
-extern thread_info audio_threads[NUM_AUDIO_THREADS];
-mqd_t qd_server;
-extern mqd_t qd_clients[NUM_AUDIO_THREADS];
 
 const struct Alert alert_messages[ALERT_MAX] = { { ALERT_RECORDING, "ERROR: Recording failed!" },
                                                  { ALERT_CONFIG_RELOADED,
@@ -1378,6 +1369,37 @@ void mqttTextToSpeech(const char *text) {
 }
 
 /*
+ * Forwards a sound effect command to DAWN via MQTT.
+ * Uses json-c API for safe JSON construction (no injection).
+ */
+void mqttSoundEffect(const char *action, const char *filename) {
+   if (mosq == NULL) {
+      LOG_ERROR("MQTT not initialized for sound effect: %s", filename);
+      return;
+   }
+
+   struct json_object *obj = json_object_new_object();
+   json_object_object_add(obj, "device", json_object_new_string("sound effect"));
+   json_object_object_add(obj, "action", json_object_new_string(action));
+   json_object_object_add(obj, "value", json_object_new_string(filename));
+
+   /* Add OCP timestamp for latency debugging */
+   struct timespec ts;
+   clock_gettime(CLOCK_REALTIME, &ts);
+   json_object_object_add(obj, "timestamp",
+                          json_object_new_int64((int64_t)ts.tv_sec * 1000 +
+                                                (int64_t)ts.tv_nsec / 1000000));
+
+   const char *json_str = json_object_to_json_string(obj);
+   int rc = mosquitto_publish(mosq, NULL, "dawn", strlen(json_str), json_str, 0, false);
+   if (rc != MOSQ_ERR_SUCCESS) {
+      LOG_ERROR("Error publishing sound effect: %s", mosquitto_strerror(rc));
+   }
+
+   json_object_put(obj);
+}
+
+/*
  * Sends a text string (JSON hopefully) over MQTT.
  */
 void mqttSendMessage(const char *topic, const char *text) {
@@ -1447,8 +1469,6 @@ int main(int argc, char **argv) {
    DestinationType initial_recording_state = DISABLED;
 
    /* Threads */
-   pthread_t thread_handles[NUM_AUDIO_THREADS];
-   int current_thread = 0;
    pthread_t video_proc_thread = 0;
 
    /* Serial Port */
@@ -1672,70 +1692,10 @@ int main(int argc, char **argv) {
 
    curl_global_init(CURL_GLOBAL_DEFAULT);
 
-   /* Create server message queue */
-   struct mq_attr attr;
-
-   attr.mq_flags = 0;
-   attr.mq_maxmsg = MAX_MESSAGES;
-   attr.mq_msgsize = MAX_MSG_SIZE;
-   attr.mq_curmsgs = 0;
-
-   if (mq_unlink(SERVER_QUEUE_NAME) == -1) {
-      // Checking but failure isn't important.
-      //perror("Server: mq_unlink");
-   }
-
-   if ((qd_server = mq_open(SERVER_QUEUE_NAME, O_RDONLY | O_CREAT, QUEUE_PERMISSIONS, &attr)) ==
-       -1) {
-      perror("Server: mq_open (server)");
-      return EXIT_FAILURE;
-   }
-
    /* If we don't get an argument, read from stdin. */
    if (!usb_enable) {
       LOG_WARNING("No serial port reading from stdin.");
    }
-
-   for (current_thread = 0; current_thread < NUM_AUDIO_THREADS; current_thread++) {
-      /* Setup Output Device */
-      snprintf(audio_threads[current_thread].client_queue_name, MAX_FILENAME_LENGTH,
-               "/stark-sound-client-%d", current_thread);
-      if (mq_unlink(audio_threads[current_thread].client_queue_name) == -1) {
-         // Checking but failure isn't important.
-         //perror("Client: mq_unlink");
-      }
-      /* Create client message queue/read */
-      if ((audio_threads[current_thread].qd_client = mq_open(
-               audio_threads[current_thread].client_queue_name, O_RDONLY | O_CREAT,
-               QUEUE_PERMISSIONS, &attr)) == -1) {
-         perror("Client: mq_open (client)");
-      }
-      /* server side */
-      if ((qd_clients[current_thread] = mq_open(audio_threads[current_thread].client_queue_name,
-                                                O_WRONLY)) == 1) {
-         perror("Server: Not able to open client queue");
-      }
-      if ((audio_threads[current_thread].qd_server = mq_open(SERVER_QUEUE_NAME, O_WRONLY)) == -1) {
-         perror("Client: mq_open (server)");
-      }
-
-      /* Create Thread */
-      audio_threads[current_thread].thread_id = current_thread;
-      //strncpy( audio_threads[current_thread].filename, file, MAX_FILENAME_LENGTH );
-      //audio_threads[current_thread].start_percent = start_percent;
-      audio_threads[current_thread].stop = 1;
-
-      if (pthread_create(&thread_handles[current_thread], NULL, audio_thread,
-                         &audio_threads[current_thread])) {
-         LOG_ERROR("Error creating thread [%d]", current_thread);
-         return EXIT_FAILURE;
-      }
-   }
-
-   /* Send test messages */
-#ifdef STARTUP_SOUND
-   process_audio_command(SOUND_PLAY, STARTUP_SOUND, 0.0);
-#endif
 
    if (IMG_Init(IMG_INIT_PNG) < 0) {
       LOG_ERROR("Error initializing SDL_image: %s\n", IMG_GetError());
@@ -2423,16 +2383,7 @@ int main(int argc, char **argv) {
    pthread_mutex_destroy(&v_mutex);
    pthread_mutex_destroy(&windowSizeMutex);
 
-   /* Close audio threads. */
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting on audio threads to stop.");
-#endif
-   for (int i = 0; i < NUM_AUDIO_THREADS; i++) {
-      pthread_join(thread_handles[i], NULL);
-   }
-#ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
-
    LOG_INFO("Waiting on command processing thread to stop.");
 #endif
    if (command_proc_thread != 0) {

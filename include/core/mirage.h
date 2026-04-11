@@ -282,6 +282,18 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *des
 void mqttTextToSpeech(const char *text);
 
 /**
+ * @brief Forwards a sound effect command to DAWN via MQTT.
+ *
+ * This function constructs a JSON command with the provided action and filename
+ * and publishes it to the MQTT topic "dawn" for playback by DAWN's SFX tool.
+ * Uses json-c API for safe JSON construction (prevents injection).
+ *
+ * @param action The action to perform ("play" or "stop").
+ * @param filename The sound effect filename (bare name, no path).
+ */
+void mqttSoundEffect(const char *action, const char *filename);
+
+/**
  * @brief Sends a text string (JSON hopefully) over MQTT.
  *
  * This function sends the provided string to the provided topic.

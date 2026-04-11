@@ -222,20 +222,12 @@ enum {
 #define MAP_UPDATE_SEC 30                  /* Fixed map update interval. */
                                            /* TODO: Make these available in the config file. */
 
-#define NUM_AUDIO_THREADS 8 /* Number of simul audio threads. */
-//#define STARTUP_SOUND         "jarvis_service.ogg"
 
 #define USB_PORT "/dev/ttyACM0" /* Default USB port. */
 
 #define FAN_RPM_FILE "/sys/class/hwmon/hwmon3/rpm"
 #define FAN_MAX_RPM 6000
 
-/* Defines for sound server. */
-#define SERVER_QUEUE_NAME "/stark-sound-server"
-#define QUEUE_PERMISSIONS 0660
-#define MAX_MESSAGES 10
-#define MAX_MSG_SIZE sizeof(audio_msg)
-#define MSG_BUFFER_SIZE MAX_MSG_SIZE + 10
 
 /* ALSA */
 #define PCM_DEVICE "default"

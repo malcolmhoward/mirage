@@ -91,7 +91,6 @@ set(SOURCE_FILES
     src/rendering/gauge_renderer.c
 
     # media
-    src/media/audio.c
     src/media/recording.c
     src/media/screenshot.c
 
@@ -112,7 +111,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS}")
 
 # Set include directories
-include_directories(/usr/include/vorbis /usr/local/include/vorbis)
 
 # Conditional Jetson includes
 if(USE_JETSON_INFERENCE)
@@ -122,12 +120,6 @@ endif()
 
 # Find required packages
 find_package(PkgConfig REQUIRED)
-
-# Audio dependencies
-pkg_check_modules(VORBISFILE REQUIRED vorbisfile)
-include_directories(${VORBISFILE_INCLUDE_DIRS})
-pkg_check_modules(ALSA REQUIRED alsa)
-include_directories(${ALSA_INCLUDE_DIRS})
 
 # Core dependencies
 pkg_check_modules(JSONC REQUIRED json-c)
@@ -179,8 +171,6 @@ endif()
 # Set libraries
 set(LIBRARIES
   # Audio
-  ${VORBISFILE_LIBRARIES}
-  ${ALSA_LIBRARIES}
   ${PULSE_LIBRARIES}
 
   # Core
