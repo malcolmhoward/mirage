@@ -1351,21 +1351,29 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *des
  * Sends a text message to be spoken via text-to-speech over MQTT.
  */
 void mqttTextToSpeech(const char *text) {
-   char mqtt_command[1024] = "";
-   int rc = 0;
-
-   // Construct the MQTT command with the provided text
-   snprintf(mqtt_command, sizeof(mqtt_command),
-            "{ \"device\": \"text to speech\", \"action\": \"play\", \"value\": \"%s\" }", text);
-
    if (mosq == NULL) {
       LOG_ERROR("MQTT not initialized trying to send: \"%s\"", text);
-   } else {
-      rc = mosquitto_publish(mosq, NULL, "dawn", strlen(mqtt_command), mqtt_command, 0, false);
-      if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
-      }
+      return;
    }
+
+   struct json_object *obj = json_object_new_object();
+   json_object_object_add(obj, "device", json_object_new_string("text to speech"));
+   json_object_object_add(obj, "action", json_object_new_string("play"));
+   json_object_object_add(obj, "value", json_object_new_string(text));
+
+   /* Add OCP millisecond timestamp */
+   struct timespec ts;
+   clock_gettime(CLOCK_REALTIME, &ts);
+   int64_t timestamp_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+   json_object_object_add(obj, "timestamp", json_object_new_int64(timestamp_ms));
+
+   const char *json_str = json_object_to_json_string(obj);
+   int rc = mosquitto_publish(mosq, NULL, "dawn", strlen(json_str), json_str, 0, false);
+   if (rc != MOSQ_ERR_SUCCESS) {
+      LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
+   }
+
+   json_object_put(obj);
 }
 
 /*

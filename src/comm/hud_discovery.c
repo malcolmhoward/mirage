@@ -143,14 +143,18 @@ void hud_discovery_publish(struct mosquitto *mosq) {
    }
 
    int rc;
-   time_t now = time(NULL);
+
+   /* OCP millisecond timestamp */
+   struct timespec ts;
+   clock_gettime(CLOCK_REALTIME, &ts);
+   int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 
    /* Build and publish elements discovery message */
    {
       struct json_object *msg = json_object_new_object();
       json_object_object_add(msg, "device", json_object_new_string("mirage"));
       json_object_object_add(msg, "msg_type", json_object_new_string("discovery"));
-      json_object_object_add(msg, "timestamp", json_object_new_int64((int64_t)now));
+      json_object_object_add(msg, "timestamp", json_object_new_int64(now_ms));
       json_object_object_add(msg, "elements", build_elements_array());
 
       const char *payload = json_object_to_json_string(msg);
@@ -171,7 +175,7 @@ void hud_discovery_publish(struct mosquitto *mosq) {
       struct json_object *msg = json_object_new_object();
       json_object_object_add(msg, "device", json_object_new_string("mirage"));
       json_object_object_add(msg, "msg_type", json_object_new_string("discovery"));
-      json_object_object_add(msg, "timestamp", json_object_new_int64((int64_t)now));
+      json_object_object_add(msg, "timestamp", json_object_new_int64(now_ms));
       json_object_object_add(msg, "huds", build_modes_array());
 
       const char *payload = json_object_to_json_string(msg);

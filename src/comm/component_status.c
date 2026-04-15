@@ -68,7 +68,12 @@ static char *build_status_message(const char *status) {
    json_object_object_add(msg, "device", json_object_new_string("mirage"));
    json_object_object_add(msg, "msg_type", json_object_new_string("status"));
    json_object_object_add(msg, "status", json_object_new_string(status));
-   json_object_object_add(msg, "timestamp", json_object_new_int64((int64_t)time(NULL)));
+
+   /* OCP millisecond timestamp */
+   struct timespec ts;
+   clock_gettime(CLOCK_REALTIME, &ts);
+   int64_t timestamp_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+   json_object_object_add(msg, "timestamp", json_object_new_int64(timestamp_ms));
 
    json_object_object_add(msg, "version", json_object_new_string(VERSION_NUMBER));
 

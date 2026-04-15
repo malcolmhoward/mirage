@@ -61,10 +61,16 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
       LOG_ERROR("Error subscribing to helmet: %s", mosquitto_strerror(rc));
    }
 
-   // Subscribe to the stat topic for system metrics
-   rc = mosquitto_subscribe(mosq, NULL, "stat", 1);
+   // Subscribe to the stat telemetry topic for system metrics
+   rc = mosquitto_subscribe(mosq, NULL, "stat/telemetry", 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error on subscribing to stat topic: %s", mosquitto_strerror(rc));
+      LOG_ERROR("Error subscribing to stat/telemetry: %s", mosquitto_strerror(rc));
+   }
+
+   // Subscribe to the stat status topic for component presence
+   rc = mosquitto_subscribe(mosq, NULL, "stat/status", 1);
+   if (rc != MOSQ_ERR_SUCCESS) {
+      LOG_ERROR("Error subscribing to stat/status: %s", mosquitto_strerror(rc));
    }
 
    /* This works. I think I like the idea of a registration service better but... */
@@ -132,6 +138,13 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    /* Handle Dawn status messages (component keepalive) */
    if (strcmp(msg->topic, STATUS_TOPIC_DAWN) == 0) {
       component_status_handle_message(msg->topic, payload, msg->payloadlen);
+      free(payload);
+      return;
+   }
+
+   /* Handle stat/status messages (component keepalive from STAT) */
+   if (strcmp(msg->topic, "stat/status") == 0) {
+      /* Currently just logged; could track STAT presence like Dawn */
       free(payload);
       return;
    }

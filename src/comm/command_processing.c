@@ -140,7 +140,7 @@ void serial_get_port(char *buffer, size_t size) {
    pthread_mutex_unlock(&serial_state.mutex);
 }
 
-/* Parse commands specifically from the "stat" topic. */
+/* Parse commands specifically from the "stat" topic (stat/telemetry). */
 int parse_stat_command(char *command_string) {
    /* Parse JSON message */
    struct json_object *parsed_json = json_tokener_parse(command_string);
@@ -149,19 +149,30 @@ int parse_stat_command(char *command_string) {
       return FAILURE;
    }
 
-   /* Get device type */
-   struct json_object *device_obj = NULL;
-   if (!json_object_object_get_ex(parsed_json, "device", &device_obj)) {
-      LOG_ERROR("Missing 'device' field in STAT message");
+   /* OCP v1.4: route on "type" field (sub-type discriminator).
+    * Fall back to "device" for backward compatibility during migration. */
+   struct json_object *type_obj = NULL;
+   const char *msg_type = NULL;
+   if (json_object_object_get_ex(parsed_json, "type", &type_obj)) {
+      msg_type = json_object_get_string(type_obj);
+   } else {
+      /* Legacy: fall back to "device" field */
+      struct json_object *device_obj = NULL;
+      if (json_object_object_get_ex(parsed_json, "device", &device_obj)) {
+         msg_type = json_object_get_string(device_obj);
+      }
+   }
+
+   if (msg_type == NULL) {
+      LOG_ERROR("Missing 'type' (and 'device') field in STAT message");
       json_object_put(parsed_json);
       return FAILURE;
    }
 
-   const char *device_type = json_object_get_string(device_obj);
    time_t current_time = time(NULL);
 
    /* Check if this is a system metrics message */
-   if (strcmp(device_type, "SystemMetrics") == 0) {
+   if (strcmp(msg_type, "SystemMetrics") == 0) {
       struct json_object *usage_obj = NULL;
       if (json_object_object_get_ex(parsed_json, "cpu_usage", &usage_obj)) {
          system_metrics.cpu_usage = (float)json_object_get_double(usage_obj);
@@ -180,7 +191,7 @@ int parse_stat_command(char *command_string) {
          system_metrics.memory_update_time = current_time;
          system_metrics.memory_available = true;
       }
-   } else if (strcmp(device_type, "Fan") == 0) {
+   } else if (strcmp(msg_type, "Fan") == 0) {
       struct json_object *rpm_obj = NULL;
       struct json_object *load_obj = NULL;
 
@@ -200,7 +211,7 @@ int parse_stat_command(char *command_string) {
     * need at this point. With that being said, some of the framework is here. */
    /* else if (strcmp(device_type, "Battery") == 0 || strcmp(device_type, "BatteryStatus") == 0) {
     */
-   else if (strcmp(device_type, "BatteryStatus") == 0) {
+   else if (strcmp(msg_type, "BatteryStatus") == 0) {
       struct json_object *obj = NULL;
 
       if (json_object_object_get_ex(parsed_json, "voltage", &obj)) {
@@ -270,7 +281,7 @@ int parse_stat_command(char *command_string) {
       }
 
       /* Fields specific to BatteryStatus */
-      if (strcmp(device_type, "BatteryStatus") == 0) {
+      if (strcmp(msg_type, "BatteryStatus") == 0) {
          /* Parse fault counts */
          if (json_object_object_get_ex(parsed_json, "critical_fault_count", &obj)) {
             system_metrics.critical_fault_count = json_object_get_int(obj);
@@ -423,7 +434,7 @@ int parse_json_command(char *command_string, char *topic) {
    }
 
    /* This function is getting too long. let's try something new. */
-   if (strcmp(topic, "stat") == 0) {
+   if (strcmp(topic, "stat/telemetry") == 0 || strcmp(topic, "stat") == 0) {
       return parse_stat_command(command_string);
    }
 
