@@ -43,13 +43,13 @@
 #include "hardware/armor.h"
 #include "hardware/devices.h"
 #include "hardware/system_metrics.h"
+#include "logging.h"
 #include "media/recording.h"
 #include "rendering/element_renderer.h"
 #include "rendering/gauge_renderer.h"
 #include "ui/hud_manager.h"
 #include "ui/notification.h"
 #include "util/curl_download.h"
-#include "util/logging.h"
 
 /* Globals and external references */
 // video elements
@@ -713,7 +713,7 @@ void render_text_element(element *curr_element) {
 
             curr_element->texture = SDL_CreateTextureFromSurface(renderer, curr_element->surface);
             if (curr_element->texture == NULL) {
-               LOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
+               OLOG_ERROR("Error creating texture from log surface: %s", SDL_GetError());
             } else {
                curr_element->dst_rect.w = curr_element->surface->w;
                curr_element->dst_rect.h = curr_element->surface->h;
@@ -820,7 +820,7 @@ void render_text_element(element *curr_element) {
          }
 
          if (curr_element->texture == NULL) {
-            LOG_ERROR("SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
+            OLOG_ERROR("SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
          }
 
          snprintf(curr_element->last_rendered_text, MAX_TEXT_LENGTH, "%s", render_text);
@@ -1014,7 +1014,7 @@ void render_special_element(element *curr_element) {
    } else if (strcmp("notification_image", curr_element->special_name) == 0) {
       render_notification_image_element(curr_element);
    } else {
-      LOG_ERROR("Unknown special element type: %s", curr_element->special_name);
+      OLOG_ERROR("Unknown special element type: %s", curr_element->special_name);
    }
 }
 
@@ -1080,7 +1080,7 @@ void render_map_element(element *curr_element) {
       map_data.force_refresh = curr_element->force_refresh;
 
       if (pthread_create(&map_download_thread, NULL, image_download_thread, &map_data) != 0) {
-         LOG_ERROR("Error creating map download thread.");
+         OLOG_ERROR("Error creating map download thread.");
          map_thread_started = 0;
       } else {
          map_thread_started = 1;
@@ -1871,7 +1871,7 @@ void render_detect_element(element *curr_element) {
    SDL_Renderer *renderer = get_sdl_renderer();
 
    if (curr_element->texture == NULL) {
-      LOG_INFO("Loading animation source: %s", curr_element->this_anim.image);
+      OLOG_INFO("Loading animation source: %s", curr_element->this_anim.image);
       curr_element->texture = get_cached_texture(curr_element->this_anim.image);
       if (!curr_element->texture) {
          SDL_Log("Couldn't load %s: %s\n", curr_element->this_anim.image, SDL_GetError());
@@ -2069,7 +2069,7 @@ void render_element(element *curr_element) {
          render_special_element(curr_element);
          break;
       default:
-         LOG_ERROR("Unknown element type: %d", curr_element->type);
+         OLOG_ERROR("Unknown element type: %d", curr_element->type);
          break;
    }
 }
@@ -2226,9 +2226,9 @@ void render_hud_elements(void) {
          /* Apply transition effect based on transition type */
          switch (hud_mgr->transition_type) {
             case TRANSITION_MAX:
-               LOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
-               LOG_ERROR("Changing to valid default transition: %s",
-                         get_transition_name(TRANSITION_FADE));
+               OLOG_ERROR("Invalid transition type: %s", get_transition_name(TRANSITION_MAX));
+               OLOG_ERROR("Changing to valid default transition: %s",
+                          get_transition_name(TRANSITION_FADE));
                hud_mgr->current_screen->transition_type = TRANSITION_FADE;
 
             case TRANSITION_FADE: {

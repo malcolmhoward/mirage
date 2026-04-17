@@ -32,9 +32,9 @@
 #include "config/config_manager.h"
 #include "config/config_parser.h"
 #include "core/mirage.h"
+#include "logging.h"
 #include "rendering/gauge_renderer.h"
 #include "util/data_sources.h"
-#include "util/logging.h"
 
 /**
  * @brief Frame-rate independent smooth interpolation for gauge values.
@@ -229,7 +229,7 @@ static void generate_linear_cache(element *curr_element) {
    SDL_Renderer *renderer = get_sdl_renderer();
 
    if (!renderer) {
-      LOG_ERROR("Cannot generate linear cache: renderer is NULL");
+      OLOG_ERROR("Cannot generate linear cache: renderer is NULL");
       return;
    }
 
@@ -246,7 +246,7 @@ static void generate_linear_cache(element *curr_element) {
                                                          SDL_TEXTUREACCESS_TARGET, width, height);
 
    if (!curr_element->gauge_cache_texture) {
-      LOG_ERROR("Failed to create linear gauge cache texture: %s", SDL_GetError());
+      OLOG_ERROR("Failed to create linear gauge cache texture: %s", SDL_GetError());
       return;
    }
 
@@ -280,7 +280,7 @@ static void generate_ring_cache(element *curr_element) {
    SDL_Renderer *renderer = get_sdl_renderer();
 
    if (!renderer) {
-      LOG_ERROR("Cannot generate ring cache: renderer is NULL");
+      OLOG_ERROR("Cannot generate ring cache: renderer is NULL");
       return;
    }
 
@@ -295,7 +295,7 @@ static void generate_ring_cache(element *curr_element) {
                                                          SDL_TEXTUREACCESS_TARGET, width, height);
 
    if (!curr_element->gauge_cache_texture) {
-      LOG_ERROR("Failed to create ring gauge cache texture: %s", SDL_GetError());
+      OLOG_ERROR("Failed to create ring gauge cache texture: %s", SDL_GetError());
       return;
    }
 
@@ -349,7 +349,7 @@ static void generate_arc_cache(element *curr_element) {
    SDL_Renderer *renderer = get_sdl_renderer();
 
    if (!renderer) {
-      LOG_ERROR("Cannot generate arc cache: renderer is NULL");
+      OLOG_ERROR("Cannot generate arc cache: renderer is NULL");
       return;
    }
 
@@ -364,7 +364,7 @@ static void generate_arc_cache(element *curr_element) {
                                                          SDL_TEXTUREACCESS_TARGET, width, height);
 
    if (!curr_element->gauge_cache_texture) {
-      LOG_ERROR("Failed to create arc gauge cache texture: %s", SDL_GetError());
+      OLOG_ERROR("Failed to create arc gauge cache texture: %s", SDL_GetError());
       return;
    }
 
@@ -506,7 +506,7 @@ static void render_linear_gauge(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
 
    if (!renderer) {
-      LOG_ERROR("Cannot render gauge: renderer is NULL");
+      OLOG_ERROR("Cannot render gauge: renderer is NULL");
       return;
    }
 
@@ -543,7 +543,7 @@ static void render_linear_gauge(element *curr_element) {
    /* Calculate fill percentage */
    float range = curr_element->gauge_max_value - curr_element->gauge_min_value;
    if (range <= 0.0f) {
-      LOG_WARNING("Gauge '%s' has invalid range", curr_element->name);
+      OLOG_WARNING("Gauge '%s' has invalid range", curr_element->name);
       return;
    }
 
@@ -634,7 +634,7 @@ static void render_ring_gauge(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
 
    if (!renderer) {
-      LOG_ERROR("Cannot render ring gauge: renderer is NULL");
+      OLOG_ERROR("Cannot render ring gauge: renderer is NULL");
       return;
    }
 
@@ -671,7 +671,7 @@ static void render_ring_gauge(element *curr_element) {
    /* Calculate fill percentage */
    float range = curr_element->gauge_max_value - curr_element->gauge_min_value;
    if (range <= 0.0f) {
-      LOG_WARNING("Ring gauge '%s' has invalid range", curr_element->name);
+      OLOG_WARNING("Ring gauge '%s' has invalid range", curr_element->name);
       return;
    }
 
@@ -768,7 +768,7 @@ static void render_arc_gauge(element *curr_element) {
    hud_display_settings *this_hds = get_hud_display_settings();
 
    if (!renderer) {
-      LOG_ERROR("Cannot render arc gauge: renderer is NULL");
+      OLOG_ERROR("Cannot render arc gauge: renderer is NULL");
       return;
    }
 
@@ -805,7 +805,7 @@ static void render_arc_gauge(element *curr_element) {
    /* Calculate fill percentage */
    float range = curr_element->gauge_max_value - curr_element->gauge_min_value;
    if (range <= 0.0f) {
-      LOG_WARNING("Arc gauge '%s' has invalid range", curr_element->name);
+      OLOG_WARNING("Arc gauge '%s' has invalid range", curr_element->name);
       return;
    }
 
@@ -922,7 +922,7 @@ void render_gauge_element(element *curr_element) {
    } else if (strcmp(curr_element->gauge_type, "arc") == 0) {
       render_arc_gauge(curr_element);
    } else {
-      LOG_WARNING("Unknown gauge type: '%s' for element '%s'", curr_element->gauge_type,
-                  curr_element->name);
+      OLOG_WARNING("Unknown gauge type: '%s' for element '%s'", curr_element->gauge_type,
+                   curr_element->name);
    }
 }

@@ -42,10 +42,10 @@
 #include "core/mirage.h"
 #include "hardware/armor.h"
 #include "hardware/system_metrics.h"
+#include "logging.h"
 #include "media/screenshot.h"
 #include "ui/hud_manager.h"
 #include "ui/notification.h"
-#include "util/logging.h"
 #include "util/string_utils.h"
 
 #define SERVER_TIMEOUT 10
@@ -146,7 +146,7 @@ int parse_stat_command(char *command_string) {
    /* Parse JSON message */
    struct json_object *parsed_json = json_tokener_parse(command_string);
    if (parsed_json == NULL) {
-      LOG_ERROR("Failed to parse JSON message from STAT");
+      OLOG_ERROR("Failed to parse JSON message from STAT");
       return FAILURE;
    }
 
@@ -165,7 +165,7 @@ int parse_stat_command(char *command_string) {
    }
 
    if (msg_type == NULL) {
-      LOG_ERROR("Missing 'type' (and 'device') field in STAT message");
+      OLOG_ERROR("Missing 'type' (and 'device') field in STAT message");
       json_object_put(parsed_json);
       return FAILURE;
    }
@@ -402,7 +402,7 @@ int parse_stat_command(char *command_string) {
 /* Parse the JSON "commands" that come over serial/USB or MQTT. */
 int parse_json_command(char *command_string, char *topic) {
    if (command_string == NULL || topic == NULL) {
-      LOG_ERROR("Invalid parameters: command_string or topic is NULL");
+      OLOG_ERROR("Invalid parameters: command_string or topic is NULL");
       return FAILURE;
    }
 
@@ -430,7 +430,7 @@ int parse_json_command(char *command_string, char *topic) {
    gps *this_gps = get_gps_dev();
 
    if (!this_motion || !this_enviro || !this_gps) {
-      LOG_ERROR("Failed to get device structures");
+      OLOG_ERROR("Failed to get device structures");
       return FAILURE;
    }
 
@@ -443,13 +443,13 @@ int parse_json_command(char *command_string, char *topic) {
 
    /* Check if command_string starts with '{' to validate it's JSON */
    if (command_string[0] != '{') {
-      LOG_INFO("Non-JSON debug message received: %s", command_string);
+      OLOG_INFO("Non-JSON debug message received: %s", command_string);
       return SUCCESS; /* Exit gracefully for debug messages */
    }
 
    parsed_json = json_tokener_parse(command_string);
    if (!parsed_json) {
-      LOG_ERROR("Failed to parse JSON command: %s", command_string);
+      OLOG_ERROR("Failed to parse JSON command: %s", command_string);
       return FAILURE;
    }
 
@@ -457,25 +457,25 @@ int parse_json_command(char *command_string, char *topic) {
    const char *device_str = NULL;
    if (!json_object_object_get_ex(parsed_json, "device", &tmpobj)) {
       /* No "device" field found, this might be valid for some commands */
-      LOG_INFO("No device field found in JSON command");
+      OLOG_INFO("No device field found in JSON command");
    } else if (tmpobj != NULL) {
       tmpstr = json_object_get_string(tmpobj);
       device_str = tmpstr; /* Preserved — tmpstr may be reassigned below */
       if (tmpstr == NULL) {
-         LOG_WARNING("Device field exists but is not a string");
+         OLOG_WARNING("Device field exists but is not a string");
       } else {
          if (strcmp("Motion", tmpstr) == 0) {
             /* Motion */
             if (!json_object_object_get_ex(parsed_json, "format", &tmpobj)) {
-               LOG_WARNING("Motion device missing format field");
+               OLOG_WARNING("Motion device missing format field");
             } else {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr == NULL) {
-                  LOG_WARNING("Format field exists but is not a string");
+                  OLOG_WARNING("Format field exists but is not a string");
                } else if (strcmp("Orientation", tmpstr) == 0) {
                   /* Only look for "Orientation" style for now. */
                   if (!json_object_object_get_ex(parsed_json, "heading", &tmpobj)) {
-                     LOG_WARNING("Orientation format missing heading field");
+                     OLOG_WARNING("Orientation format missing heading field");
                   } else {
                      // Get the sensor heading value
                      double raw_heading = json_object_get_double(tmpobj);
@@ -659,18 +659,18 @@ int parse_json_command(char *command_string, char *topic) {
             filename[0] = '\0';
 
             if (!json_object_object_get_ex(parsed_json, "command", &tmpobj)) {
-               LOG_WARNING("Audio command missing 'command' field");
+               OLOG_WARNING("Audio command missing 'command' field");
             } else {
                tmpstr = json_object_get_string(tmpobj);
                if (tmpstr == NULL) {
-                  LOG_WARNING("Audio command field is not a string");
+                  OLOG_WARNING("Audio command field is not a string");
                } else if (strcmp(tmpstr, "play") == 0 || strcmp(tmpstr, "stop") == 0) {
                   if (json_object_object_get_ex(parsed_json, "arg1", &tmpobj)) {
                      const char *fname = json_object_get_string(tmpobj);
                      if (fname != NULL) {
                         /* Defense-in-depth: reject path traversal before forwarding */
                         if (strchr(fname, '/') || strchr(fname, '\\') || strstr(fname, "..")) {
-                           LOG_ERROR("Audio: path traversal rejected: %s", fname);
+                           OLOG_ERROR("Audio: path traversal rejected: %s", fname);
                         } else {
                            strncpy(filename, fname, MAX_FILENAME_LENGTH - 1);
                            filename[MAX_FILENAME_LENGTH - 1] = '\0';
@@ -679,7 +679,7 @@ int parse_json_command(char *command_string, char *topic) {
                      }
                   }
                } else {
-                  LOG_WARNING("Unrecognized audio command: %s", tmpstr);
+                  OLOG_WARNING("Unrecognized audio command: %s", tmpstr);
                }
             }
          } else if (strcmp("viewing", tmpstr) == 0) {
@@ -692,7 +692,7 @@ int parse_json_command(char *command_string, char *topic) {
             struct json_object *request_id_obj = NULL;
             if (json_object_object_get_ex(parsed_json, "request_id", &request_id_obj)) {
                request_id = json_object_get_string(request_id_obj);
-               LOG_INFO("Viewing command with request_id: %s", request_id);
+               OLOG_INFO("Viewing command with request_id: %s", request_id);
             }
 
             time(&r_time);
@@ -701,7 +701,7 @@ int parse_json_command(char *command_string, char *topic) {
                strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S", l_time);
                trigger_snapshot(datetime, request_id);
             } else {
-               LOG_ERROR("Failed to get local time for snapshot");
+               OLOG_ERROR("Failed to get local time for snapshot");
             }
          } else if (strcmp("ai", tmpstr) == 0) {
             const char *aiName = NULL;
@@ -718,7 +718,7 @@ int parse_json_command(char *command_string, char *topic) {
             if (aiName != NULL && aiState != NULL) {
                process_ai_state(aiName, aiState);
             } else {
-               LOG_WARNING("AI command missing name or state");
+               OLOG_WARNING("AI command missing name or state");
             }
          } else if (strcmp("map", tmpstr) == 0) {
             if (json_object_object_get_ex(parsed_json, "action", &tmpobj)) {
@@ -772,7 +772,7 @@ int parse_json_command(char *command_string, char *topic) {
                   }
 
                   if (enabled > -1) {
-                     LOG_INFO("Going to enable or disable %s.", tmpstr);
+                     OLOG_INFO("Going to enable or disable %s.", tmpstr);
 
                      /* Recording/Streaming */
                      if (!strcmp(tmpstr, "record")) {
@@ -855,7 +855,7 @@ int parse_json_command(char *command_string, char *topic) {
                                                 "Requested HUD, '%s', not found.", hudName);
                                        temp_msg[sizeof(temp_msg) - 1] = '\0';
                                        mqttTextToSpeech(temp_msg);
-                                       LOG_ERROR(temp_msg);
+                                       OLOG_ERROR(temp_msg);
                                     }
                                  }
                               }
@@ -887,9 +887,9 @@ int parse_json_command(char *command_string, char *topic) {
                                              transition_type = json_object_get_int(tmpobj);
                                              if (transition_type < 0 ||
                                                  transition_type >= TRANSITION_MAX) {
-                                                LOG_WARNING("Invalid transition type %d in JSON "
-                                                            "command, using default",
-                                                            transition_type);
+                                                OLOG_WARNING("Invalid transition type %d in JSON "
+                                                             "command, using default",
+                                                             transition_type);
                                                 transition_type =
                                                     target
                                                         ->transition_type;  // Fall back to default
@@ -976,26 +976,26 @@ int serial_port_connect(const char *port_name, speed_t baud_rate, int *fd) {
 
    if (strcmp(port_name, "") == 0) {
       *fd = fileno(stdin);
-      LOG_INFO("Using stdin for commands instead of serial port");
+      OLOG_INFO("Using stdin for commands instead of serial port");
       return 0;
    }
 
    // Open the serial port
    *fd = open(port_name, O_RDWR | O_NOCTTY);
    if (*fd == -1) {
-      LOG_ERROR("Unable to open serial port %s: %s", port_name, strerror(errno));
+      OLOG_ERROR("Unable to open serial port %s: %s", port_name, strerror(errno));
       return -1;
    }
 
-   LOG_INFO("Serial port %s opened successfully.", port_name);
+   OLOG_INFO("Serial port %s opened successfully.", port_name);
 
    // Clear all settings
    memset(&SerialPortSettings, 0, sizeof(SerialPortSettings));
 
    // Get current settings
    if (tcgetattr(*fd, &SerialPortSettings) != 0) {
-      LOG_ERROR("Failed to get port attributes: %s", strerror(errno));
-      LOG_ERROR("Closing port.");
+      OLOG_ERROR("Failed to get port attributes: %s", strerror(errno));
+      OLOG_ERROR("Closing port.");
       close(*fd);
       return -1;
    }
@@ -1028,8 +1028,8 @@ int serial_port_connect(const char *port_name, speed_t baud_rate, int *fd) {
 
    // Apply settings
    if (tcsetattr(*fd, TCSANOW, &SerialPortSettings) != 0) {
-      LOG_ERROR("ERROR in setting attributes: %s", strerror(errno));
-      LOG_ERROR("Closing port.");
+      OLOG_ERROR("ERROR in setting attributes: %s", strerror(errno));
+      OLOG_ERROR("Closing port.");
       close(*fd);
       return -1;
    }
@@ -1074,10 +1074,10 @@ void *serial_command_processing_thread(void *arg) {
    /* Initial connection */
    if (serial_port_connect(usb_port, serial_speed, &sfd) != 0) {
       if (strcmp(usb_port, "") != 0) {
-         LOG_ERROR("Initial connection to serial port %s failed, will retry", usb_port);
+         OLOG_ERROR("Initial connection to serial port %s failed, will retry", usb_port);
          // Continue anyway - main loop will handle reconnection
       } else {
-         LOG_ERROR("Failed to open stdin, exiting thread");
+         OLOG_ERROR("Failed to open stdin, exiting thread");
          return NULL;
       }
    } else {
@@ -1098,23 +1098,23 @@ void *serial_command_processing_thread(void *arg) {
             int backoff_delay = (reconnect_attempts > max_reconnect_delay) ? max_reconnect_delay
                                                                            : reconnect_attempts;
 
-            LOG_INFO("Attempting to reconnect to %s (attempt %d, delay %d sec)", usb_port,
-                     reconnect_attempts + 1, backoff_delay);
+            OLOG_INFO("Attempting to reconnect to %s (attempt %d, delay %d sec)", usb_port,
+                      reconnect_attempts + 1, backoff_delay);
 
             sleep(backoff_delay);  // Delay before reconnection attempt
 
             if (serial_port_connect(usb_port, serial_speed, &sfd) == 0) {
-               LOG_INFO("Successfully reconnected to %s", usb_port);
+               OLOG_INFO("Successfully reconnected to %s", usb_port);
                reconnect_attempts = 0;
                last_successful_read = time(NULL);
                serial_set_state(-1, NULL, sfd);  // Update just the file descriptor
             } else {
-               LOG_WARNING("Failed to reconnect to %s", usb_port);
+               OLOG_WARNING("Failed to reconnect to %s", usb_port);
                reconnect_attempts++;
                continue;
             }
          } else {
-            LOG_ERROR("Invalid file descriptor and not using serial port, exiting thread");
+            OLOG_ERROR("Invalid file descriptor and not using serial port, exiting thread");
             break;
          }
       }
@@ -1123,8 +1123,8 @@ void *serial_command_processing_thread(void *arg) {
       time_t current_time = time(NULL);
       if (strcmp(usb_port, "") != 0 && last_successful_read > 0 &&
           (current_time - last_successful_read) > watchdog_timeout_sec) {
-         LOG_WARNING("No data received for %ld seconds, attempting reconnection",
-                     current_time - last_successful_read);
+         OLOG_WARNING("No data received for %ld seconds, attempting reconnection",
+                      current_time - last_successful_read);
 
          /* Close and invalidate the file descriptor */
          close(sfd);
@@ -1146,7 +1146,7 @@ void *serial_command_processing_thread(void *arg) {
             continue;
          }
 
-         LOG_ERROR("Select error: %s", strerror(errno));
+         OLOG_ERROR("Select error: %s", strerror(errno));
 
          /* Handle serious errors by reconnecting */
          if (strcmp(usb_port, "") != 0) {
@@ -1154,7 +1154,7 @@ void *serial_command_processing_thread(void *arg) {
             sfd = -1;
             continue;  // Will trigger reconnection on next iteration
          } else {
-            LOG_ERROR("Select error on stdin, exiting thread");
+            OLOG_ERROR("Select error on stdin, exiting thread");
             break;
          }
       } else if (select_result == 0) {
@@ -1170,26 +1170,26 @@ void *serial_command_processing_thread(void *arg) {
 
       /* Check bytes available */
       if (ioctl(sfd, FIONREAD, &bytes_available) == -1) {
-         LOG_ERROR("ioctl error: %s", strerror(errno));
+         OLOG_ERROR("ioctl error: %s", strerror(errno));
          if (strcmp(usb_port, "") != 0) {
             close(sfd);
             sfd = -1;
             continue;  // Will trigger reconnection on next iteration
          } else {
-            LOG_ERROR("ioctl error on stdin, exiting thread");
+            OLOG_ERROR("ioctl error on stdin, exiting thread");
             break;
          }
       }
 
       if (bytes_available == 0) {
          if (strcmp(usb_port, "") != 0) {
-            LOG_WARNING("Zero bytes available but select indicated ready - possible device issue");
+            OLOG_WARNING("Zero bytes available but select indicated ready - possible device issue");
             /* Test the connection by doing a non-blocking zero-length write */
             flags = fcntl(sfd, F_GETFL, 0);
             fcntl(sfd, F_SETFL, flags | O_NONBLOCK);
 
             if (write(sfd, NULL, 0) < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-               LOG_WARNING("Connection test failed: %s", strerror(errno));
+               OLOG_WARNING("Connection test failed: %s", strerror(errno));
                close(sfd);
                sfd = -1;
                continue;  // Will trigger reconnection on next iteration
@@ -1215,14 +1215,14 @@ void *serial_command_processing_thread(void *arg) {
 
       if (select_result <= 0) {
          if (select_result < 0) {
-            LOG_ERROR("Read select error: %s", strerror(errno));
+            OLOG_ERROR("Read select error: %s", strerror(errno));
          } else {
-            LOG_WARNING("Read operation timed out after 2 seconds");
+            OLOG_WARNING("Read operation timed out after 2 seconds");
          }
 
          /* Handle timeout or error */
          if (strcmp(usb_port, "") != 0) {
-            LOG_WARNING("Possible device hang, attempting to recover connection");
+            OLOG_WARNING("Possible device hang, attempting to recover connection");
             /* Restore original flags before closing */
             fcntl(sfd, F_SETFL, flags);
             close(sfd);
@@ -1245,23 +1245,23 @@ void *serial_command_processing_thread(void *arg) {
       fcntl(sfd, F_SETFL, flags);
 
       if (read_result < 0) {
-         LOG_ERROR("Read error: %s", strerror(errno));
+         OLOG_ERROR("Read error: %s", strerror(errno));
 
          /* Handle serious I/O errors */
          if (errno == EIO || errno == ENXIO || errno == ENODEV || errno == EBADF) {
-            LOG_WARNING("Serious I/O error, reconnecting");
+            OLOG_WARNING("Serious I/O error, reconnecting");
             if (strcmp(usb_port, "") != 0) {
                close(sfd);
                sfd = -1;
                continue;  // Will trigger reconnection on next iteration
             } else {
-               LOG_ERROR("Cannot recover from read error on stdin");
+               OLOG_ERROR("Cannot recover from read error on stdin");
                break;
             }
          }
          continue;
       } else if (read_result == 0) {
-         LOG_WARNING("Zero bytes read despite having bytes available - possible disconnection");
+         OLOG_WARNING("Zero bytes read despite having bytes available - possible disconnection");
          if (strcmp(usb_port, "") != 0) {
             close(sfd);
             sfd = -1;
@@ -1322,7 +1322,7 @@ void *serial_command_processing_thread(void *arg) {
          } else if (command_length < MAX_SERIAL_BUFFER_LENGTH - 2) {
             command_buffer[command_length++] = sread_buf[j];
          } else {
-            LOG_WARNING("Command buffer overflow, discarding data");
+            OLOG_WARNING("Command buffer overflow, discarding data");
             command_buffer[0] = '\0';
             command_length = 0;
          }
@@ -1335,7 +1335,7 @@ void *serial_command_processing_thread(void *arg) {
       serial_set_state(-1, NULL, -1);  // Mark the fd as invalid
    }
 
-   LOG_INFO("Serial command processing thread exiting");
+   OLOG_INFO("Serial command processing thread exiting");
    return NULL;
 }
 
@@ -1377,7 +1377,7 @@ int serial_port_send(const char *command) {
    // Send the command
    ssize_t bytes_written = write(fd, buffer, cmd_len);
    if (bytes_written < 0) {
-      LOG_ERROR("Failed to send command to serial port: %s", strerror(errno));
+      OLOG_ERROR("Failed to send command to serial port: %s", strerror(errno));
       return -1;
    }
 
@@ -1395,13 +1395,13 @@ int forward_helmet_command_to_serial(char *command_string) {
 
    // Only forward if serial is enabled
    if (!serial_is_enabled()) {
-      LOG_WARNING("Serial not enabled. Not forwarding helmet message.");
+      OLOG_WARNING("Serial not enabled. Not forwarding helmet message.");
       return -1;
    }
 
    // On first transmission, clear any stale buffer data
    if (first_transmission) {
-      LOG_INFO("First transmission detected, clearing stale buffer...");
+      OLOG_INFO("First transmission detected, clearing stale buffer...");
 
       int fd = serial_get_fd();
       if (fd >= 0) {
@@ -1417,10 +1417,10 @@ int forward_helmet_command_to_serial(char *command_string) {
       }
 
       first_transmission = 0;
-      LOG_INFO("Stale buffer cleared, proceeding with real command...");
+      OLOG_INFO("Stale buffer cleared, proceeding with real command...");
    }
 
-   LOG_INFO("Forwarding helmet command to serial: %s", command_string);
+   OLOG_INFO("Forwarding helmet command to serial: %s", command_string);
    return serial_port_send(command_string);
 }
 
@@ -1439,13 +1439,13 @@ void *socket_command_processing_thread(void *arg) {
 
    // Creating socket file descriptor
    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-      LOG_ERROR("Socket creation failed.");
+      OLOG_ERROR("Socket creation failed.");
       return NULL;
    }
 
    // Attaching socket to the port
    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-      LOG_ERROR("Setsockopt failed.");
+      OLOG_ERROR("Setsockopt failed.");
       close(server_fd);
       return NULL;
    }
@@ -1456,19 +1456,19 @@ void *socket_command_processing_thread(void *arg) {
 
    // Binding the socket to the network address and port
    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-      LOG_ERROR("Socket bind failed.");
+      OLOG_ERROR("Socket bind failed.");
       close(server_fd);
       return NULL;
    }
 
    // Start listening for incoming connections
    if (listen(server_fd, 3) < 0) {
-      LOG_ERROR("Listen failed.");
+      OLOG_ERROR("Listen failed.");
       close(server_fd);
       return NULL;
    }
 
-   LOG_INFO("Helmet TCP server listening on port %d", port);
+   OLOG_INFO("Helmet TCP server listening on port %d", port);
 
    while (!checkShutdown()) {
       fd_set readfds;
@@ -1485,7 +1485,7 @@ void *socket_command_processing_thread(void *arg) {
       activity = select(server_fd + 1, &readfds, NULL, NULL, &reconnect_timeout);
 
       if (activity < 0 && errno != EINTR) {
-         LOG_ERROR("Select error.");
+         OLOG_ERROR("Select error.");
          continue;
       }
 
@@ -1494,11 +1494,11 @@ void *socket_command_processing_thread(void *arg) {
 
          new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
          if (new_socket < 0) {
-            LOG_ERROR("Accept failed.");
+            OLOG_ERROR("Accept failed.");
             continue;
          }
 
-         LOG_INFO("Accepted new connection.");
+         OLOG_INFO("Accepted new connection.");
 
          // Set timeout
          read_timeout.tv_sec = SERVER_TIMEOUT;
@@ -1507,7 +1507,7 @@ void *socket_command_processing_thread(void *arg) {
          // Set the receive timeout for the new socket
          if (setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&read_timeout,
                         sizeof(read_timeout)) < 0) {
-            LOG_ERROR("Setting socket receive timeout failed.");
+            OLOG_ERROR("Setting socket receive timeout failed.");
             close(new_socket);
             continue;
          }
@@ -1519,24 +1519,24 @@ void *socket_command_processing_thread(void *arg) {
                registerArmor("helmet");
                parse_json_command(buffer, "helmet");
             } else if (bytes_read == 0) {
-               LOG_INFO("Client disconnected.");
+               OLOG_INFO("Client disconnected.");
                break;
             } else if (bytes_read < 0 && errno == EWOULDBLOCK) {
-               LOG_WARNING("Socket receive timed out.");
+               OLOG_WARNING("Socket receive timed out.");
                break;  // Timeout occurred
             } else if (bytes_read < 0) {
-               LOG_ERROR("Socket read failed with error: %s", strerror(errno));
+               OLOG_ERROR("Socket read failed with error: %s", strerror(errno));
                break;
             }
          }
 
          close(new_socket);
-         LOG_INFO("Closed connection socket, ready for new connections.");
+         OLOG_INFO("Closed connection socket, ready for new connections.");
       }
    }
 
    close(server_fd);
-   LOG_INFO("Server socket closed.");
+   OLOG_INFO("Server socket closed.");
 
    return NULL;
 }

@@ -36,9 +36,9 @@
 
 #include "config/config_manager.h"
 #include "core/mirage.h"
+#include "logging.h"
 #include "media/recording.h"
 #include "util/image_utils.h"
-#include "util/logging.h"
 
 /* Global variables for PBO system */
 static GLuint g_pboIds[3] = { 0, 0, 0 };
@@ -187,7 +187,7 @@ static char *sha256_compute(const unsigned char *data, size_t len) {
 
    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
    if (!ctx) {
-      LOG_ERROR("sha256_compute: Failed to create EVP context");
+      OLOG_ERROR("sha256_compute: Failed to create EVP context");
       return NULL;
    }
 
@@ -196,7 +196,7 @@ static char *sha256_compute(const unsigned char *data, size_t len) {
 
    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1 || EVP_DigestUpdate(ctx, data, len) != 1 ||
        EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
-      LOG_ERROR("sha256_compute: SHA256 computation failed");
+      OLOG_ERROR("sha256_compute: SHA256 computation failed");
       EVP_MD_CTX_free(ctx);
       return NULL;
    }
@@ -231,19 +231,19 @@ static char *sha256_file(const char *filepath) {
 
    FILE *f = fopen(filepath, "rb");
    if (!f) {
-      LOG_WARNING("sha256_file: Cannot open file: %s", filepath);
+      OLOG_WARNING("sha256_file: Cannot open file: %s", filepath);
       return NULL;
    }
 
    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
    if (!ctx) {
-      LOG_ERROR("sha256_file: Failed to create EVP context");
+      OLOG_ERROR("sha256_file: Failed to create EVP context");
       fclose(f);
       return NULL;
    }
 
    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
-      LOG_ERROR("sha256_file: Failed to initialize SHA256");
+      OLOG_ERROR("sha256_file: Failed to initialize SHA256");
       EVP_MD_CTX_free(ctx);
       fclose(f);
       return NULL;
@@ -253,7 +253,7 @@ static char *sha256_file(const char *filepath) {
    size_t bytes_read;
    while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
       if (EVP_DigestUpdate(ctx, buffer, bytes_read) != 1) {
-         LOG_ERROR("sha256_file: Failed to update hash");
+         OLOG_ERROR("sha256_file: Failed to update hash");
          EVP_MD_CTX_free(ctx);
          fclose(f);
          return NULL;
@@ -265,7 +265,7 @@ static char *sha256_file(const char *filepath) {
    unsigned int hash_len = 0;
 
    if (EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
-      LOG_ERROR("sha256_file: Failed to finalize hash");
+      OLOG_ERROR("sha256_file: Failed to finalize hash");
       EVP_MD_CTX_free(ctx);
       return NULL;
    }
@@ -356,7 +356,7 @@ int request_screenshot(int with_overlay,
 
    /* If there's already a pending request, don't overwrite it */
    if (g_screenshot_requested) {
-      LOG_WARNING("Screenshot already requested, ignoring new request");
+      OLOG_WARNING("Screenshot already requested, ignoring new request");
       result = FAILURE;
    } else {
       /* Set the request flag */
@@ -376,8 +376,8 @@ int request_screenshot(int with_overlay,
          g_screenshot_path[0] = '\0'; /* Empty string indicates auto-generated filename */
       }
 
-      LOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s", with_overlay,
-               full_resolution, output_filename ? output_filename : "auto-generated");
+      OLOG_INFO("Screenshot requested: overlay=%d, full_res=%d, path=%s", with_overlay,
+                full_resolution, output_filename ? output_filename : "auto-generated");
    }
 
    pthread_mutex_unlock(&g_screenshot_mutex);
@@ -395,14 +395,14 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
                                  int pitch) {
    /* Basic parameter checks */
    if (!renderer || !pixels) {
-      LOG_ERROR("Invalid arguments: renderer=%p, pixels=%p", (void *)renderer, (void *)pixels);
+      OLOG_ERROR("Invalid arguments: renderer=%p, pixels=%p", (void *)renderer, (void *)pixels);
       return 1;
    }
 
    /* Grab current GL context from SDL (assumes we've made it current) */
    SDL_GLContext currentContext = SDL_GL_GetCurrentContext();
    if (!currentContext) {
-      LOG_ERROR("No current GL context found.");
+      OLOG_ERROR("No current GL context found.");
       return 1;
    }
 
@@ -479,7 +479,7 @@ int OpenGL_RenderReadPixelsAsync(SDL_Renderer *renderer,
    } else {
       /* For the first 2 frames, we'll just return success without
          actually trying to read data, since we're still priming the pipeline */
-      LOG_INFO("Priming PBO pipeline, frame %d", g_frameCount);
+      OLOG_INFO("Priming PBO pipeline, frame %d", g_frameCount);
    }
 
    /* Unbind PBO */
@@ -512,7 +512,7 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
                                 int pitch) {
    /* Basic parameter checks */
    if (!renderer || !pixels) {
-      LOG_ERROR("Invalid arguments for synchronous read");
+      OLOG_ERROR("Invalid arguments for synchronous read");
       return 1;
    }
 
@@ -532,7 +532,7 @@ int OpenGL_RenderReadPixelsSync(SDL_Renderer *renderer,
    const int bytesPerPixel = 4; /* RGBA */
    GLubyte *tempBuffer = (GLubyte *)malloc(readW * readH * bytesPerPixel);
    if (!tempBuffer) {
-      LOG_ERROR("Failed to allocate temporary buffer for pixel read");
+      OLOG_ERROR("Failed to allocate temporary buffer for pixel read");
       return 1;
    }
 
@@ -585,15 +585,15 @@ int take_screenshot(int with_overlay,
       filename[PATH_MAX + 31 - 1] = '\0';
    }
 
-   LOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d", filename, with_overlay,
-            full_resolution);
+   OLOG_INFO("Taking screenshot: %s, overlay: %d, full res: %d", filename, with_overlay,
+             full_resolution);
 
    if (with_overlay) {
       /* With overlay - capture what's currently on screen */
       void *screenshot_buffer = malloc(this_hds->eye_output_width * 2 * RGB_OUT_SIZE *
                                        this_hds->eye_output_height);
       if (screenshot_buffer == NULL) {
-         LOG_ERROR("Unable to allocate memory for screenshot buffer");
+         OLOG_ERROR("Unable to allocate memory for screenshot buffer");
          return FAILURE;
       }
 
@@ -601,7 +601,7 @@ int take_screenshot(int with_overlay,
       result = OpenGL_RenderReadPixelsSync(renderer, NULL, PIXEL_FORMAT_OUT, screenshot_buffer,
                                            this_hds->eye_output_width * 2 * RGB_OUT_SIZE);
       if (result != 0) {
-         LOG_ERROR("Failed to read pixels: %d", result);
+         OLOG_ERROR("Failed to read pixels: %d", result);
          free(screenshot_buffer);
          return FAILURE;
       }
@@ -651,7 +651,7 @@ int take_screenshot(int with_overlay,
          temp_buffer = malloc(this_hds->cam_input_width * this_hds->cam_input_height * 4);
          if (temp_buffer == NULL) {
             pthread_mutex_unlock(&this_vod->p_mutex);
-            LOG_ERROR("Unable to allocate memory for camera frame buffer");
+            OLOG_ERROR("Unable to allocate memory for camera frame buffer");
             return FAILURE;
          }
 
@@ -666,7 +666,7 @@ int take_screenshot(int with_overlay,
             free(temp_buffer);
          }
          pthread_mutex_unlock(&this_vod->p_mutex);
-         LOG_ERROR("No valid pixel data available for screenshot");
+         OLOG_ERROR("No valid pixel data available for screenshot");
          return FAILURE;
       }
 
@@ -724,10 +724,10 @@ int take_screenshot(int with_overlay,
    }
 
    if (result != 0) {
-      LOG_ERROR("Image processing failed with error code: %d", result);
+      OLOG_ERROR("Image processing failed with error code: %d", result);
       return 3;
    } else {
-      LOG_INFO("Screenshot saved to: %s", filename);
+      OLOG_INFO("Screenshot saved to: %s", filename);
       return 0;
    }
 }
@@ -778,7 +778,7 @@ void trigger_snapshot(const char *datetime, const char *request_id) {
 static void mqttViewingSnapshotOCP(const char *filename, const char *request_id) {
    struct json_object *response = json_object_new_object();
    if (!response) {
-      LOG_ERROR("Failed to create JSON response object");
+      OLOG_ERROR("Failed to create JSON response object");
       return;
    }
 
@@ -827,11 +827,11 @@ static void mqttViewingSnapshotOCP(const char *filename, const char *request_id)
             json_object_object_add(response, "value", json_object_new_string(filename));
 
             free(base64_data);
-            LOG_INFO("Sending inline image data: %zu bytes", file_size);
+            OLOG_INFO("Sending inline image data: %zu bytes", file_size);
          } else {
             /* Base64 encoding failed, fall back to file path */
             json_object_object_add(response, "value", json_object_new_string(filename));
-            LOG_WARNING("Base64 encoding failed, sending file path instead");
+            OLOG_WARNING("Base64 encoding failed, sending file path instead");
          }
 
          if (checksum) {
@@ -840,7 +840,7 @@ static void mqttViewingSnapshotOCP(const char *filename, const char *request_id)
       } else {
          /* File read failed, fall back to file path */
          json_object_object_add(response, "value", json_object_new_string(filename));
-         LOG_WARNING("Failed to read file for inline data, sending path instead");
+         OLOG_WARNING("Failed to read file for inline data, sending path instead");
       }
    } else {
       /* File reference mode - just send the path */
@@ -853,11 +853,11 @@ static void mqttViewingSnapshotOCP(const char *filename, const char *request_id)
          free(checksum);
       }
 
-      LOG_INFO("Sending file reference: %s", filename);
+      OLOG_INFO("Sending file reference: %s", filename);
    }
 
    const char *json_str = json_object_to_json_string(response);
-   LOG_INFO("OCP Response: %.200s%s", json_str, strlen(json_str) > 200 ? "..." : "");
+   OLOG_INFO("OCP Response: %.200s%s", json_str, strlen(json_str) > 200 ? "..." : "");
 
    mqttSendMessage("dawn", json_str);
    json_object_put(response);
@@ -875,7 +875,7 @@ static void mqttViewingSnapshotErrorOCP(const char *request_id,
                                         const char *error_message) {
    struct json_object *response = json_object_new_object();
    if (!response) {
-      LOG_ERROR("Failed to create JSON error response object");
+      OLOG_ERROR("Failed to create JSON error response object");
       return;
    }
 
@@ -899,7 +899,7 @@ static void mqttViewingSnapshotErrorOCP(const char *request_id,
    json_object_object_add(response, "error", error_obj);
 
    const char *json_str = json_object_to_json_string(response);
-   LOG_WARNING("OCP Error Response: %s", json_str);
+   OLOG_WARNING("OCP Error Response: %s", json_str);
 
    mqttSendMessage("dawn", json_str);
    json_object_put(response);
@@ -991,11 +991,11 @@ void process_screenshot_requests(int no_camera_mode) {
       /* Send notification if it was an MQTT request */
       if (source == SCREENSHOT_MQTT) {
          if (result == 0) {
-            LOG_INFO("Screenshot for MQTT. Sending with request_id=%s",
-                     request_id[0] ? request_id : "(none)");
+            OLOG_INFO("Screenshot for MQTT. Sending with request_id=%s",
+                      request_id[0] ? request_id : "(none)");
             mqttViewingSnapshotOCP(output_path, request_id[0] ? request_id : NULL);
          } else {
-            LOG_ERROR("Screenshot capture failed (result=%d)", result);
+            OLOG_ERROR("Screenshot capture failed (result=%d)", result);
             mqttViewingSnapshotErrorOCP(request_id[0] ? request_id : NULL, "CAPTURE_FAILED",
                                         "Failed to capture screenshot from camera");
          }

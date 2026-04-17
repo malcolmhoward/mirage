@@ -26,7 +26,7 @@
 #include <json-c/json.h>
 #include <string.h>
 
-#include "util/logging.h"
+#include "logging.h"
 #include "util/string_utils.h"
 
 #define MAX_SECRET_LENGTH 256
@@ -51,7 +51,7 @@ static void read_secret(struct json_object *root, const char *key, char *dest, s
 int secrets_load(const char *filename) {
    struct json_object *root = json_object_from_file(filename);
    if (root == NULL) {
-      LOG_WARNING("Could not load secrets file: %s (continuing without secrets)", filename);
+      OLOG_WARNING("Could not load secrets file: %s (continuing without secrets)", filename);
       return 1;
    }
 
@@ -63,7 +63,7 @@ int secrets_load(const char *filename) {
    read_secret(root, "dawn_service_token", dawn_service_token, sizeof(dawn_service_token));
 
    json_object_put(root);
-   LOG_INFO("Secrets loaded from %s", filename);
+   OLOG_INFO("Secrets loaded from %s", filename);
    return 0;
 }
 

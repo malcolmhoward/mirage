@@ -1,290 +1,113 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
 ## Project Overview
 
-MIRAGE (Multi-Input Reconnaissance and Guidance Environment) is a heads-up display (HUD) system for the OASIS Project, designed to run on NVIDIA Jetson and Raspberry Pi platforms. It renders real-time camera feeds with overlaid HUD elements to dual displays (one per eye), with support for object detection, video recording, and streaming.
+MIRAGE (Multi-Input Reconnaissance and Guidance Environment) is a heads-up display system for the OASIS Project, targeting NVIDIA Jetson and Raspberry Pi. It renders real-time camera feeds with overlaid HUD elements to dual displays (one per eye), with object detection, video recording, and streaming.
 
-## Important: Working with the Developer
+See @README.md for features and @GETTING_STARTED.md for setup.
 
-When the developer asks questions, they are typically asking for feedback, analysis, or suggestions FIRST - not requesting immediate implementation. Always provide your thoughts, recommendations, and discuss trade-offs before taking action. Wait for explicit confirmation (e.g., "go ahead", "do it", "yes") before implementing changes.
+## Critical Rules — Always Follow
 
-**CRITICAL: NEVER delete files.** Always tell the developer which files should be deleted and let them do it manually. Files may contain secrets, credentials, or other data that cannot be recovered.
+- **NEVER delete files.** Tell the developer which files to delete.
+- **NEVER run `git add`, `git commit`, or `git push`.** Suggest the command and message; let the developer run it.
+- **Feedback before implementation.** Provide analysis, trade-offs, and a recommendation *first*. Wait for explicit confirmation ("go ahead", "do it", "yes") before coding.
+- **Format before committing.** Every change must pass `./format_code.sh --check`. Pre-commit hook enforces this.
+- **GPL header on every new `.c`/`.cpp`/`.h`.** Template in @CODING_STYLE_GUIDE.md.
+- **Design doc commit policy**: commit design docs only when they describe shipped or in-flight code. Docs for planned-but-unstarted work stay untracked.
 
-**CRITICAL: NEVER run `git add` or `git commit`.** Always tell the developer which files to add and suggest a commit message. Let them run the git commands manually.
+## Build & Test
 
-## Building the Project
-
-### Standard Build Process
+Default build directory is `build-debug/` (created by the `debug` CMake
+preset).  Earlier `build/` layouts are legacy — prefer the preset.
 
 ```bash
-# Configure with CMake preset (creates build directory automatically)
+# Standard build
 cmake --preset debug
-
-# Build
 make -C build-debug -j$(nproc)
 
-# Run from project root
-./build-debug/mirage
-```
-
-### Legacy Build (CMake < 3.21)
-
-```bash
-mkdir -p build && cd build
-cmake ..
-make -j$(nproc)
-```
-
-### Build with Optional Features
-
-```bash
+# With optional features
 cmake --preset debug -DUSE_JETSON_INFERENCE=ON -DUSE_CUDA=ON
+
+# Run
+./build-debug/mirage
+
+# Format
+./format_code.sh                 # fix all
+./format_code.sh --changed       # only changed files (fast)
+./format_code.sh --check         # CI mode
 ```
 
-### Code Formatting
+- Dependencies and install steps: see @README.md and @GETTING_STARTED.md.
+- Pre-commit hook: `./install-git-hooks.sh` (one-time).
+- Manual testing on device required for camera, HUD rendering, MQTT, recording.
 
-```bash
-# Format all code (required before committing)
-./format_code.sh
+## Code Standards
 
-# Format only changed files (fast)
-./format_code.sh --changed
+Full standards in @CODING_STYLE_GUIDE.md. Critical gotchas:
 
-# Check formatting without modifying files
-./format_code.sh --check
+- **Return codes**: `SUCCESS` (0) / `FAILURE` (1) — never negative.
+- **Naming**: `snake_case` functions/vars, `UPPER_CASE` constants, `_t` suffix on types.
+- **Logging**: `LOG_INFO` / `LOG_WARNING` / `LOG_ERROR` macros.
+- **Formatting**: 3-space indent, 100-char lines, K&R braces, right-aligned pointers. Enforced by `.clang-format`.
+- **Memory**: prefer static allocation for embedded; check malloc; free and NULL.
 
-# Install pre-commit hook
-./install-git-hooks.sh
-```
+## Threading Model
 
-The `.clang-format` configuration enforces:
-- 3-space indentation (no tabs)
-- 100 character line limit
-- K&R brace style
-- Right-aligned pointers (`int *ptr`)
-- Automatic include sorting
+Multiple threads for concurrent processing:
 
-### Dependencies
+- `video_proc_thread` — camera input, SDL render
+- `vid_out_thread` — video output (disk + streaming)
+- `command_proc_thread` — USB/serial input
+- `thread_handles[0..7]` — audio playback (NUM_AUDIO_THREADS=8)
+- `od_L_thread`, `od_R_thread` — object detection per eye (when enabled)
+- `cpu_util_thread` / `map_download_thread` — monitoring / map tiles
+- Mosquitto loop — MQTT message handling
 
-See `README.md` and `GETTING_STARTED.md` for full installation. Core dependencies:
-- CMake 3.15+ (3.21+ for presets)
-- SDL2, SDL2_image, SDL2_ttf, SDL2_gfx
-- GStreamer 1.0 (with plugins)
-- json-c
-- libmosquitto
-- libcurl, OpenSSL
-- OpenGL, GLEW, GD
-- libvorbisfile, ALSA
-- Optional: jetson-inference, CUDA
+**Thread-safety rules:**
 
-## Architecture
+- **SDL renderer**: main thread only — never call `SDL_Render*` from other threads.
+- **GStreamer pipeline**: recording thread (`vid_out_thread`) only.
+- **Config reload**: mutex-protected in `config_manager.c` (5s polling).
+- **MQTT callbacks**: run in mosquitto's loop thread; route via topic matching.
+- **Audio playback**: isolated via POSIX message queues (8 threads, no shared state).
+- **Atomic flags**: `quit`, `detect_enabled`, `active_alerts`, `averageFrameRate` are `_Atomic`.
+- **AI state**: `aiName`/`aiState` use double-buffering with atomic index swap (lock-free).
+- **Video buffers**: `v_mutex` protects frame rotation; triple-buffered pre-allocated pool.
+- **Shutdown order**: MQTT loop stopped **before** element list freed (prevents use-after-free in `registerArmor`).
 
-### Threading Model
+Not yet synchronized (benign in practice): sensor structs (`motion`, `enviro`, `gps`, `system_metrics`) show torn reads momentarily but don't crash. Detection arrays fine while detection disabled; need double-buffering when re-enabled.
 
-The system uses multiple threads for concurrent processing:
-- `video_proc_thread` - Camera input processing, renders to SDL
-- `vid_out_thread` - Video output (disk recording and/or streaming)
-- `command_proc_thread` - USB/Serial input handling
-- `thread_handles[0..7]` - Audio playback threads (NUM_AUDIO_THREADS=8)
-- `od_L_thread`, `od_R_thread` - Object detection per eye (when enabled)
-- `cpu_util_thread` - CPU utilization monitoring
-- `map_download_thread` - Map tile updates
-- Mosquitto loop - MQTT message handling
+## MQTT Integration
 
-### Key Modules
+MIRAGE communicates with other OASIS components:
+- **AURA** (helmet sensors) → MIRAGE: motion, orientation, environmental, GPS
+- **SPARK** (armor sensors) → MIRAGE: component status, audio commands
+- **DAWN** (AI assistant) ↔ MIRAGE: AI state, TTS notifications, image capture requests
 
-- `mirage.c/h` - Main entry point, thread coordination, SDL renderer
-- `hud_manager.c/h` - HUD state management and element lifecycle
-- `element_renderer.c/h` - Renders individual HUD elements (static, animated, text, special)
-- `gauge_renderer.c/h` - Dynamic gauge drawing with frame-rate independent smoothing
-- `config_parser.c/h` - JSON configuration file parsing, element/animation structures, text source resolution
-- `config_manager.c/h` - Runtime configuration management with auto-refresh (5s polling), MQTT settings
-- `config_secrets.c/h` - Runtime secrets loader (API keys, MQTT credentials from `secrets.json`)
-- `mosquitto_comms.c/h` - MQTT communication with other OASIS components
-- `recording.c/h` - GStreamer-based video recording and streaming, PulseAudio device validation
-- `screenshot.c/h` - Screenshot and snapshot capture (async, for AI vision)
-- `audio.c/h` - Audio playback via POSIX message queue (8 concurrent threads)
-- `command_processing.c/h` - USB/Serial input handling
-- `detect.cpp/h` - Object detection using Jetson Inference (deprecated)
-- `hud_discovery.c/h` - MQTT HUD discovery protocol (OCP v1.3)
-- `component_status.c/h` - OCP component keepalive protocol
-- `system_metrics.c/h` - CPU/memory/temperature monitoring
-- `logging.c/h` - Centralized logging with file/line/function tracking
-- `string_utils.h` - Safe string utilities (`safe_strncpy`, ported from DAWN common lib)
+All messages conform to OCP v1.4 (ms timestamps, `msg_type` field, `clock_gettime(CLOCK_REALTIME)`).
 
-### Communication
-
-MIRAGE communicates with other OASIS components via MQTT:
-- **AURA** (Helmet Sensors) -> MIRAGE: Motion, orientation, environmental data, GPS
-- **SPARK** (Armor Sensors) -> MIRAGE: Component status, audio commands
-- **DAWN** (AI Assistant) <-> MIRAGE: AI state, TTS notifications, image capture requests
-
-### Platform Support
+## Platform Support
 
 Controlled via `PLATFORM` CMake variable (AUTO, JETSON, RPI):
-- `PLATFORM_JETSON` - NVIDIA hardware encoding (nvv4l2h264enc), nvarguscamerasrc
-- `PLATFORM_RPI` - Raspberry Pi camera module (libcamerasrc)
-- Generic ARM - USB cameras only, software encoding
 
-### Configuration
+- `PLATFORM_JETSON` — nvv4l2h264enc hardware encoding, nvarguscamerasrc
+- `PLATFORM_RPI` — libcamerasrc
+- Generic ARM — USB cameras only, software encoding
 
-- `config.json` - Runtime configuration (camera settings, HUD elements, fonts, paths, MQTT). Hot-reloads every 5 seconds.
-- `config-720p.json` - Alternative 720p resolution config
-- `secrets.json` - Runtime API keys and MQTT credentials (gitignored, loaded at startup). Copy `secrets.json.example` to get started.
-- `defines.h` - Compile-time settings (camera resolution, display dimensions, GStreamer pipelines, feature flags)
-- `version.h` - Version number (manually maintained)
+## Configuration Files
 
-**MQTT Configuration** (`config.json` "mqtt" section + `secrets.json`):
-```json
-// config.json
-"mqtt": {
-   "host": "127.0.0.1",
-   "port": 1883,
-   "tls": false,
-   "tls_ca_cert": "",
-   "tls_cert_path": "",
-   "tls_key_path": ""
-}
+- `config.json` — runtime HUD config; hot-reloads every 5 seconds.
+- `config-720p.json` — alternative 720p resolution.
+- `secrets.json` — API keys and MQTT credentials (gitignored; copy from `secrets.json.example`).
+- `defines.h` — compile-time settings (camera resolution, GStreamer pipelines, feature flags).
+- `version.h` — manually maintained.
 
-// secrets.json
-{
-   "mqtt_username": "",
-   "mqtt_password": ""
-}
-```
-Mirrors DAWN's pattern: connection settings in config, credentials in secrets. Auth and TLS are optional -- if `mqtt_username` is empty, a warning is logged. If `tls` is false, connects without encryption. All fields have safe defaults.
+MQTT auth and TLS are optional: empty `mqtt_username` logs a warning; `tls: false` connects unencrypted. Mirrors DAWN's split of connection settings in `config.json` and credentials in `secrets.json`.
 
-## Coding Standards
+**Change camera resolution** by uncommenting ONE option in `defines.h`:
 
-**MUST follow `CODING_STYLE_GUIDE.md`** - enforced by clang-format.
-
-Key points:
-- 3-space indentation, no tabs
-- 100 character line limit
-- K&R brace style, always use braces for single statements
-- `snake_case` for functions and variables
-- `UPPER_CASE` for constants and macros
-- Types: `typedef` with `_t` suffix (e.g., `log_level_t`)
-- Pointers align right: `int *ptr`
-- Return values: use `SUCCESS` (0) and `FAILURE` (1), never negative values
-- Prefer static allocation over dynamic for embedded systems
-- Use `LOG_INFO()`, `LOG_WARNING()`, `LOG_ERROR()` macros for logging
-- All new files must include the GPL license header block
-
-**File Header (REQUIRED for all new .c/.cpp/.h files)**:
-```c
-/*
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
- * By contributing to this project, you agree to license your contributions
- * under the GPLv3 (or any later version) or any future licenses chosen by
- * the project author(s). Contributions include any modifications,
- * enhancements, or additions to the project. These contributions become
- * part of the project and are adopted by the project author(s).
- *
- * [Brief description of file purpose]
- */
-```
-
-## Development Guidelines
-
-### Thread Safety
-
-When working with shared resources:
-- **SDL Renderer**: Main thread only -- never call SDL_Render* from other threads
-- **GStreamer Pipeline**: Recording thread (`vid_out_thread`) only
-- **Config Reload**: Mutex-protected in `config_manager.c` (5-second polling)
-- **MQTT Callbacks**: Run in Mosquitto's loop thread, route via topic matching
-- **Audio Playback**: Isolated via POSIX message queues (8 threads, no shared state)
-- **Object Detection**: Separate threads per eye, read-only access to frames
-- **Atomic flags**: `quit`, `detect_enabled`, `active_alerts`, `averageFrameRate` are `_Atomic` for safe cross-thread access
-- **AI state**: `aiName`/`aiState` use double-buffering with atomic index swap (lock-free, no torn reads)
-- **Video buffers**: `v_mutex` protects frame buffer rotation; triple-buffered with pre-allocated pool
-- **Window size**: Protected by `windowSizeMutex`
-- **Shutdown order**: MQTT loop is stopped before element list is freed (prevents use-after-free in `registerArmor`)
-
-**Not yet synchronized** (benign in practice):
-- Sensor structs (`motion`, `enviro`, `gps`, `system_metrics`) -- written by MQTT thread, read by render thread. Torn reads show momentarily wrong sensor values, not crashes.
-- Detection arrays -- object detection is disabled. Needs double-buffered results when re-enabled.
-- Log buffer -- generation counter prevents stale renders.
-
-### File Size Monitoring
-
-**Proactively warn** when files approach size limits:
-
-- **1,500+ lines (C)**: Mention that the file is getting large
-- **2,500+ lines**: Recommend splitting before adding more features
-- **New feature in large file**: Suggest creating a separate module instead
-
-**Current large files requiring attention:**
-
-| File | Lines | Status |
-|------|-------|--------|
-| `mirage.c` | 2,546 | AT splitting threshold -- needs modular extraction |
-| `element_renderer.c` | 2,212 | Approaching threshold -- split by renderer type |
-| `config_parser.c` | 1,607 | Above monitoring threshold |
-| `command_processing.c` | 1,533 | Above monitoring threshold |
-
-### Refactoring Large Files
-
-If asked to refactor a large file:
-
-1. **Never attempt full rewrites** - They frequently fail due to interconnected features
-2. **Use incremental extraction** - One feature at a time
-3. **Keep original working** - Extract into new file, import back, test
-4. **Test after each extraction** - Don't batch multiple extractions
-
-## Common Patterns
-
-**MQTT Callbacks** (in `mosquitto_comms.c`):
-```c
-void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
-   /* Subscribe to topics */
-   mosquitto_subscribe(mosq, NULL, "hud", 1);
-}
-
-void on_message(struct mosquitto *mosq, void *obj,
-                const struct mosquitto_message *msg) {
-   /* Route by topic via strncmp */
-   if (strncmp(msg->topic, "hud", 3) == 0) { ... }
-}
-```
-
-**Logging**:
-```c
-LOG_INFO("System initialized");
-LOG_WARNING("Battery voltage low: %.2fV", voltage);
-LOG_ERROR("I2C communication failed: %d", error);
-```
-
-**Config Access** (via `config_parser.h` getters):
-```c
-element *elements = get_elements();
-int count = get_element_count();
-/* Config hot-reloads every 5s via config_manager.c polling */
-```
-
-**HUD Element Registration** (JSON-driven in `config.json`):
-- Elements defined as JSON objects with type, position, size, layer
-- Bitmask-based HUD membership (up to 16 named HUD screens)
-- No code changes needed to add/remove HUD elements
-
-## Camera Resolution
-
-Change camera resolution by uncommenting ONE option in `defines.h`:
 ```c
 //#define USE_720P_30FPS
 #define USE_720P_60FPS      // Default
@@ -292,86 +115,53 @@ Change camera resolution by uncommenting ONE option in `defines.h`:
 //#define USE_1080P_60FPS
 ```
 
-## Important Files to Know
+## Patterns
 
-**Configuration:**
-- `config.json`: Runtime HUD configuration (64KB, hot-reloads), includes MQTT settings
-- `config-720p.json`: Alternative 720p config
-- `secrets.json`: API keys and MQTT credentials (gitignored, copy from `secrets.json.example`)
-- `defines.h`: Compile-time settings (resolution, encoding, features)
-- `version.h`: App version (manually maintained)
+### MQTT Callbacks (`mosquitto_comms.c`)
 
-**Code Formatting:**
-- `.clang-format`: C/C++ formatting rules (3-space indent, 100 char lines)
-- `format_code.sh`: Formatting automation (clang-format-14)
-- `pre-commit.hook`: Git pre-commit hook for formatting
-- `install-git-hooks.sh`: Hook installer
+```c
+void on_message(struct mosquitto *mosq, void *obj,
+                const struct mosquitto_message *msg) {
+   if (strncmp(msg->topic, "hud", 3) == 0) { ... }
+}
+```
 
-**Build:**
-- `CMakeLists.txt`: Build system configuration
-- `CMakePresets.json`: debug/release/ci presets
+### Config Access (via `config_parser.h` getters)
 
-**Assets:**
-- `ui_assets/`: HUD graphics and fonts (mk2, mk2-720p variants)
-- `sound_assets/`: Audio files (Ogg Vorbis)
+```c
+element *elements = get_elements();
+int count = get_element_count();
+// Hot-reloads every 5s via config_manager.c polling
+```
 
-**Tools:**
-- `tools/scale_config.py`: Configuration scaling utility
-- `tools/scale_frames.py`: Frame scaling utility
+### HUD Element Registration (JSON-driven)
 
-## Known Issues and TODOs
+Elements are defined in `config.json` with type, position, size, layer. Bitmask-based HUD membership (up to 16 named screens). No code changes needed to add/remove elements.
 
-1. Object detection deprecated (Jetson Inference integration is outdated)
-2. `mirage.c` at ~2,600 lines -- needs modular extraction (extern coupling, god module)
-3. `element_renderer.c` at ~2,200 lines -- should split by renderer type
-4. No unit tests yet
-5. Element struct (~250 lines) carries all fields for all types -- consider union/subtype pattern
-6. Sensor structs (`motion`, `enviro`, `gps`, `system_metrics`) not synchronized across threads (benign but technically UB)
-7. TCP command socket (`-H` flag) has no authentication -- redesign with WebSocket+auth when needed
-8. Audio subsystem needs redesign (PCM device open/close per playback, Ogg-only)
+## File Size Discipline
 
-**Recently Completed:**
-- Source tree reorganized from flat root into `src/` and `include/` with 8 categories
-- Circular `recording.h` <-> `mirage.h` dependency resolved
-- GitHub Actions CI (format-check + build)
-- Thread safety: atomic flags, double-buffered AI state, correct shutdown order
-- Text element rendering: O(1) enum dispatch replacing 47+ strcmp chain
-- Detection label texture caching (was creating/destroying per frame)
-- Secrets migrated from compile-time `secrets.h` to runtime `secrets.json`
-- MQTT auth (username/password) and TLS support mirroring DAWN
-- MQTT broker host/port configurable in `config.json`
-- PulseAudio device validation before recording (prevents silent 0-byte files)
-- Pre-allocated frame buffers for recording (eliminates per-frame malloc)
-- Frame-rate independent gauge smoothing with configurable factor
-- Smoothstep easing on HUD transitions
-- `safe_strncpy` utility (ported from DAWN common lib)
-- Numerous buffer overflow, null-termination, and shutdown crash fixes
+- **1,500+ lines (C)**: flag as getting large.
+- **2,500+ lines**: recommend splitting before adding features.
+- **New feature in a large file**: propose a separate module instead.
+- **Refactoring large files**: never full rewrites. Incremental extraction — one feature at a time, keep original working, test after each step.
+
+Current large files (monitor):
+
+| File | Lines | Status |
+|------|-------|--------|
+| `mirage.c` | ~2,550 | At splitting threshold — needs modular extraction (god module, extern coupling) |
+| `element_renderer.c` | ~2,200 | Approaching threshold — split by renderer type |
+| `config_parser.c` | ~1,600 | Above monitoring threshold |
+| `command_processing.c` | ~1,530 | Above monitoring threshold |
 
 ## Development Lifecycle
 
-### 1. Plan (if non-trivial)
-- Use plan mode for features that touch multiple modules
-- Launch Explore agents to understand existing code
-
-### 2. Implement
-- Build and format check after each logical chunk: `make -C build-debug -j$(nproc)` + `./format_code.sh --check`
-
-### 3. Review
-- Run review agents on the diff for non-trivial changes
-
-### 4. Test
-- Manual testing on device (camera feed, HUD rendering, MQTT, recording)
-- No automated tests yet
-
-### 5. Document
-- Update CLAUDE.md if architecture changes
-
-### 6. Commit
-- Run `./format_code.sh --check` one final time
-- Provide a single `git add` command with all relevant files
-- Suggest a commit message (present tense, summary line + bullet details)
-- **NEVER run `git add`, `git commit`, or `git push`** -- the developer does this
+1. **Plan** (non-trivial only) — plan mode + Explore agents for multi-module work.
+2. **Implement** — build + format check after each chunk: `make -C build-debug -j$(nproc)` + `./format_code.sh --check`.
+3. **Review** — run review agents on the diff for non-trivial changes.
+4. **Test** — manual on device (camera, HUD, MQTT, recording). No automated tests yet.
+5. **Commit** — final `./format_code.sh --check`, provide `git add` + commit message; **developer runs git commands**.
 
 ## License
 
-GPLv3 or later. All source files include GPL header block.
+GPLv3 or later. Every new source file includes the GPL header block.

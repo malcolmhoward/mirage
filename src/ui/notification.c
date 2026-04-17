@@ -37,7 +37,7 @@
 #include "config/config_parser.h"
 #include "config/config_secrets.h"
 #include "core/mirage.h"
-#include "util/logging.h"
+#include "logging.h"
 
 /* Maximum image size from HTTP fetch (5 MB) */
 #define IMAGE_FETCH_MAX_SIZE (5 * 1024 * 1024)
@@ -85,7 +85,7 @@ static unsigned char *base64_decode(const char *input, size_t *out_size) {
 
    /* Cap at 512KB base64 (~384KB decoded) to prevent OOM from rogue MQTT payloads */
    if (input_len > 512 * 1024) {
-      LOG_WARNING("notification: base64 input too large (%zu bytes), rejecting", input_len);
+      OLOG_WARNING("notification: base64 input too large (%zu bytes), rejecting", input_len);
       return NULL;
    }
 
@@ -145,7 +145,7 @@ static size_t fetch_write_cb(void *contents, size_t size, size_t nmemb, void *us
    size_t realsize = size * nmemb;
 
    if (buf->size + realsize > IMAGE_FETCH_MAX_SIZE) {
-      LOG_ERROR("notification: image fetch exceeds %d byte limit", IMAGE_FETCH_MAX_SIZE);
+      OLOG_ERROR("notification: image fetch exceeds %d byte limit", IMAGE_FETCH_MAX_SIZE);
       return 0;
    }
 
@@ -219,7 +219,7 @@ static void *image_fetch_thread(void *arg) {
 
    /* Validate URL pattern */
    if (!validate_image_url(url_path)) {
-      LOG_ERROR("notification: invalid image URL rejected: %.64s", url_path);
+      OLOG_ERROR("notification: invalid image URL rejected: %.64s", url_path);
       goto cleanup;
    }
 
@@ -227,7 +227,7 @@ static void *image_fetch_thread(void *arg) {
    const char *base = get_dawn_url();
    const char *token = get_dawn_service_token();
    if (!base[0] || !token[0]) {
-      LOG_WARNING("notification: dawn_url or dawn_service_token not configured, skipping fetch");
+      OLOG_WARNING("notification: dawn_url or dawn_service_token not configured, skipping fetch");
       goto cleanup;
    }
 
@@ -238,7 +238,7 @@ static void *image_fetch_thread(void *arg) {
 
    curl = curl_easy_init();
    if (!curl) {
-      LOG_ERROR("notification: curl_easy_init failed");
+      OLOG_ERROR("notification: curl_easy_init failed");
       goto cleanup;
    }
 
@@ -263,8 +263,8 @@ static void *image_fetch_thread(void *arg) {
    }
 
    if (res != CURLE_OK || !buf.data || buf.size == 0) {
-      LOG_ERROR("notification: image fetch failed: %s (HTTP %ld)", curl_easy_strerror(res),
-                http_code);
+      OLOG_ERROR("notification: image fetch failed: %s (HTTP %ld)", curl_easy_strerror(res),
+                 http_code);
       goto cleanup;
    }
 
@@ -285,11 +285,11 @@ static void *image_fetch_thread(void *arg) {
    }
 
    if (!valid_magic) {
-      LOG_ERROR("notification: fetched data has invalid image magic bytes");
+      OLOG_ERROR("notification: fetched data has invalid image magic bytes");
       goto cleanup;
    }
 
-   LOG_INFO("notification: image fetched, %zu bytes (HTTP %ld)", buf.size, http_code);
+   OLOG_INFO("notification: image fetched, %zu bytes (HTTP %ld)", buf.size, http_code);
 
    /* Hand off to render thread via dirty flag (ownership transfer) */
    pthread_mutex_lock(&s_image.image_mutex);
@@ -382,7 +382,7 @@ void notification_init(void) {
    memset(&s_image, 0, sizeof(s_image));
    pthread_mutex_init(&s_phone.mutex, NULL);
    pthread_mutex_init(&s_image.image_mutex, NULL);
-   LOG_INFO("Notification system initialized");
+   OLOG_INFO("Notification system initialized");
 }
 
 void notification_shutdown(void) {
@@ -414,7 +414,7 @@ void notification_shutdown(void) {
 
    pthread_mutex_destroy(&s_phone.mutex);
    pthread_mutex_destroy(&s_image.image_mutex);
-   LOG_INFO("Notification system shut down");
+   OLOG_INFO("Notification system shut down");
 }
 
 /* =============================================================================
@@ -597,13 +597,13 @@ void notification_handle_image_request(struct json_object *root) {
 
    if (should_launch) {
       if (pthread_create(&s_image.fetch_thread, NULL, image_fetch_thread, NULL) != 0) {
-         LOG_ERROR("notification: failed to create image fetch thread");
+         OLOG_ERROR("notification: failed to create image fetch thread");
          pthread_mutex_lock(&s_image.image_mutex);
          s_image.fetch_in_progress = false;
          pthread_mutex_unlock(&s_image.image_mutex);
       }
    } else if (s_image.image_url[0]) {
-      LOG_INFO("notification: fetch already in progress, skipping duplicate request");
+      OLOG_INFO("notification: fetch already in progress, skipping duplicate request");
    }
 }
 

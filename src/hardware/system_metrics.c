@@ -26,7 +26,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "util/logging.h"
+#include "logging.h"
 
 /* Global metrics structure instance */
 system_metrics_t system_metrics = { .cpu_usage = 0.0f,
@@ -123,7 +123,7 @@ void init_system_metrics(void) {
    system_metrics.fan_available = false;
    system_metrics.power_available = false;
 
-   LOG_INFO("System metrics initialized");
+   OLOG_INFO("System metrics initialized");
 }
 
 /**
@@ -160,23 +160,23 @@ void update_metrics_availability(int timeout_seconds) {
    /* Log if metrics become unavailable */
 #if 0 /* Suppressing these for now. */
    if (!system_metrics.cpu_available) {
-      LOG_WARNING("CPU metrics have become stale (not updated in %d seconds)", timeout_seconds);
+      OLOG_WARNING("CPU metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
    
    if (!system_metrics.memory_available) {
-      LOG_WARNING("Memory metrics have become stale (not updated in %d seconds)", timeout_seconds);
+      OLOG_WARNING("Memory metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
 
    if (!system_metrics.system_temp_available) {
-      LOG_WARNING("System temperature metrics have become stale (not updated in %d seconds)", timeout_seconds);
+      OLOG_WARNING("System temperature metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
    
    if (!system_metrics.fan_available) {
-      LOG_WARNING("Fan metrics have become stale (not updated in %d seconds)", timeout_seconds);
+      OLOG_WARNING("Fan metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
    
    if (!system_metrics.power_available) {
-      LOG_WARNING("Power metrics have become stale (not updated in %d seconds)", timeout_seconds);
+      OLOG_WARNING("Power metrics have become stale (not updated in %d seconds)", timeout_seconds);
    }
 #endif
 }

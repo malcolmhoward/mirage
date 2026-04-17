@@ -26,7 +26,7 @@
 #include <string.h>
 
 #include "config/defines.h"
-#include "util/logging.h"
+#include "logging.h"
 #include "util/string_utils.h"
 
 /* Default image and font paths. These are configurable in the config file. */
@@ -86,15 +86,15 @@ char *set_image_path(const char *path, int length) {
    }
 
    if (path == NULL) {
-      LOG_ERROR("%s: path is NULL", __func__);
+      OLOG_ERROR("%s: path is NULL", __func__);
    }
 
    if (length <= 0) {
-      LOG_ERROR("%s: length is too short", __func__);
+      OLOG_ERROR("%s: length is too short", __func__);
    }
 
    if (length >= MAX_FILENAME_LENGTH) {
-      LOG_ERROR("%s: length is too long", __func__);
+      OLOG_ERROR("%s: length is too long", __func__);
    }
 
    return NULL;
@@ -111,15 +111,15 @@ char *set_sound_path(const char *path, int length) {
    }
 
    if (path == NULL) {
-      LOG_ERROR("%s: path is NULL", __func__);
+      OLOG_ERROR("%s: path is NULL", __func__);
    }
 
    if (length <= 0) {
-      LOG_ERROR("%s: length is too short", __func__);
+      OLOG_ERROR("%s: length is too short", __func__);
    }
 
    if (length >= MAX_FILENAME_LENGTH) {
-      LOG_ERROR("%s: length is too long", __func__);
+      OLOG_ERROR("%s: length is too long", __func__);
    }
 
    return NULL;
@@ -136,15 +136,15 @@ char *set_font_path(const char *path, int length) {
    }
 
    if (path == NULL) {
-      LOG_ERROR("%s: path is NULL", __func__);
+      OLOG_ERROR("%s: path is NULL", __func__);
    }
 
    if (length <= 0) {
-      LOG_ERROR("%s: length is too short", __func__);
+      OLOG_ERROR("%s: length is too short", __func__);
    }
 
    if (length >= MAX_FILENAME_LENGTH) {
-      LOG_ERROR("%s: length is too long", __func__);
+      OLOG_ERROR("%s: length is too long", __func__);
    }
 
    return NULL;
@@ -161,15 +161,15 @@ const char *set_wifi_dev_name(const char *name, int length) {
    }
 
    if (name == NULL) {
-      LOG_ERROR("%s: name is NULL", __func__);
+      OLOG_ERROR("%s: name is NULL", __func__);
    }
 
    if (length <= 0) {
-      LOG_ERROR("%s: length is too short", __func__);
+      OLOG_ERROR("%s: length is too short", __func__);
    }
 
    if (length >= MAX_WIFI_DEV_LENGTH) {
-      LOG_ERROR("%s: length is too long", __func__);
+      OLOG_ERROR("%s: length is too long", __func__);
    }
 
    return NULL;

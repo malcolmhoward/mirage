@@ -32,8 +32,8 @@
 #include "config/config_manager.h"
 #include "config/config_parser.h"
 #include "core/mirage.h"
+#include "logging.h"
 #include "ui/hud_manager.h"
-#include "util/logging.h"
 
 /**
  * @brief Check if a string is already in the JSON array
@@ -127,13 +127,13 @@ int hud_discovery_init(struct mosquitto *mosq) {
    /* Subscribe to discovery request topic */
    int rc = mosquitto_subscribe(mosq, NULL, HUD_DISCOVERY_TOPIC_REQUEST, 0);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("HUD discovery: Failed to subscribe to %s: %s", HUD_DISCOVERY_TOPIC_REQUEST,
-                mosquitto_strerror(rc));
+      OLOG_ERROR("HUD discovery: Failed to subscribe to %s: %s", HUD_DISCOVERY_TOPIC_REQUEST,
+                 mosquitto_strerror(rc));
       return 1;
    }
 
    s_discovery_initialized = true;
-   LOG_INFO("HUD discovery: Subscribed to %s", HUD_DISCOVERY_TOPIC_REQUEST);
+   OLOG_INFO("HUD discovery: Subscribed to %s", HUD_DISCOVERY_TOPIC_REQUEST);
    return 0;
 }
 
@@ -162,9 +162,9 @@ void hud_discovery_publish(struct mosquitto *mosq) {
                              payload, 0, true); /* retain=true */
 
       if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("HUD discovery: Failed to publish elements: %s", mosquitto_strerror(rc));
+         OLOG_ERROR("HUD discovery: Failed to publish elements: %s", mosquitto_strerror(rc));
       } else {
-         LOG_INFO("HUD discovery: Published elements to %s", HUD_DISCOVERY_TOPIC_ELEMENTS);
+         OLOG_INFO("HUD discovery: Published elements to %s", HUD_DISCOVERY_TOPIC_ELEMENTS);
       }
 
       json_object_put(msg);
@@ -183,9 +183,9 @@ void hud_discovery_publish(struct mosquitto *mosq) {
                              0, true); /* retain=true */
 
       if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("HUD discovery: Failed to publish modes: %s", mosquitto_strerror(rc));
+         OLOG_ERROR("HUD discovery: Failed to publish modes: %s", mosquitto_strerror(rc));
       } else {
-         LOG_INFO("HUD discovery: Published modes to %s", HUD_DISCOVERY_TOPIC_MODES);
+         OLOG_INFO("HUD discovery: Published modes to %s", HUD_DISCOVERY_TOPIC_MODES);
       }
 
       json_object_put(msg);
@@ -214,6 +214,6 @@ void hud_discovery_handle_request(struct mosquitto *mosq, const char *payload) {
       }
    }
 
-   LOG_INFO("HUD discovery: Received discovery request, republishing capabilities");
+   OLOG_INFO("HUD discovery: Received discovery request, republishing capabilities");
    hud_discovery_publish(mosq);
 }

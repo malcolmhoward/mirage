@@ -37,7 +37,7 @@
 
 #include "config/version.h"
 #include "core/mirage.h"
-#include "util/logging.h"
+#include "logging.h"
 
 /* =============================================================================
  * Module State
@@ -103,9 +103,9 @@ static int publish_status(struct mosquitto *mosq, const char *status, bool retai
    int rc = mosquitto_publish(mosq, NULL, STATUS_TOPIC_HUD, (int)strlen(payload), payload, 1,
                               retain);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Failed to publish hud status: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Failed to publish hud status: %s", mosquitto_strerror(rc));
    } else {
-      LOG_INFO("Published hud status: %s", status);
+      OLOG_INFO("Published hud status: %s", status);
    }
 
    free(payload);
@@ -121,8 +121,8 @@ static void check_dawn_timeout(void) {
    if (s_dawn_online && s_dawn_last_seen > 0) {
       time_t now = time(NULL);
       if ((now - s_dawn_last_seen) > STATUS_TIMEOUT_SEC) {
-         LOG_WARNING("Dawn heartbeat timeout (%ld seconds), marking offline",
-                     (long)(now - s_dawn_last_seen));
+         OLOG_WARNING("Dawn heartbeat timeout (%ld seconds), marking offline",
+                      (long)(now - s_dawn_last_seen));
          s_dawn_online = false;
 
          /* Reset AI state to show grey indicator */
@@ -141,7 +141,7 @@ static void check_dawn_timeout(void) {
 static void *heartbeat_thread_func(void *arg) {
    (void)arg;
 
-   LOG_INFO("Heartbeat thread started (interval: %ds)", STATUS_HEARTBEAT_INTERVAL_SEC);
+   OLOG_INFO("Heartbeat thread started (interval: %ds)", STATUS_HEARTBEAT_INTERVAL_SEC);
 
    while (s_heartbeat_running) {
       /* Sleep in smaller increments to allow faster shutdown */
@@ -162,7 +162,7 @@ static void *heartbeat_thread_func(void *arg) {
       check_dawn_timeout();
    }
 
-   LOG_INFO("Heartbeat thread stopped");
+   OLOG_INFO("Heartbeat thread stopped");
    return NULL;
 }
 
@@ -188,11 +188,11 @@ int component_status_set_lwt(struct mosquitto *mosq) {
    json_object_put(msg);
 
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Failed to set LWT: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Failed to set LWT: %s", mosquitto_strerror(rc));
       return 1;
    }
 
-   LOG_INFO("LWT configured for %s", STATUS_TOPIC_HUD);
+   OLOG_INFO("LWT configured for %s", STATUS_TOPIC_HUD);
    return 0;
 }
 
@@ -213,11 +213,11 @@ int component_status_init(struct mosquitto *mosq) {
    /* Subscribe to Dawn status */
    int rc = mosquitto_subscribe(mosq, NULL, STATUS_TOPIC_DAWN, 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Failed to subscribe to %s: %s", STATUS_TOPIC_DAWN, mosquitto_strerror(rc));
+      OLOG_ERROR("Failed to subscribe to %s: %s", STATUS_TOPIC_DAWN, mosquitto_strerror(rc));
       pthread_mutex_unlock(&s_status_mutex);
       return 1;
    }
-   LOG_INFO("Subscribed to %s", STATUS_TOPIC_DAWN);
+   OLOG_INFO("Subscribed to %s", STATUS_TOPIC_DAWN);
 
    /* Publish online status */
    if (publish_status(mosq, "online", true) != 0) {
@@ -228,7 +228,7 @@ int component_status_init(struct mosquitto *mosq) {
    /* Start heartbeat thread */
    s_heartbeat_running = true;
    if (pthread_create(&s_heartbeat_thread, NULL, heartbeat_thread_func, NULL) != 0) {
-      LOG_ERROR("Failed to create heartbeat thread");
+      OLOG_ERROR("Failed to create heartbeat thread");
       s_heartbeat_running = false;
       pthread_mutex_unlock(&s_status_mutex);
       return 1;
@@ -237,7 +237,7 @@ int component_status_init(struct mosquitto *mosq) {
    s_initialized = true;
    pthread_mutex_unlock(&s_status_mutex);
 
-   LOG_INFO("Component status initialized");
+   OLOG_INFO("Component status initialized");
    return 0;
 }
 
@@ -269,7 +269,7 @@ void component_status_shutdown(void) {
    s_dawn_last_seen = 0;
    pthread_mutex_unlock(&s_status_mutex);
 
-   LOG_INFO("Component status shutdown complete");
+   OLOG_INFO("Component status shutdown complete");
 }
 
 /* =============================================================================
@@ -289,7 +289,7 @@ void component_status_handle_message(const char *topic, const char *payload, int
    /* Parse JSON */
    struct json_object *root = json_tokener_parse(payload);
    if (!root) {
-      LOG_WARNING("Failed to parse Dawn status message");
+      OLOG_WARNING("Failed to parse Dawn status message");
       return;
    }
 
@@ -306,7 +306,7 @@ void component_status_handle_message(const char *topic, const char *payload, int
    /* Extract status */
    struct json_object *status_obj = NULL;
    if (!json_object_object_get_ex(root, "status", &status_obj)) {
-      LOG_WARNING("Dawn status message missing 'status' field");
+      OLOG_WARNING("Dawn status message missing 'status' field");
       json_object_put(root);
       return;
    }
@@ -334,10 +334,10 @@ void component_status_handle_message(const char *topic, const char *payload, int
 
    /* Log state change and update HUD indicator */
    if (is_online && !was_online) {
-      LOG_INFO("Dawn is now ONLINE (timestamp=%ld)", (long)timestamp);
+      OLOG_INFO("Dawn is now ONLINE (timestamp=%ld)", (long)timestamp);
    } else if (!is_online && was_online) {
-      LOG_INFO("Dawn is now OFFLINE (timestamp=%ld, LWT=%s)", (long)timestamp,
-               timestamp == 0 ? "yes" : "no");
+      OLOG_INFO("Dawn is now OFFLINE (timestamp=%ld, LWT=%s)", (long)timestamp,
+                timestamp == 0 ? "yes" : "no");
 
       /* Reset AI state to show grey indicator */
       process_ai_state("", "OFFLINE");

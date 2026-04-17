@@ -32,7 +32,7 @@
 #include "config/config_parser.h"
 #include "core/mirage.h"
 #include "hardware/system_metrics.h"
-#include "util/logging.h"
+#include "logging.h"
 
 long double get_loadavg(void) {
    float cpu_usage = get_cpu_usage();
@@ -53,7 +53,7 @@ int get_wifi_signal_level(void) {
 
    fp = fopen("/proc/net/wireless", "r");
    if (fp == NULL) {
-      LOG_ERROR("No wireless found.");
+      OLOG_ERROR("No wireless found.");
       return 0;
    }
 
@@ -120,7 +120,7 @@ void change_map_zoom(int direction) {
       if (map_elem->map_zoom > 21)
          map_elem->map_zoom = 21;
 
-      LOG_INFO("New map zoom set to: %d", map_elem->map_zoom);
+      OLOG_INFO("New map zoom set to: %d", map_elem->map_zoom);
 
       // Force refresh
       map_elem->force_refresh = 1;
@@ -136,7 +136,7 @@ void cycle_map_type(void) {
       // Cycle to next map type
       map_elem->map_type = (map_elem->map_type + 1) % MAP_TYPE_COUNT;
 
-      LOG_INFO("New map type is: %s", MAP_TYPE_STRINGS[map_elem->map_type]);
+      OLOG_INFO("New map type is: %s", MAP_TYPE_STRINGS[map_elem->map_type]);
 
       // Force refresh
       map_elem->force_refresh = 1;

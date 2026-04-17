@@ -26,8 +26,8 @@
 #include "config/config_manager.h"
 #include "config/defines.h"
 #include "core/mirage.h"
+#include "logging.h"
 #include "rendering/element_renderer.h"
-#include "util/logging.h"
 
 static int armor_enabled = 1; /* Variable to turn on/off displaying armor. */
 
@@ -80,7 +80,7 @@ void registerArmor(char *mqtt_device_in) {
             snprintf(text, 2048, "%s connected.", this_element->name);
             mqttTextToSpeech(text);
 
-            LOG_INFO("Armor element connected: %s", this_element->name);
+            OLOG_INFO("Armor element connected: %s", this_element->name);
          } else {
             /* Update existing registration timestamp */
             this_element->mqtt_last_time = current_time;

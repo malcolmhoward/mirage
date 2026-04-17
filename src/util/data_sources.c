@@ -29,7 +29,7 @@
 #include "config/config_manager.h"
 #include "core/mirage.h"
 #include "hardware/system_metrics.h"
-#include "util/logging.h"
+#include "logging.h"
 #include "util/sim_data.h"
 
 /* External reference to FPS counter */
@@ -46,7 +46,7 @@ int is_dynamic_source(const char *source) {
 
 float resolve_data_source_float(const char *source) {
    if (!source || strlen(source) == 0) {
-      LOG_WARNING("resolve_data_source_float: NULL or empty source");
+      OLOG_WARNING("resolve_data_source_float: NULL or empty source");
       return 0.0f;
    }
 
@@ -187,6 +187,6 @@ float resolve_data_source_float(const char *source) {
    }
 
    /* Unknown source - log warning and return 0 */
-   LOG_WARNING("Unknown dynamic data source: '%s'", source);
+   OLOG_WARNING("Unknown dynamic data source: '%s'", source);
    return 0.0f;
 }

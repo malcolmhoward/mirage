@@ -27,7 +27,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include "util/logging.h"
+#include "logging.h"
 
 /* Simulation state */
 static double sim_time = 0.0;
@@ -80,7 +80,7 @@ void init_sim_data(void) {
    /* Seed random */
    sim_rand_state = (unsigned int)time(NULL);
 
-   LOG_INFO("Simulated data sources initialized");
+   OLOG_INFO("Simulated data sources initialized");
 }
 
 void update_sim_data(void) {

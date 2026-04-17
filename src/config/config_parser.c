@@ -29,9 +29,9 @@
 #include "SDL2/SDL_image.h"
 #include "config/config_manager.h"
 #include "core/mirage.h"
+#include "logging.h"
 #include "ui/hud_manager.h"
 #include "ui/notification.h"
-#include "util/logging.h"
 
 /* Map type string representations */
 const char *MAP_TYPE_STRINGS[] = { "hybrid", "satellite", "roadmap", "terrain" };
@@ -126,7 +126,7 @@ static int validate_json_config(const char *config_filename) {
    /* Try to open and read the file */
    config_file = fopen(config_filename, "r");
    if (config_file == NULL) {
-      LOG_ERROR("Cannot open config file for validation: %s", config_filename);
+      OLOG_ERROR("Cannot open config file for validation: %s", config_filename);
       return FAILURE;
    }
 
@@ -147,7 +147,7 @@ static int validate_json_config(const char *config_filename) {
    /* Try to parse JSON */
    parsed_json = json_tokener_parse(config_string);
    if (parsed_json == NULL) {
-      LOG_ERROR("Invalid JSON in config file: %s", config_filename);
+      OLOG_ERROR("Invalid JSON in config file: %s", config_filename);
       free(config_string);
       return FAILURE;
    }
@@ -157,7 +157,7 @@ static int validate_json_config(const char *config_filename) {
 
    /* Validate HUDs section exists */
    if (!json_object_object_get_ex(parsed_json, "HUDs", &tmpobj)) {
-      LOG_ERROR("Missing 'HUDs' section in config file");
+      OLOG_ERROR("Missing 'HUDs' section in config file");
       json_object_put(parsed_json);
       free(config_string);
       return FAILURE;
@@ -165,7 +165,7 @@ static int validate_json_config(const char *config_filename) {
 
    /* Validate Elements section exists */
    if (!json_object_object_get_ex(parsed_json, "Elements", &tmpobj)) {
-      LOG_ERROR("Missing 'Elements' section in config file");
+      OLOG_ERROR("Missing 'Elements' section in config file");
       json_object_put(parsed_json);
       free(config_string);
       return FAILURE;
@@ -190,7 +190,7 @@ int reload_config(const char *config_filename) {
 
    /* Validate new config before touching existing state */
    if (validate_json_config(config_filename) != SUCCESS) {
-      LOG_ERROR("New config file is invalid, keeping current configuration");
+      OLOG_ERROR("New config file is invalid, keeping current configuration");
       return FAILURE;
    }
 
@@ -220,8 +220,8 @@ int reload_config(const char *config_filename) {
 
    /* Parse new config (should succeed since we validated) */
    if (parse_json_config(config_filename) != SUCCESS) {
-      LOG_ERROR("Config parsing failed after validation - file may have changed during reload");
-      LOG_ERROR("Application restart required");
+      OLOG_ERROR("Config parsing failed after validation - file may have changed during reload");
+      OLOG_ERROR("Application restart required");
       exit(EXIT_FAILURE);  // Just exit - system is in inconsistent state
    }
 
@@ -231,7 +231,7 @@ int reload_config(const char *config_filename) {
       if (restored_hud != NULL) {
          switch_to_hud(restored_hud, restored_hud->transition_type);
       } else {
-         LOG_WARNING("Previous HUD '%s' not found in new config, using default", current_hud_name);
+         OLOG_WARNING("Previous HUD '%s' not found in new config, using default", current_hud_name);
       }
    }
 
@@ -245,26 +245,26 @@ int check_and_reload_config(const char *config_filename) {
    struct stat file_stat;
 
    if (stat(config_filename, &file_stat) != 0) {
-      LOG_WARNING("Cannot stat config file: %s", config_filename);
+      OLOG_WARNING("Cannot stat config file: %s", config_filename);
       return FAILURE;
    }
 
    // For initial load (config_last_modified == 0), always load
    if (config_last_modified == 0 || file_stat.st_mtime > config_last_modified) {
       if (config_last_modified == 0) {
-         LOG_INFO("Loading initial config file: %s", config_filename);
+         OLOG_INFO("Loading initial config file: %s", config_filename);
       } else {
-         LOG_INFO("Config file changed, reloading...");
+         OLOG_INFO("Config file changed, reloading...");
       }
 
       if (reload_config(config_filename) == SUCCESS) {
          config_last_modified = file_stat.st_mtime;
          if (config_last_modified > 0) {
-            LOG_INFO("Config successfully reloaded");
+            OLOG_INFO("Config successfully reloaded");
          }
          return SUCCESS;
       } else {
-         LOG_ERROR("Config reload failed, keeping current config");
+         OLOG_ERROR("Config reload failed, keeping current config");
          return FAILURE;
       }
    }
@@ -291,7 +291,7 @@ int parse_animated_json(element *curr_element) {
 
    config_file = fopen(curr_element->filename, "r");
    if (config_file == NULL) {
-      LOG_ERROR("Unable to open config file: %s", curr_element->filename);
+      OLOG_ERROR("Unable to open config file: %s", curr_element->filename);
       return FAILURE;
    }
 
@@ -341,7 +341,7 @@ int parse_animated_json(element *curr_element) {
          if (curr_element->this_anim.frame_count < MAX_FRAMES) {
             curr_element->this_anim.frame_lookup[curr_element->this_anim.frame_count] = this_frame;
          } else {
-            LOG_WARNING("Max frame count reached: %d", MAX_FRAMES);
+            OLOG_WARNING("Max frame count reached: %d", MAX_FRAMES);
          }
          curr_element->this_anim.frame_count++;
 
@@ -535,7 +535,7 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
          } else if (strcmp(angle_str, "opposite roll") == 0) {
             curr_element->angle = ANGLE_OPPOSITE_ROLL;
          } else {
-            LOG_WARNING("Error processing angle string: %s", angle_str);
+            OLOG_WARNING("Error processing angle string: %s", angle_str);
          }
       } else {
          curr_element->angle = json_object_get_double(tmpobj);
@@ -591,7 +591,7 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
          if (screen != NULL) {
             curr_element->hud_flags[screen->hud_id] = 1;
          } else {
-            LOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
+            OLOG_WARNING("Unknown HUD '%s' in element definition", hud_name);
          }
       }
    } else {
@@ -637,7 +637,7 @@ int parse_json_config(const char *filename) {
 
    config_file = fopen(filename, "r");
    if (config_file == NULL) {
-      LOG_ERROR("Unable to open config file: %s", filename);
+      OLOG_ERROR("Unable to open config file: %s", filename);
       return FAILURE;
    }
 
@@ -703,22 +703,22 @@ int parse_json_config(const char *filename) {
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Image Path") == 0) {
                   if (set_image_path(json_object_get_string(json_object_iter_peek_value(&itSub)),
                                      MAX_FILENAME_LENGTH - 1) == NULL) {
-                     LOG_ERROR("Error setting image path!");
+                     OLOG_ERROR("Error setting image path!");
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Font Path") == 0) {
                   if (set_font_path(json_object_get_string(json_object_iter_peek_value(&itSub)),
                                     MAX_FILENAME_LENGTH - 1) == NULL) {
-                     LOG_ERROR("Error setting font path!");
+                     OLOG_ERROR("Error setting font path!");
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Sound Path") == 0) {
                   if (set_sound_path(json_object_get_string(json_object_iter_peek_value(&itSub)),
                                      MAX_FILENAME_LENGTH - 1) == NULL) {
-                     LOG_ERROR("Error setting sound path!");
+                     OLOG_ERROR("Error setting sound path!");
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Wifi") == 0) {
                   if (set_wifi_dev_name(json_object_get_string(json_object_iter_peek_value(&itSub)),
                                         MAX_WIFI_DEV_LENGTH - 1) == NULL) {
-                     LOG_ERROR("Error settings Wifi device name!");
+                     OLOG_ERROR("Error settings Wifi device name!");
                   }
                } else if (strcmp(json_object_iter_peek_name(&itSub), "Invert Compass") == 0) {
                   set_inv_compass(json_object_get_boolean(json_object_iter_peek_value(&itSub)));
@@ -780,7 +780,7 @@ int parse_json_config(const char *filename) {
                   /* Get HUD name */
                   json_object_object_get_ex(tmpobj2, "name", &tmpobj3);
                   if (tmpobj3 == NULL) {
-                     LOG_ERROR("HUD definition missing name");
+                     OLOG_ERROR("HUD definition missing name");
                      continue;
                   }
                   const char *hud_name = json_object_get_string(tmpobj3);
@@ -845,7 +845,7 @@ int parse_json_config(const char *filename) {
 
                      curr_element = malloc(sizeof(element));
                      if (curr_element == NULL) {
-                        LOG_ERROR("Cannot malloc new element!");
+                        OLOG_ERROR("Cannot malloc new element!");
                         exit(1);
                      }
                      memcpy(curr_element, default_element, sizeof(element));
@@ -1551,7 +1551,7 @@ int parse_json_config(const char *filename) {
                for (i = 0; i < array_length; i++) {
                   curr_element = malloc(sizeof(element));
                   if (curr_element == NULL) {
-                     LOG_ERROR("Cannot malloc new element!");
+                     OLOG_ERROR("Cannot malloc new element!");
                      exit(1);
                   }
                   memcpy(curr_element, default_element, sizeof(element));
@@ -1639,7 +1639,7 @@ int parse_json_config(const char *filename) {
 
                   curr_element->texture_base = get_cached_texture(curr_element->filename_base);
                   if (!curr_element->texture_base) {
-                     LOG_ERROR("Couldn't load %s: %s\n", curr_element->filename, SDL_GetError());
+                     OLOG_ERROR("Couldn't load %s: %s\n", curr_element->filename, SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
                      return FAILURE;
@@ -1647,8 +1647,8 @@ int parse_json_config(const char *filename) {
 
                   curr_element->texture_online = get_cached_texture(curr_element->filename_online);
                   if (!curr_element->texture_online) {
-                     LOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_online,
-                               SDL_GetError());
+                     OLOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_online,
+                                SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
                      return FAILURE;
@@ -1657,8 +1657,8 @@ int parse_json_config(const char *filename) {
                   curr_element->texture_warning = get_cached_texture(
                       curr_element->filename_warning);
                   if (!curr_element->texture_warning) {
-                     LOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_warning,
-                               SDL_GetError());
+                     OLOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_warning,
+                                SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
                      return FAILURE;
@@ -1667,8 +1667,8 @@ int parse_json_config(const char *filename) {
                   curr_element->texture_offline = get_cached_texture(
                       curr_element->filename_offline);
                   if (!curr_element->texture_offline) {
-                     LOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_offline,
-                               SDL_GetError());
+                     OLOG_ERROR("Couldn't load %s: %s\n", curr_element->filename_offline,
+                                SDL_GetError());
                      json_object_put(parsed_json);
                      free(config_string);
                      return FAILURE;

@@ -71,11 +71,13 @@ set(SOURCE_FILES
     src/config/config_manager.c
     src/config/config_secrets.c
 
+    # logging (foundational — canonical shared across OASIS repos)
+    src/logging.c
+
     # util
     src/util/curl_download.c
     src/util/data_sources.c
     src/util/image_utils.c
-    src/util/logging.c
     src/util/sim_data.c
     src/util/utils.c
 

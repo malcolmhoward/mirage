@@ -28,7 +28,7 @@
 
 #include "config/config_manager.h"
 #include "core/mirage.h"
-#include "util/logging.h"
+#include "logging.h"
 
 /* Global HUD manager instance */
 static hud_manager hud_mgr = { .screens = NULL,
@@ -92,7 +92,7 @@ hud_screen *find_hud_by_id(int id) {
 /* Register a new HUD */
 int register_hud(const char *name, const char *hotkey, const char *transition) {
    if (find_hud_by_name(name) != NULL) {
-      LOG_ERROR("HUD with name %s already exists", name);
+      OLOG_ERROR("HUD with name %s already exists", name);
       return -1;
    }
 
@@ -104,7 +104,7 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
          next_id = current->hud_id + 1;
       }
       if (next_id >= MAX_HUDS) {
-         LOG_ERROR("Maximum number of HUDs reached (%d)", MAX_HUDS);
+         OLOG_ERROR("Maximum number of HUDs reached (%d)", MAX_HUDS);
          return -1;
       }
       current = current->next;
@@ -113,7 +113,7 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
    /* Create new HUD screen */
    hud_screen *new_screen = (hud_screen *)malloc(sizeof(hud_screen));
    if (new_screen == NULL) {
-      LOG_ERROR("Failed to allocate memory for new HUD");
+      OLOG_ERROR("Failed to allocate memory for new HUD");
       return -1;
    }
 
@@ -152,19 +152,19 @@ int register_hud(const char *name, const char *hotkey, const char *transition) {
 /* Switch to a different HUD with specified transition */
 void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
    if (this_screen == NULL) {
-      LOG_ERROR("Invalid HUD passed for transition.");
+      OLOG_ERROR("Invalid HUD passed for transition.");
       return;
    }
 
    if (this_screen == hud_mgr.current_screen) {
-      LOG_INFO("Already on HUD '%s'", this_screen->name);
+      OLOG_INFO("Already on HUD '%s'", this_screen->name);
       return;
    }
 
    /* Validate transition type */
    if (transition_type < 0 || transition_type >= TRANSITION_MAX) {
-      LOG_WARNING("Invalid transition type %d, using default for screen %s", transition_type,
-                  this_screen->transition_type);
+      OLOG_WARNING("Invalid transition type %d, using default for screen %s", transition_type,
+                   this_screen->transition_type);
       transition_type = this_screen->transition_type;
    }
 
@@ -176,8 +176,8 @@ void switch_to_hud(hud_screen *this_screen, transition_t transition_type) {
    //hud_mgr.transition_duration_ms = transition_duration_ms;
    hud_mgr.transition_start_time = SDL_GetTicks();
 
-   LOG_INFO("Switching to HUD: %s with transition %s", this_screen->name,
-            get_transition_name(transition_type));
+   OLOG_INFO("Switching to HUD: %s with transition %s", this_screen->name,
+             get_transition_name(transition_type));
 }
 
 /* Get ID of current HUD */
@@ -225,7 +225,7 @@ void switch_to_next_hud(void) {
    hud_manager *hud_mgr = get_hud_manager();
 
    if (hud_mgr == NULL || hud_mgr->current_screen == NULL) {
-      LOG_ERROR("No HUD manager or current screen available");
+      OLOG_ERROR("No HUD manager or current screen available");
       return;
    }
 
@@ -238,7 +238,7 @@ void switch_to_next_hud(void) {
 
    // If we still don't have a next screen, there's only one HUD or none
    if (next_screen == NULL) {
-      LOG_WARNING("No other HUDs available to switch to");
+      OLOG_WARNING("No other HUDs available to switch to");
       return;
    }
 

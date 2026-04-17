@@ -111,6 +111,7 @@
 #include "hardware/devices.h"
 #include "hardware/frame_rate_tracker.h"
 #include "hardware/system_metrics.h"
+#include "logging.h"
 #include "media/recording.h"
 #include "media/screenshot.h"
 #include "rendering/element_renderer.h"
@@ -118,7 +119,6 @@
 #include "ui/notification.h"
 #include "util/curl_download.h"
 #include "util/image_utils.h"
-#include "util/logging.h"
 #include "util/sim_data.h"
 #include "util/utils.h"
 
@@ -421,13 +421,13 @@ element *set_first_element(element *this_element) {
 SDL_Renderer *get_sdl_renderer(void) {
    // Check if main thread ID has been initialized
    if (main_thread_id == 0) {
-      LOG_ERROR("Main thread ID not initialized!");
+      OLOG_ERROR("Main thread ID not initialized!");
       return NULL;
    }
 
    // Check if current thread is the main thread
    if (SDL_ThreadID() != main_thread_id) {
-      LOG_ERROR("get_sdl_renderer() called from non-main thread!");
+      OLOG_ERROR("get_sdl_renderer() called from non-main thread!");
       return NULL;
    }
 
@@ -499,7 +499,7 @@ void free_elements(element *start_element) {
    element *next_element = NULL;
 
    if (start_element == NULL) {
-      LOG_ERROR("Unable to free NULL elements!");
+      OLOG_ERROR("Unable to free NULL elements!");
       return;
    }
 
@@ -508,12 +508,12 @@ void free_elements(element *start_element) {
       next_element = this_element->next;
 
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Freeing: %d.", this_element->type);
+      OLOG_INFO("Freeing: %d.", this_element->type);
 #endif
 
       if (this_element->surface != NULL) {
 #ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing surface.");
+         OLOG_INFO("Freeing surface.");
 #endif
          SDL_FreeSurface(this_element->surface);
       }
@@ -524,7 +524,7 @@ void free_elements(element *start_element) {
              * not from files, so they still need to be destroyed */
             if (this_element->metrics_textures[i] != NULL) {
 #ifdef DEBUG_SHUTDOWN
-               LOG_INFO("Freeing texture (metrics_textures).");
+               OLOG_INFO("Freeing texture (metrics_textures).");
 #endif
                SDL_DestroyTexture(this_element->metrics_textures[i]);
             }
@@ -535,7 +535,7 @@ void free_elements(element *start_element) {
 
       if (this_element->gauge_cache_texture != NULL) {
 #ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing gauge cache texture.");
+         OLOG_INFO("Freeing gauge cache texture.");
 #endif
          SDL_DestroyTexture(this_element->gauge_cache_texture);
          this_element->gauge_cache_texture = NULL;
@@ -545,7 +545,7 @@ void free_elements(element *start_element) {
          for (int i = 0; i < this_element->metrics_texture_count; i++) {
             if (this_element->last_metrics_text[i] != NULL) {
 #ifdef DEBUG_SHUTDOWN
-               LOG_INFO("Freeing text (last_metrics_text).");
+               OLOG_INFO("Freeing text (last_metrics_text).");
 #endif
                free(this_element->last_metrics_text[i]);
             }
@@ -556,13 +556,13 @@ void free_elements(element *start_element) {
 
       for (int i = 0; i < this_element->this_anim.frame_count; i++) {
 #ifdef DEBUG_SHUTDOWN
-         LOG_INFO("Freeing frame %d.", i);
+         OLOG_INFO("Freeing frame %d.", i);
 #endif
          free(this_element->this_anim.frame_lookup[i]);
       }
 
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Freeing element.");
+      OLOG_INFO("Freeing element.");
 #endif
       free(this_element);
 
@@ -579,60 +579,60 @@ void dump_element_list(void) {
    while (curr_element != NULL) {
       switch (curr_element->type) {
          case STATIC:
-            LOG_INFO("Element[%d]:\n"
-                     "\ttype:\tSTATIC\n"
-                     "\tfile:\t%s\n"
-                     "\tdest_x:\t%d\n"
-                     "\tdest_y:\t%d\n"
-                     "\tangle:\t%f\n"
-                     "\tlayer:\t%d",
-                     count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
-                     curr_element->angle, curr_element->layer);
+            OLOG_INFO("Element[%d]:\n"
+                      "\ttype:\tSTATIC\n"
+                      "\tfile:\t%s\n"
+                      "\tdest_x:\t%d\n"
+                      "\tdest_y:\t%d\n"
+                      "\tangle:\t%f\n"
+                      "\tlayer:\t%d",
+                      count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
+                      curr_element->angle, curr_element->layer);
             break;
          case ANIMATED:
-            LOG_INFO("Element[%d]:\n"
-                     "\ttype:\tANIMATED\n"
-                     "\tfile:\t%s\n"
-                     "\tdest_x:\t%d\n"
-                     "\tdest_y:\t%d\n"
-                     "\tangle:\t%f\n"
-                     "\tlayer:\t%d",
-                     count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
-                     curr_element->angle, curr_element->layer);
+            OLOG_INFO("Element[%d]:\n"
+                      "\ttype:\tANIMATED\n"
+                      "\tfile:\t%s\n"
+                      "\tdest_x:\t%d\n"
+                      "\tdest_y:\t%d\n"
+                      "\tangle:\t%f\n"
+                      "\tlayer:\t%d",
+                      count, curr_element->filename, curr_element->dest_x, curr_element->dest_y,
+                      curr_element->angle, curr_element->layer);
             break;
          case TEXT:
-            LOG_INFO("Element[%d]:\n"
-                     "\ttype:\tTEXT\n"
-                     "\tstring:\t%s\n"
-                     "\tfont:\t%s\n"
-                     "\tsize:\t%d\n"
-                     "\tdest_x:\t%d\n"
-                     "\tdest_y:\t%d\n"
-                     "\thalign:\t%s\n"
-                     "\tangle:\t%f\n"
-                     "\tlayer:\t%d",
-                     count, curr_element->text, curr_element->font, curr_element->font_size,
-                     curr_element->dest_x, curr_element->dest_y, curr_element->halign,
-                     curr_element->angle, curr_element->layer);
+            OLOG_INFO("Element[%d]:\n"
+                      "\ttype:\tTEXT\n"
+                      "\tstring:\t%s\n"
+                      "\tfont:\t%s\n"
+                      "\tsize:\t%d\n"
+                      "\tdest_x:\t%d\n"
+                      "\tdest_y:\t%d\n"
+                      "\thalign:\t%s\n"
+                      "\tangle:\t%f\n"
+                      "\tlayer:\t%d",
+                      count, curr_element->text, curr_element->font, curr_element->font_size,
+                      curr_element->dest_x, curr_element->dest_y, curr_element->halign,
+                      curr_element->angle, curr_element->layer);
             break;
          case SPECIAL:
-            LOG_INFO("Element[%d]:\n"
-                     "\ttype:\tSPECIAL\n"
-                     "\tname:\t%s\n"
-                     "\tfile:\t%s\n"
-                     "\tdest_x:\t%d\n"
-                     "\tdest_y:\t%d\n"
-                     "\tangle:\t%f\n"
-                     "\tlayer:\t%d",
-                     count, curr_element->special_name, curr_element->filename,
-                     curr_element->dest_x, curr_element->dest_y, curr_element->angle,
-                     curr_element->layer);
+            OLOG_INFO("Element[%d]:\n"
+                      "\ttype:\tSPECIAL\n"
+                      "\tname:\t%s\n"
+                      "\tfile:\t%s\n"
+                      "\tdest_x:\t%d\n"
+                      "\tdest_y:\t%d\n"
+                      "\tangle:\t%f\n"
+                      "\tlayer:\t%d",
+                      count, curr_element->special_name, curr_element->filename,
+                      curr_element->dest_x, curr_element->dest_y, curr_element->angle,
+                      curr_element->layer);
             break;
          case ANIMATED_DYNAMIC:
-            LOG_INFO("Not implemented.");
+            OLOG_INFO("Not implemented.");
             break;
          case ARMOR_COMPONENT:
-            LOG_INFO("Not implemented.");
+            OLOG_INFO("Not implemented.");
             break;
       }
 
@@ -705,7 +705,7 @@ int play_intro(int frames, int clear, int *finished) {
 #endif
 
          if (ensure_frame_buffers((size_t)window_width * RGB_OUT_SIZE * window_height) != SUCCESS) {
-            LOG_ERROR("Unable to allocate frame buffers.");
+            OLOG_ERROR("Unable to allocate frame buffers.");
             return 2;
          }
 #ifdef ENCODE_TIMING
@@ -714,7 +714,7 @@ int play_intro(int frames, int clear, int *finished) {
          if (OpenGL_RenderReadPixelsAsync(renderer, NULL, PIXEL_FORMAT_OUT,
                                           this_vod->rgb_out_pixels[this_vod->write_index],
                                           window_width * RGB_OUT_SIZE) != 0) {
-            LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
+            OLOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
 #ifdef ENCODE_TIMING
          } else {
             stop = SDL_GetTicks();
@@ -725,8 +725,8 @@ int play_intro(int frames, int clear, int *finished) {
                max_time = cur_time;
             if ((cur_time < min_time) || (min_time == 0))
                min_time = cur_time;
-            LOG_INFO("OpenGL_RenderReadPixelsAsync(): %0.2f ms, min: %d, max: %d. weight: %d",
-                     avg_time, min_time, max_time, weight);
+            OLOG_INFO("OpenGL_RenderReadPixelsAsync(): %0.2f ms, min: %d, max: %d. weight: %d",
+                      avg_time, min_time, max_time, weight);
 #endif
          }
 
@@ -737,7 +737,7 @@ int play_intro(int frames, int clear, int *finished) {
          if (get_video_out_thread() == 0) {
             pthread_t thread_id;
             if (pthread_create(&thread_id, NULL, video_next_thread, NULL) != 0) {
-               LOG_ERROR("Error creating video output thread.");
+               OLOG_ERROR("Error creating video output thread.");
                set_recording_state(DISABLED);
             } else {
                set_video_out_thread(thread_id);
@@ -891,11 +891,11 @@ void *video_processing_thread(void *arg) {
       if (sampleL[!buffer_num] == NULL) {
          eosL = gst_app_sink_is_eos(GST_APP_SINK(sinkL));
          if (eosL) {
-            LOG_ERROR("sinkL returned NULL. It is EOS.");
+            OLOG_ERROR("sinkL returned NULL. It is EOS.");
             quit = 1;
             return NULL;
          } else {
-            LOG_ERROR("sinkL returned NULL. It is NOT EOS!?!?");
+            OLOG_ERROR("sinkL returned NULL. It is NOT EOS!?!?");
             continue;
          }
       }
@@ -904,11 +904,11 @@ void *video_processing_thread(void *arg) {
          if (sampleR[!buffer_num] == NULL) {
             eosR = gst_app_sink_is_eos(GST_APP_SINK(sinkR));
             if (eosR) {
-               LOG_ERROR("sinkR returned NULL. It is EOS.");
+               OLOG_ERROR("sinkR returned NULL. It is EOS.");
                quit = 1;
                return NULL;
             } else {
-               LOG_ERROR("sinkR returned NULL. It is NOT EOS!?!?");
+               OLOG_ERROR("sinkR returned NULL. It is NOT EOS!?!?");
                continue;
             }
          }
@@ -933,13 +933,13 @@ void *video_processing_thread(void *arg) {
                g_signal_emit_by_name(sinkR, "pull-sample", &sampleR[!buffer_num], NULL);
                bufferR[!buffer_num] = gst_sample_get_buffer(sampleR[!buffer_num]);
 #ifdef DEBUG_BUFFERS
-               LOG_WARNING("Catching up R buffer.");
-               LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                           bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                           (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                           (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
-                                                                (long)bufferR[!buffer_num]->pts),
-                           sync_comp);
+               OLOG_WARNING("Catching up R buffer.");
+               OLOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                            bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                            (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                            (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
+                                                                 (long)bufferR[!buffer_num]->pts),
+                            sync_comp);
                sync_comp++;
 #endif
             }
@@ -949,24 +949,24 @@ void *video_processing_thread(void *arg) {
                g_signal_emit_by_name(sinkL, "pull-sample", &sampleL[!buffer_num], NULL);
                bufferL[!buffer_num] = gst_sample_get_buffer(sampleL[!buffer_num]);
 #ifdef DEBUG_BUFFERS
-               LOG_WARNING("Catching up L buffer.");
-               LOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                           bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                           (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                           (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
-                                                                (long)bufferR[!buffer_num]->pts),
-                           sync_comp);
+               OLOG_WARNING("Catching up L buffer.");
+               OLOG_WARNING("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                            bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                            (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                            (this_hds->cam_frame_duration) > abs((long)bufferL[!buffer_num]->pts -
+                                                                 (long)bufferR[!buffer_num]->pts),
+                            sync_comp);
                sync_comp++;
 #endif
             }
 
 #ifdef DEBUG_BUFFERS
-            LOG_INFO("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
-                     bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
-                     (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
-                     (this_hds->cam_frame_duration) >
-                         abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
-                     sync_comp);
+            OLOG_INFO("bufferL PTS: %lu, bufferR PTS: %lu, %10ld: %d, sync_comp: %d",
+                      bufferL[!buffer_num]->pts, bufferR[!buffer_num]->pts,
+                      (long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts,
+                      (this_hds->cam_frame_duration) >
+                          abs((long)bufferL[!buffer_num]->pts - (long)bufferR[!buffer_num]->pts),
+                      sync_comp);
 #endif
 
             gst_buffer_map(bufferL[!buffer_num], &mapL[!buffer_num], GST_MAP_READ);
@@ -1010,15 +1010,15 @@ TTF_Font *get_local_font(char *font_name, int font_size) {
    local_font *this_font = NULL;
 
    if (font_name == NULL || font_size <= 0) {
-      LOG_WARNING("Invalid font parameters: name=%s, size=%d", font_name ? font_name : "NULL",
-                  font_size);
+      OLOG_WARNING("Invalid font parameters: name=%s, size=%d", font_name ? font_name : "NULL",
+                   font_size);
       return NULL;
    }
 
    if (font_list == NULL) {
       font_list = malloc(sizeof(local_font));
       if (font_list == NULL) {
-         LOG_ERROR("Unable to malloc initial font cache entry");
+         OLOG_ERROR("Unable to malloc initial font cache entry");
          return NULL;
       }
       this_font = font_list;
@@ -1040,7 +1040,7 @@ TTF_Font *get_local_font(char *font_name, int font_size) {
       /* None found. Create new one. */
       this_font->next = malloc(sizeof(local_font));
       if (this_font->next == NULL) {
-         LOG_ERROR("Unable to malloc font cache entry");
+         OLOG_ERROR("Unable to malloc font cache entry");
          return NULL;
       }
       this_font = this_font->next;
@@ -1071,18 +1071,18 @@ SDL_Texture *get_cached_texture(const char *filename) {
    SDL_Renderer *renderer = get_sdl_renderer();
 
    if (filename == NULL || filename[0] == '\0') {
-      LOG_WARNING("Invalid texture filename: NULL or empty");
+      OLOG_WARNING("Invalid texture filename: NULL or empty");
       return NULL;
    }
 
    if (renderer == NULL) {
-      LOG_ERROR("No SDL renderer available for texture loading");
+      OLOG_ERROR("No SDL renderer available for texture loading");
       return NULL;
    }
 
    /* Get file modification time for cache validation */
    if (stat(filename, &file_stat) != 0) {
-      LOG_WARNING("Cannot stat texture file: %s", filename);
+      OLOG_WARNING("Cannot stat texture file: %s", filename);
       /* Continue anyway - file might be accessible for reading */
       file_stat.st_mtime = 0;
    }
@@ -1091,13 +1091,13 @@ SDL_Texture *get_cached_texture(const char *filename) {
    if (texture_list == NULL) {
       texture_list = malloc(sizeof(texture_cache));
       if (texture_list == NULL) {
-         LOG_ERROR("Unable to malloc initial texture cache entry");
+         OLOG_ERROR("Unable to malloc initial texture cache entry");
          return NULL;
       }
 
       texture_list->texture = IMG_LoadTexture(renderer, filename);
       if (!texture_list->texture) {
-         LOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
+         OLOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
          free(texture_list);
          texture_list = NULL;
          return NULL;
@@ -1117,14 +1117,14 @@ SDL_Texture *get_cached_texture(const char *filename) {
       if (strcmp(filename, this_texture->filename) == 0) {
          /* Found in cache - check if file has been modified */
          if (file_stat.st_mtime > this_texture->file_mtime) {
-            LOG_INFO("Texture file modified, reloading: %s", filename);
+            OLOG_INFO("Texture file modified, reloading: %s", filename);
 
             /* Destroy old texture and reload */
             SDL_DestroyTexture(this_texture->texture);
             this_texture->texture = IMG_LoadTexture(renderer, filename);
 
             if (!this_texture->texture) {
-               LOG_ERROR("Error reloading modified texture: %s - %s", filename, SDL_GetError());
+               OLOG_ERROR("Error reloading modified texture: %s - %s", filename, SDL_GetError());
                return NULL;
             }
 
@@ -1144,14 +1144,14 @@ SDL_Texture *get_cached_texture(const char *filename) {
    /* Texture not found in cache, create new cache entry */
    this_texture->next = malloc(sizeof(texture_cache));
    if (this_texture->next == NULL) {
-      LOG_ERROR("Unable to malloc texture cache entry");
+      OLOG_ERROR("Unable to malloc texture cache entry");
       return NULL;
    }
 
    this_texture = this_texture->next;
    this_texture->texture = IMG_LoadTexture(renderer, filename);
    if (!this_texture->texture) {
-      LOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
+      OLOG_ERROR("Error loading texture: %s - %s", filename, SDL_GetError());
       free(this_texture);
       /* Fix the linked list - find previous node */
       texture_cache *prev = texture_list;
@@ -1205,7 +1205,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *des
    hud_display_settings *this_hds = get_hud_display_settings();
 
    if (dest == NULL) {
-      LOG_ERROR("ERROR: renderStereo() was passed a NULL dest value!");
+      OLOG_ERROR("ERROR: renderStereo() was passed a NULL dest value!");
 
       return;
    }
@@ -1353,7 +1353,7 @@ void renderStereo(SDL_Texture *tex, SDL_Rect *src, SDL_Rect *dest, SDL_Rect *des
  */
 void mqttTextToSpeech(const char *text) {
    if (mosq == NULL) {
-      LOG_ERROR("MQTT not initialized trying to send: \"%s\"", text);
+      OLOG_ERROR("MQTT not initialized trying to send: \"%s\"", text);
       return;
    }
 
@@ -1371,7 +1371,7 @@ void mqttTextToSpeech(const char *text) {
    const char *json_str = json_object_to_json_string(obj);
    int rc = mosquitto_publish(mosq, NULL, "dawn", strlen(json_str), json_str, 0, false);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
    }
 
    json_object_put(obj);
@@ -1383,7 +1383,7 @@ void mqttTextToSpeech(const char *text) {
  */
 void mqttSoundEffect(const char *action, const char *filename) {
    if (mosq == NULL) {
-      LOG_ERROR("MQTT not initialized for sound effect: %s", filename);
+      OLOG_ERROR("MQTT not initialized for sound effect: %s", filename);
       return;
    }
 
@@ -1402,7 +1402,7 @@ void mqttSoundEffect(const char *action, const char *filename) {
    const char *json_str = json_object_to_json_string(obj);
    int rc = mosquitto_publish(mosq, NULL, "dawn", strlen(json_str), json_str, 0, false);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error publishing sound effect: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error publishing sound effect: %s", mosquitto_strerror(rc));
    }
 
    json_object_put(obj);
@@ -1415,13 +1415,13 @@ void mqttSendMessage(const char *topic, const char *text) {
    int rc = 0;
 
    if (mosq == NULL) {
-      LOG_ERROR("MQTT not initialized.");
+      OLOG_ERROR("MQTT not initialized.");
    } else {
       rc = mosquitto_publish(mosq, NULL, topic, strlen(text), text, 0, false);
       if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
+         OLOG_ERROR("Error publishing: %s", mosquitto_strerror(rc));
       } else {
-         LOG_INFO("Successfully send via MQTT: %s", text);
+         OLOG_INFO("Successfully send via MQTT: %s", text);
       }
    }
 }
@@ -1703,16 +1703,16 @@ int main(int argc, char **argv) {
 
    /* If we don't get an argument, read from stdin. */
    if (!usb_enable) {
-      LOG_WARNING("No serial port reading from stdin.");
+      OLOG_WARNING("No serial port reading from stdin.");
    }
 
    if (IMG_Init(IMG_INIT_PNG) < 0) {
-      LOG_ERROR("Error initializing SDL_image: %s\n", IMG_GetError());
+      OLOG_ERROR("Error initializing SDL_image: %s\n", IMG_GetError());
       return EXIT_FAILURE;
    }
 
    if (TTF_Init() < 0) {
-      LOG_ERROR("Error initializing SDL_ttf: %s\n", TTF_GetError());
+      OLOG_ERROR("Error initializing SDL_ttf: %s\n", TTF_GetError());
       return EXIT_FAILURE;
    }
 
@@ -1721,7 +1721,7 @@ int main(int argc, char **argv) {
    // Create window with native dimensions
    if ((window = SDL_CreateWindow(argv[0], SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                   native_width, native_height, sdl_flags)) == NULL) {
-      LOG_ERROR("SDL_CreateWindow() failed: %s\n", SDL_GetError());
+      OLOG_ERROR("SDL_CreateWindow() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
 
@@ -1735,20 +1735,20 @@ int main(int argc, char **argv) {
    // Create GL context
    SDL_GLContext glContext = SDL_GL_CreateContext(window);
    if (!glContext) {
-      LOG_ERROR("Failed to create GL context: %s", SDL_GetError());
+      OLOG_ERROR("Failed to create GL context: %s", SDL_GetError());
       return EXIT_FAILURE;
    }
 
    // Make the context current
    if (SDL_GL_MakeCurrent(window, glContext) < 0) {
-      LOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
+      OLOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
       return EXIT_FAILURE;
    }
 
    // Initialize GLEW (if you're using GLEW)
    GLenum glewError = glewInit();
    if (GLEW_OK != glewError) {
-      LOG_ERROR("GLEW Error: %s", glewGetErrorString(glewError));
+      OLOG_ERROR("GLEW Error: %s", glewGetErrorString(glewError));
       return EXIT_FAILURE;
    }
 
@@ -1758,7 +1758,7 @@ int main(int argc, char **argv) {
 #else
    if ((renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)) == NULL) {
 #endif
-      LOG_ERROR("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
+      OLOG_ERROR("SDL_CreateRenderer() failed: %s\n", SDL_GetError());
       return EXIT_FAILURE;
    }
 
@@ -1785,11 +1785,11 @@ int main(int argc, char **argv) {
    intro_element.enabled = 0;
 
    if (check_and_reload_config(config_file) == FAILURE) {
-      LOG_ERROR("Failed to parse config file. Exiting.");
+      OLOG_ERROR("Failed to parse config file. Exiting.");
       return EXIT_FAILURE;
    }
 
-   LOG_INFO("Initial configuration loaded successfully");
+   OLOG_INFO("Initial configuration loaded successfully");
 
    /* Load secrets (API keys) from secrets.json -- non-fatal if missing */
    secrets_load("secrets.json");
@@ -1847,7 +1847,7 @@ int main(int argc, char **argv) {
 
    mosq = mosquitto_new(NULL, true, NULL);
    if (mosq == NULL) {
-      LOG_ERROR("Error: Out of memory.");
+      OLOG_ERROR("Error: Out of memory.");
       return EXIT_FAILURE;
    }
 
@@ -1864,16 +1864,16 @@ int main(int argc, char **argv) {
       rc = mosquitto_username_pw_set(mosq, get_mqtt_username(),
                                      get_mqtt_password()[0] != '\0' ? get_mqtt_password() : NULL);
       if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("Failed to set MQTT credentials: %s", mosquitto_strerror(rc));
-         LOG_ERROR("  Hint: Check mqtt_username/mqtt_password in secrets.json");
+         OLOG_ERROR("Failed to set MQTT credentials: %s", mosquitto_strerror(rc));
+         OLOG_ERROR("  Hint: Check mqtt_username/mqtt_password in secrets.json");
       } else {
-         LOG_INFO("MQTT authentication configured for user: %s", get_mqtt_username());
+         OLOG_INFO("MQTT authentication configured for user: %s", get_mqtt_username());
       }
    } else {
-      LOG_WARNING("========================================");
-      LOG_WARNING("MQTT: No authentication configured.");
-      LOG_WARNING("Configure mqtt_username/mqtt_password in secrets.json");
-      LOG_WARNING("========================================");
+      OLOG_WARNING("========================================");
+      OLOG_WARNING("MQTT: No authentication configured.");
+      OLOG_WARNING("Configure mqtt_username/mqtt_password in secrets.json");
+      OLOG_WARNING("========================================");
    }
 
    /* Configure MQTT TLS if enabled */
@@ -1888,20 +1888,20 @@ int main(int argc, char **argv) {
       int tls_ok = 1;
       for (int i = 0; i < 3; i++) {
          if (paths[i] && access(paths[i], R_OK) != 0) {
-            LOG_ERROR("MQTT TLS %s not readable: %s (%s)", labels[i], paths[i], strerror(errno));
+            OLOG_ERROR("MQTT TLS %s not readable: %s (%s)", labels[i], paths[i], strerror(errno));
             tls_ok = 0;
          }
       }
 
       if (!tls_ok) {
-         LOG_ERROR("MQTT TLS certificate files not accessible -- connecting without TLS");
+         OLOG_ERROR("MQTT TLS certificate files not accessible -- connecting without TLS");
       } else {
          rc = mosquitto_tls_set(mosq, ca, NULL, cert, key, NULL);
          if (rc != MOSQ_ERR_SUCCESS) {
-            LOG_ERROR("MQTT TLS setup failed: %s -- connecting without TLS",
-                      mosquitto_strerror(rc));
+            OLOG_ERROR("MQTT TLS setup failed: %s -- connecting without TLS",
+                       mosquitto_strerror(rc));
          } else {
-            LOG_INFO("MQTT TLS enabled (CA: %s)", ca ? ca : "system default");
+            OLOG_INFO("MQTT TLS enabled (CA: %s)", ca ? ca : "system default");
          }
       }
    }
@@ -1910,13 +1910,13 @@ int main(int argc, char **argv) {
    component_status_set_lwt(mosq);
 
    /* Connect to MQTT server (host/port from config.json, defaults to 127.0.0.1:1883) */
-   LOG_INFO("Connecting to MQTT broker at %s:%d", get_mqtt_host(), get_mqtt_port());
+   OLOG_INFO("Connecting to MQTT broker at %s:%d", get_mqtt_host(), get_mqtt_port());
    rc = mosquitto_connect(mosq, get_mqtt_host(), get_mqtt_port(), 60);
    if (rc != MOSQ_ERR_SUCCESS) {
       mosquitto_destroy(mosq);
-      LOG_ERROR("Error: %s", mosquitto_strerror(rc));
-      LOG_ERROR("  Hint: Check Mosquitto is running: sudo systemctl status mosquitto");
-      LOG_ERROR("  Hint: Verify mqtt host/port in config.json (default: 127.0.0.1:1883)");
+      OLOG_ERROR("Error: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("  Hint: Check Mosquitto is running: sudo systemctl status mosquitto");
+      OLOG_ERROR("  Hint: Verify mqtt host/port in config.json (default: 127.0.0.1:1883)");
       return EXIT_FAILURE;
    }
 
@@ -1946,7 +1946,7 @@ int main(int argc, char **argv) {
    if (detect_enabled) {
       if (init_detect(&oddataL.detect_obj, argc, argv, this_hds->cam_input_width,
                       this_hds->cam_input_height)) {
-         LOG_ERROR("Error initializing detect!!!");
+         OLOG_ERROR("Error initializing detect!!!");
          detect_enabled = 0;
       } else {
          if (intro_element.enabled) {
@@ -1954,7 +1954,7 @@ int main(int argc, char **argv) {
          }
          if (init_detect(&oddataR.detect_obj, argc, argv, this_hds->cam_input_width,
                          this_hds->cam_input_height)) {
-            LOG_ERROR("Error initializing detect!!!");
+            OLOG_ERROR("Error initializing detect!!!");
             detect_enabled = 0;
          } else {
             //oddataL.detect_obj.v_mutex = &v_mutex;
@@ -1966,11 +1966,11 @@ int main(int argc, char **argv) {
    if (!no_camera_mode) {
       if (pthread_create(&video_proc_thread, NULL, video_processing_thread, (void *)cam_type) !=
           0) {
-         LOG_ERROR("Error creating video processing thread.");
+         OLOG_ERROR("Error creating video processing thread.");
          return EXIT_FAILURE;
       }
    } else {
-      LOG_INFO("Running in no camera mode, video processing thread not started");
+      OLOG_INFO("Running in no camera mode, video processing thread not started");
    }
 
 
@@ -1984,7 +1984,7 @@ int main(int argc, char **argv) {
       /* USB/Serial helmet communication */
       if (pthread_create(&command_proc_thread, NULL, serial_command_processing_thread,
                          (void *)usb_port) != 0) {
-         LOG_ERROR("Error creating command processing thread.");
+         OLOG_ERROR("Error creating command processing thread.");
          return EXIT_FAILURE;
       }
    } else if (helmet_tcp_enable) {
@@ -1992,11 +1992,11 @@ int main(int argc, char **argv) {
       strcpy(usb_port, "");
       if (pthread_create(&command_proc_thread, NULL, socket_command_processing_thread,
                          (void *)(intptr_t)helmet_tcp_port) != 0) {
-         LOG_ERROR("Error creating command processing thread.");
+         OLOG_ERROR("Error creating command processing thread.");
          return EXIT_FAILURE;
       }
    } else {
-      LOG_INFO("No helmet command thread started (use -u for USB or -H for TCP)");
+      OLOG_INFO("No helmet command thread started (use -u for USB or -H for TCP)");
    }
 
    mqttTextToSpeech("Your hud is now online boss.");
@@ -2032,10 +2032,10 @@ int main(int argc, char **argv) {
                      if (event.key.keysym.sym == SDL_GetKeyFromName(curr_element->hotkey)) {
                         curr_element->enabled = !curr_element->enabled;
                         if (strncmp(curr_element->special_name, "detect", 6) == 0) {
-                           LOG_INFO("Changing detect status.");
+                           OLOG_INFO("Changing detect status.");
                            detect_enabled = !detect_enabled;
                         }
-                        LOG_INFO("Changing status.");
+                        OLOG_INFO("Changing status.");
                      }
                   }
 
@@ -2059,14 +2059,14 @@ int main(int argc, char **argv) {
                switch (event.key.keysym.sym) {
                   case SDLK_f:
                      if (get_recording_state() != DISABLED) {
-                        LOG_WARNING("Unable to change window size while recording.");
+                        OLOG_WARNING("Unable to change window size while recording.");
                      } else {
                         if (fullscreen) {
-                           LOG_INFO("Switching to windowed mode.");
+                           OLOG_INFO("Switching to windowed mode.");
                            SDL_SetWindowFullscreen(window, 0);
                            SDL_ShowCursor(1);
                         } else {
-                           LOG_INFO("Switching to fullscreen mode.");
+                           OLOG_INFO("Switching to fullscreen mode.");
                            SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
                            SDL_ShowCursor(0);
                         }
@@ -2076,13 +2076,13 @@ int main(int argc, char **argv) {
                      break;
 
                   case SDLK_p:  // 'P' for photo/screenshot
-                     LOG_INFO("Requesting full-resolution screenshot with overlay...");
+                     OLOG_INFO("Requesting full-resolution screenshot with overlay...");
                      request_screenshot(1, 1, NULL,
                                         SCREENSHOT_MANUAL);  // With overlay, full resolution
                      break;
 
                   case SDLK_o:  // 'O' for raw screenshot (without overlay)
-                     LOG_INFO("Requesting full-resolution raw camera screenshot...");
+                     OLOG_INFO("Requesting full-resolution raw camera screenshot...");
                      request_screenshot(0, 1, NULL,
                                         SCREENSHOT_MANUAL);  // Without overlay, full resolution
                      break;
@@ -2091,11 +2091,11 @@ int main(int argc, char **argv) {
                      if (get_recording_state() == DISABLED) {
                         set_recording_state(RECORD);
                         last_file_check = currTime;
-                        LOG_INFO("Starting recording.");
+                        OLOG_INFO("Starting recording.");
                      } else {
                         set_recording_state(DISABLED);
                         last_size = last_last_size = -1;
-                        LOG_INFO("Stopping recording.");
+                        OLOG_INFO("Stopping recording.");
                      }
                      break;
 
@@ -2103,11 +2103,11 @@ int main(int argc, char **argv) {
                      if (get_recording_state() == DISABLED) {
                         set_recording_state(STREAM);
                         last_file_check = currTime;
-                        LOG_INFO("Starting streaming.");
+                        OLOG_INFO("Starting streaming.");
                      } else {
                         set_recording_state(DISABLED);
                         last_size = last_last_size = -1;
-                        LOG_INFO("Stopping streaming.");
+                        OLOG_INFO("Stopping streaming.");
                      }
                      break;
 
@@ -2115,22 +2115,22 @@ int main(int argc, char **argv) {
                      if (get_recording_state() == DISABLED) {
                         set_recording_state(RECORD_STREAM);
                         last_file_check = currTime;
-                        LOG_INFO("Starting recording and streaming.");
+                        OLOG_INFO("Starting recording and streaming.");
                      } else {
                         set_recording_state(DISABLED);
                         last_size = last_last_size = -1;
-                        LOG_INFO("Stopping recording and streaming.");
+                        OLOG_INFO("Stopping recording and streaming.");
                      }
                      break;
 
                   case SDLK_LEFT:
                      this_hds->stereo_offset -= 10;
-                     LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
+                     OLOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
                      break;
 
                   case SDLK_RIGHT:
                      this_hds->stereo_offset += 10;
-                     LOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
+                     OLOG_INFO("Stereo Offset: %d", this_hds->stereo_offset);
                      break;
 
                   case SDLK_TAB:  // Tab key to cycle through HUDs
@@ -2171,7 +2171,7 @@ int main(int argc, char **argv) {
                   window_height = newHeight;
                   pthread_mutex_unlock(&windowSizeMutex);
 
-                  LOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
+                  OLOG_INFO("Window resized to: %dx%d", newWidth, newHeight);
                }
                break;
             case SDL_QUIT:
@@ -2293,9 +2293,9 @@ int main(int argc, char **argv) {
          present_time = (unsigned long)display_time.tv_sec * 1000000000 + display_time.tv_nsec;
          ts_count++;
          ts_total += (present_time - last_ts_cap) / 1000000;
-         LOG_INFO("Display latency: %lu ms, avg: %lu ms", (present_time - last_ts_cap) / 1000000,
-                  ts_total / (unsigned long)ts_count);
-         LOG_INFO("ts_total: %lu ms, ts_count: %u", ts_total, ts_count);
+         OLOG_INFO("Display latency: %lu ms, avg: %lu ms", (present_time - last_ts_cap) / 1000000,
+                   ts_total / (unsigned long)ts_count);
+         OLOG_INFO("ts_total: %lu ms, ts_count: %u", ts_total, ts_count);
 #endif
 
          if (get_recording_state() != DISABLED) {
@@ -2310,8 +2310,8 @@ int main(int argc, char **argv) {
                last_last_size = last_size;
                if (has_file_grown(this_vod->filename, &last_last_size)) {
                   if (!(active_alerts & ALERT_RECORDING)) {
-                     LOG_ERROR("ERROR: %s: File size is not increasing. %ld ? %ld",
-                               this_vod->filename, last_last_size, last_size);
+                     OLOG_ERROR("ERROR: %s: File size is not increasing. %ld ? %ld",
+                                this_vod->filename, last_last_size, last_size);
                      active_alerts |= ALERT_RECORDING;
                      mqttTextToSpeech("There is potentially and error with recording.");
                   }
@@ -2325,7 +2325,7 @@ int main(int argc, char **argv) {
             /* Ensure pre-allocated frame buffers are the right size */
             if (ensure_frame_buffers((size_t)window_width * RGB_OUT_SIZE * window_height) !=
                 SUCCESS) {
-               LOG_ERROR("Unable to allocate frame buffers.");
+               OLOG_ERROR("Unable to allocate frame buffers.");
                return (2);
             }
 
@@ -2342,7 +2342,7 @@ int main(int argc, char **argv) {
             if (OpenGL_RenderReadPixelsSync(renderer, NULL, PIXEL_FORMAT_OUT,
                                             this_vod->rgb_out_pixels[this_vod->write_index],
                                             window_width * RGB_OUT_SIZE) != 0) {
-               LOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
+               OLOG_ERROR("OpenGL_RenderReadPixelsAsync() failed");
                /* Buffer is pre-allocated, no free needed -- just skip this frame */
 #ifdef ENCODE_TIMING
             } else {
@@ -2369,7 +2369,7 @@ int main(int argc, char **argv) {
             if (get_recording_state() != DISABLED && get_video_out_thread() == 0) {
                pthread_t thread_id;
                if (pthread_create(&thread_id, NULL, video_next_thread, NULL) != 0) {
-                  LOG_ERROR("Error creating video output thread.");
+                  OLOG_ERROR("Error creating video output thread.");
                   set_recording_state(DISABLED);
                } else {
                   set_video_out_thread(thread_id);
@@ -2396,16 +2396,16 @@ int main(int argc, char **argv) {
    pthread_mutex_destroy(&windowSizeMutex);
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting on command processing thread to stop.");
+   OLOG_INFO("Waiting on command processing thread to stop.");
 #endif
    if (command_proc_thread != 0) {
       //pthread_join(command_proc_thread, NULL); // TODO: This is hanging.
       pthread_cancel(command_proc_thread);
    }
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 
-   LOG_INFO("Stopping MQTT before freeing elements.");
+   OLOG_INFO("Stopping MQTT before freeing elements.");
 #endif
    /* Publish offline status and stop MQTT before freeing elements -- the
     * mosquitto loop thread calls registerArmor() which walks the element
@@ -2415,17 +2415,17 @@ int main(int argc, char **argv) {
    mosquitto_disconnect(mosq);
    mosquitto_loop_stop(mosq, false);
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 
-   LOG_INFO("Freeing elements.");
+   OLOG_INFO("Freeing elements.");
 #endif
    /* Free elements. */
    free_elements(first_element);
    free_elements(this_as->armor_elements);
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 
-   LOG_INFO("Freeing fonts.");
+   OLOG_INFO("Freeing fonts.");
 #endif
    /* Free fonts. */
    this_font = font_list;
@@ -2436,11 +2436,11 @@ int main(int argc, char **argv) {
       this_font = next_font;
    }
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 #endif
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Freeing texture cache.");
+   OLOG_INFO("Freeing texture cache.");
 #endif
    /* Free texture cache */
    texture_cache *this_tex = texture_list;
@@ -2454,7 +2454,7 @@ int main(int argc, char **argv) {
    }
    texture_list = NULL;
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 #endif
 
    cleanup_hud_manager();
@@ -2464,30 +2464,30 @@ int main(int argc, char **argv) {
 
    if (!no_camera_mode) {
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Wainting on video processing to stop.");
+      OLOG_INFO("Wainting on video processing to stop.");
 #endif
       pthread_join(video_proc_thread, NULL);
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Done.");
+      OLOG_INFO("Done.");
 #endif
    }
 
    pthread_t vid_out_thread = get_video_out_thread();
    if (vid_out_thread != 0) {
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Waiting on final video thread to stop.");
+      OLOG_INFO("Waiting on final video thread to stop.");
 #endif
       pthread_join(vid_out_thread, NULL);
       reset_video_out_thread();
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Done.");
+      OLOG_INFO("Done.");
 #endif
    }
 
    cleanup_video_out_data();
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Destroy primary textures.");
+   OLOG_INFO("Destroy primary textures.");
 #endif
    if (textureL != NULL) {
       SDL_DestroyTexture(textureL);
@@ -2499,53 +2499,53 @@ int main(int argc, char **argv) {
    }
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Delete GL buffers.");
+   OLOG_INFO("Delete GL buffers.");
 #endif
    cleanup_pbo_system();
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Delete the GL context.");
+   OLOG_INFO("Delete the GL context.");
 #endif
    SDL_GL_DeleteContext(glContext);
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting on SDL renderer and window destruction.");
+   OLOG_INFO("Waiting on SDL renderer and window destruction.");
 #endif
    SDL_DestroyRenderer(renderer);
    SDL_DestroyWindow(window);
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 #endif
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting on SDL libraries to quit.");
+   OLOG_INFO("Waiting on SDL libraries to quit.");
 #endif
    TTF_Quit();
    IMG_Quit();
    SDL_Quit();
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 #endif
 
    if (detect_enabled) {
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Waiting for detection to clean up.");
+      OLOG_INFO("Waiting for detection to clean up.");
 #endif
       free_detect(&oddataL.detect_obj);
       free_detect(&oddataR.detect_obj);
 #ifdef DEBUG_SHUTDOWN
-      LOG_INFO("Done.");
+      OLOG_INFO("Done.");
 #endif
    }
 
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Waiting for other library clean up.");
+   OLOG_INFO("Waiting for other library clean up.");
 #endif
    mosquitto_destroy(mosq);
    mosquitto_lib_cleanup();
    curl_global_cleanup();
 #ifdef DEBUG_SHUTDOWN
-   LOG_INFO("Done.");
+   OLOG_INFO("Done.");
 #endif
 
    // Close the log file properly

@@ -29,7 +29,7 @@
 #include "config/config_parser.h"
 #include "config/defines.h"
 #include "hardware/armor.h"
-#include "util/logging.h"
+#include "logging.h"
 
 /* Mosquitto STUFF */
 /* Callback called when the client receives a CONNACK message from the broker. */
@@ -47,38 +47,38 @@ void on_connect(struct mosquitto *mosq, void *obj, int reason_code) {
       return;
    }
 
-   LOG_INFO("Mosquitto successfully connected. Subscribing to...");
+   OLOG_INFO("Mosquitto successfully connected. Subscribing to...");
 
    // Subscribe to the main hud service
    rc = mosquitto_subscribe(mosq, NULL, "hud", 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error subscribing to hud: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error subscribing to hud: %s", mosquitto_strerror(rc));
    }
 
    // Subscribe to the helmet topic for faceplate control
    rc = mosquitto_subscribe(mosq, NULL, "helmet", 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error subscribing to helmet: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error subscribing to helmet: %s", mosquitto_strerror(rc));
    }
 
    // Subscribe to the stat telemetry topic for system metrics
    rc = mosquitto_subscribe(mosq, NULL, "stat/telemetry", 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error subscribing to stat/telemetry: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error subscribing to stat/telemetry: %s", mosquitto_strerror(rc));
    }
 
    // Subscribe to the stat status topic for component presence
    rc = mosquitto_subscribe(mosq, NULL, "stat/status", 1);
    if (rc != MOSQ_ERR_SUCCESS) {
-      LOG_ERROR("Error subscribing to stat/status: %s", mosquitto_strerror(rc));
+      OLOG_ERROR("Error subscribing to stat/status: %s", mosquitto_strerror(rc));
    }
 
    /* This works. I think I like the idea of a registration service better but... */
    while (this_element != NULL) {
-      LOG_INFO(" %s\n", this_element->mqtt_device);
+      OLOG_INFO(" %s\n", this_element->mqtt_device);
       rc = mosquitto_subscribe(mosq, NULL, this_element->mqtt_device, 1);
       if (rc != MOSQ_ERR_SUCCESS) {
-         LOG_ERROR("Error subscribing: %s", mosquitto_strerror(rc));
+         OLOG_ERROR("Error subscribing: %s", mosquitto_strerror(rc));
       }
 
       this_element = this_element->next;
@@ -109,7 +109,7 @@ void on_subscribe(struct mosquitto *mosq,
       }
    }
    if (have_subscription == false) {
-      LOG_ERROR("Error: All subscriptions rejected.");
+      OLOG_ERROR("Error: All subscriptions rejected.");
       mosquitto_disconnect(mosq);
    }
 }
@@ -119,14 +119,14 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    // Properly null-terminate the payload to pass around.
    char *payload = malloc(msg->payloadlen + 1);
    if (!payload) {
-      LOG_ERROR("Failed to allocate memory for MQTT payload");
+      OLOG_ERROR("Failed to allocate memory for MQTT payload");
       return;
    }
 
    memcpy(payload, msg->payload, msg->payloadlen);
    payload[msg->payloadlen] = '\0';
 
-   //LOG_INFO("%s %d %s", msg->topic, msg->qos, (char *)msg->payload);
+   //OLOG_INFO("%s %d %s", msg->topic, msg->qos, (char *)msg->payload);
 
    /* Handle HUD discovery requests */
    if (strcmp(msg->topic, HUD_DISCOVERY_TOPIC_REQUEST) == 0) {
@@ -152,7 +152,7 @@ void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messag
    // Check if this is a helmet command that needs to be forwarded to serial
    if (strcmp(msg->topic, "helmet") == 0) {
       // Forward the message to serial if connected
-      LOG_INFO("Received 'helmet' message to forward.");
+      OLOG_INFO("Received 'helmet' message to forward.");
       forward_helmet_command_to_serial(payload);
    }
 

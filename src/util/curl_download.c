@@ -30,7 +30,7 @@
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_image.h"
 #include "core/mirage.h"
-#include "util/logging.h"
+#include "logging.h"
 
 /**
  * Callback function for curl to write received data
@@ -49,14 +49,14 @@ static size_t write_data(void *contents, size_t size, size_t nmemb, void *userp)
 
    /* Overflow check on multiplication */
    if (nmemb > 0 && size > SIZE_MAX / nmemb) {
-      LOG_ERROR("Download size overflow");
+      OLOG_ERROR("Download size overflow");
       return 0;
    }
    size_t realsize = size * nmemb;
 
    /* Bound total download size */
    if (mem->size + realsize > MAX_DOWNLOAD_SIZE) {
-      LOG_ERROR("Download exceeds %d byte limit", MAX_DOWNLOAD_SIZE);
+      OLOG_ERROR("Download exceeds %d byte limit", MAX_DOWNLOAD_SIZE);
       return 0;
    }
 
@@ -65,7 +65,7 @@ static size_t write_data(void *contents, size_t size, size_t nmemb, void *userp)
 
    ptr = realloc(mem->data, mem->size + realsize + 1);
    if (!ptr) {
-      LOG_ERROR("Not enough memory for download (realloc returned NULL)");
+      OLOG_ERROR("Not enough memory for download (realloc returned NULL)");
       return 0;
    }
 
@@ -91,7 +91,7 @@ void *image_download_thread(void *arg) {
    /* Initialize curl */
    curl_handle = curl_easy_init();
    if (!curl_handle) {
-      LOG_ERROR("Failed to initialize curl handle");
+      OLOG_ERROR("Failed to initialize curl handle");
       return NULL;
    }
 
@@ -112,7 +112,7 @@ void *image_download_thread(void *arg) {
 
       /* Check if it's time for an update */
       if (should_refresh) {
-         //LOG_INFO("image_download_thread should_refresh received.");
+         //OLOG_INFO("image_download_thread should_refresh received.");
 
          /* Lock the mutex before modifying shared data */
          pthread_mutex_lock(&this_data->mutex);
@@ -130,7 +130,7 @@ void *image_download_thread(void *arg) {
             /* We've downloaded all we need to. This thread is being monitored though, so just sleep
              * for a while and then continue.
              */
-            LOG_INFO("Download limit reached.");
+            OLOG_INFO("Download limit reached.");
             sleep(60);
             continue;
          }
@@ -150,7 +150,7 @@ void *image_download_thread(void *arg) {
          if (res == CURLE_OK && this_data->data && this_data->size > 0) {
             this_data->updated = 1;
             time(&last_update);
-            LOG_INFO("Downloaded new map data, %zu bytes", this_data->size);
+            OLOG_INFO("Downloaded new map data, %zu bytes", this_data->size);
             downloads++;
          }
          pthread_mutex_unlock(&this_data->mutex);
