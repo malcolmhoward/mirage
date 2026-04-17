@@ -126,6 +126,10 @@ typedef struct {
    bool image_dirty;
    SDL_Texture *image_texture;
    pthread_mutex_t image_mutex;
+
+   /* Fetch thread lifecycle (protected by image_mutex) */
+   pthread_t fetch_thread;
+   bool fetch_in_progress;
 } notif_image_t;
 
 /* =============================================================================
@@ -212,5 +216,16 @@ const notif_phone_t *notification_get_phone(void);
  * @brief Get the image notification slot (read-only access for renderer).
  */
 const notif_image_t *notification_get_image(void);
+
+/**
+ * @brief Get the image display texture (or NULL if none/not yet fetched).
+ *
+ * Must be called from the render thread. Creates SDL texture from
+ * fetched image data if dirty flag is set.
+ *
+ * @param renderer SDL renderer for texture creation
+ * @return SDL_Texture pointer or NULL
+ */
+SDL_Texture *notification_get_image_texture(SDL_Renderer *renderer);
 
 #endif /* NOTIFICATION_H */

@@ -918,6 +918,67 @@ void render_notification_photo_element(element *curr_element) {
    SDL_SetTextureAlphaMod(tex, 255);
 }
 
+/* Render a notification image display (special element type "notification_image") */
+void render_notification_image_element(element *curr_element) {
+   SDL_Renderer *renderer = get_sdl_renderer();
+   SDL_Texture *img_tex = notification_get_image_texture(renderer);
+
+   /* Use placeholder texture if image not yet fetched */
+   if (!curr_element->texture && curr_element->filename[0]) {
+      curr_element->texture = get_cached_texture(curr_element->filename);
+   }
+
+   SDL_Texture *tex = img_tex ? img_tex : curr_element->texture;
+   if (!tex) {
+      return;
+   }
+
+   hud_display_settings *this_hds = get_hud_display_settings();
+   int area_w = curr_element->width > 0 ? curr_element->width : 536;
+   int area_h = curr_element->height > 0 ? curr_element->height : 380;
+   int dest_w = area_w;
+   int dest_h = area_h;
+   int offset_x = 0;
+   int offset_y = 0;
+
+   /* Scale-to-fit: preserve aspect ratio, center within the area */
+   if (img_tex) {
+      int tex_w, tex_h;
+      SDL_QueryTexture(img_tex, NULL, NULL, &tex_w, &tex_h);
+      if (tex_w > 0 && tex_h > 0) {
+         float scale_w = (float)area_w / (float)tex_w;
+         float scale_h = (float)area_h / (float)tex_h;
+         float scale = (scale_w < scale_h) ? scale_w : scale_h;
+         dest_w = (int)((float)tex_w * scale);
+         dest_h = (int)((float)tex_h * scale);
+         offset_x = (area_w - dest_w) / 2;
+         offset_y = (area_h - dest_h) / 2;
+      }
+   }
+
+   SDL_Rect dst_rect_l, dst_rect_r;
+   dst_rect_l.x = dst_rect_r.x = curr_element->dest_x + offset_x;
+   dst_rect_l.y = dst_rect_r.y = curr_element->dest_y + offset_y;
+   dst_rect_l.w = dst_rect_r.w = dest_w;
+   dst_rect_l.h = dst_rect_r.h = dest_h;
+
+   if (!curr_element->fixed) {
+      dst_rect_l.x -= this_hds->stereo_offset;
+      dst_rect_r.x += this_hds->stereo_offset;
+   }
+
+   float notif_alpha = notification_get_alpha(curr_element->notification_group);
+   Uint8 alpha = (Uint8)(notif_alpha * 255);
+   if (alpha == 0) {
+      return;
+   }
+
+   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+   SDL_SetTextureAlphaMod(tex, alpha);
+   renderStereo(tex, NULL, &dst_rect_l, &dst_rect_r, 0.0);
+   SDL_SetTextureAlphaMod(tex, 255);
+}
+
 /* Forward declarations for special element types */
 void render_map_element(element *curr_element);
 void render_pitch_element(element *curr_element);
@@ -950,6 +1011,8 @@ void render_special_element(element *curr_element) {
       render_armor_display_element(curr_element);
    } else if (strcmp("notification_photo", curr_element->special_name) == 0) {
       render_notification_photo_element(curr_element);
+   } else if (strcmp("notification_image", curr_element->special_name) == 0) {
+      render_notification_image_element(curr_element);
    } else {
       LOG_ERROR("Unknown special element type: %s", curr_element->special_name);
    }

@@ -35,6 +35,8 @@ static char youtube_stream_key[MAX_SECRET_LENGTH] = "";
 static char google_api_key[MAX_SECRET_LENGTH] = "";
 static char mqtt_username[MAX_SECRET_LENGTH] = "";
 static char mqtt_password[MAX_SECRET_LENGTH] = "";
+static char dawn_url[MAX_SECRET_LENGTH] = "";
+static char dawn_service_token[MAX_SECRET_LENGTH] = "";
 
 /**
  * @brief Read a string value from a JSON object into a buffer.
@@ -57,6 +59,8 @@ int secrets_load(const char *filename) {
    read_secret(root, "google_api_key", google_api_key, sizeof(google_api_key));
    read_secret(root, "mqtt_username", mqtt_username, sizeof(mqtt_username));
    read_secret(root, "mqtt_password", mqtt_password, sizeof(mqtt_password));
+   read_secret(root, "dawn_url", dawn_url, sizeof(dawn_url));
+   read_secret(root, "dawn_service_token", dawn_service_token, sizeof(dawn_service_token));
 
    json_object_put(root);
    LOG_INFO("Secrets loaded from %s", filename);
@@ -77,4 +81,12 @@ const char *get_mqtt_username(void) {
 
 const char *get_mqtt_password(void) {
    return mqtt_password;
+}
+
+const char *get_dawn_url(void) {
+   return dawn_url;
+}
+
+const char *get_dawn_service_token(void) {
+   return dawn_service_token;
 }

@@ -26,14 +26,21 @@
 #include "ui/notification.h"
 
 #include <SDL2/SDL_image.h>
+#include <curl/curl.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "config/config_parser.h"
+#include "config/config_secrets.h"
+#include "core/mirage.h"
 #include "util/logging.h"
+
+/* Maximum image size from HTTP fetch (5 MB) */
+#define IMAGE_FETCH_MAX_SIZE (5 * 1024 * 1024)
 
 /* =============================================================================
  * State
@@ -41,6 +48,7 @@
 
 static notif_phone_t s_phone = { 0 };
 static notif_image_t s_image = { 0 };
+static volatile bool s_shutting_down = false;
 
 notif_group_t notif_group_resolve(const char *group) {
    if (!group || !group[0]) {
@@ -117,6 +125,202 @@ static unsigned char *base64_decode(const char *input, size_t *out_size) {
 }
 
 /* =============================================================================
+ * HTTP Image Fetch (async, for image search results)
+ * ============================================================================= */
+
+/**
+ * @brief Curl write callback — accumulates bytes into a malloc'd buffer.
+ */
+typedef struct {
+   unsigned char *data;
+   size_t size;
+} fetch_buf_t;
+
+static size_t fetch_write_cb(void *contents, size_t size, size_t nmemb, void *userp) {
+   fetch_buf_t *buf = (fetch_buf_t *)userp;
+
+   if (nmemb > 0 && size > SIZE_MAX / nmemb) {
+      return 0;
+   }
+   size_t realsize = size * nmemb;
+
+   if (buf->size + realsize > IMAGE_FETCH_MAX_SIZE) {
+      LOG_ERROR("notification: image fetch exceeds %d byte limit", IMAGE_FETCH_MAX_SIZE);
+      return 0;
+   }
+
+   unsigned char *ptr = realloc(buf->data, buf->size + realsize);
+   if (!ptr) {
+      return 0;
+   }
+
+   buf->data = ptr;
+   memcpy(buf->data + buf->size, contents, realsize);
+   buf->size += realsize;
+   return realsize;
+}
+
+/**
+ * @brief Validate that an image URL matches the expected DAWN API pattern.
+ *
+ * Only allows /api/images/img_<12 alphanumeric chars> to prevent SSRF.
+ */
+static bool validate_image_url(const char *url) {
+   if (!url || !url[0]) {
+      return false;
+   }
+   /* Must start with /api/images/img_ */
+   if (strncmp(url, "/api/images/img_", 16) != 0) {
+      return false;
+   }
+   /* Validate the ID portion: 12 alphanumeric characters */
+   const char *id_part = url + 16;
+   int len = 0;
+   for (int i = 0; id_part[i]; i++) {
+      char c = id_part[i];
+      /* Allow optional file extension after the ID */
+      if (c == '.') {
+         break;
+      }
+      if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+         return false;
+      }
+      len++;
+   }
+   return len == 12;
+}
+
+/**
+ * @brief Background thread: fetch image from DAWN via HTTP with Bearer token.
+ *
+ * Clears s_image.fetch_in_progress on all exit paths. Skips work if shutdown
+ * has been signaled. Explicitly zeros the auth header buffer before returning.
+ */
+static void *image_fetch_thread(void *arg) {
+   (void)arg;
+
+   char url_path[256];
+   char full_url[512];
+   char auth_header[320] = { 0 };
+   CURL *curl = NULL;
+   struct curl_slist *headers = NULL;
+   fetch_buf_t buf = { .data = NULL, .size = 0 };
+   long http_code = 0;
+   CURLcode res = CURLE_OK;
+
+   if (s_shutting_down) {
+      goto cleanup;
+   }
+
+   /* Read URL under lock */
+   pthread_mutex_lock(&s_image.image_mutex);
+   snprintf(url_path, sizeof(url_path), "%s", s_image.image_url);
+   pthread_mutex_unlock(&s_image.image_mutex);
+
+   /* Validate URL pattern */
+   if (!validate_image_url(url_path)) {
+      LOG_ERROR("notification: invalid image URL rejected: %.64s", url_path);
+      goto cleanup;
+   }
+
+   /* Build full URL from dawn_url base + path */
+   const char *base = get_dawn_url();
+   const char *token = get_dawn_service_token();
+   if (!base[0] || !token[0]) {
+      LOG_WARNING("notification: dawn_url or dawn_service_token not configured, skipping fetch");
+      goto cleanup;
+   }
+
+   snprintf(full_url, sizeof(full_url), "%s%s", base, url_path);
+
+   /* Build auth header */
+   snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);
+
+   curl = curl_easy_init();
+   if (!curl) {
+      LOG_ERROR("notification: curl_easy_init failed");
+      goto cleanup;
+   }
+
+   headers = curl_slist_append(headers, auth_header);
+
+   curl_easy_setopt(curl, CURLOPT_URL, full_url);
+   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fetch_write_cb);
+   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+   curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+   curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);
+   curl_easy_setopt(curl, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)IMAGE_FETCH_MAX_SIZE);
+   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); /* No redirects */
+   curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); /* Local network, self-signed cert */
+
+   res = curl_easy_perform(curl);
+   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+   if (s_shutting_down) {
+      goto cleanup;
+   }
+
+   if (res != CURLE_OK || !buf.data || buf.size == 0) {
+      LOG_ERROR("notification: image fetch failed: %s (HTTP %ld)", curl_easy_strerror(res),
+                http_code);
+      goto cleanup;
+   }
+
+   /* Validate magic bytes (JPEG, PNG, GIF, WebP) */
+   bool valid_magic = false;
+   if (buf.size >= 4) {
+      if (buf.data[0] == 0xFF && buf.data[1] == 0xD8) {
+         valid_magic = true; /* JPEG */
+      } else if (buf.data[0] == 0x89 && buf.data[1] == 'P' && buf.data[2] == 'N' &&
+                 buf.data[3] == 'G') {
+         valid_magic = true; /* PNG */
+      } else if (buf.data[0] == 'G' && buf.data[1] == 'I' && buf.data[2] == 'F') {
+         valid_magic = true; /* GIF */
+      } else if (buf.size >= 12 && buf.data[8] == 'W' && buf.data[9] == 'E' &&
+                 buf.data[10] == 'B' && buf.data[11] == 'P') {
+         valid_magic = true; /* WebP */
+      }
+   }
+
+   if (!valid_magic) {
+      LOG_ERROR("notification: fetched data has invalid image magic bytes");
+      goto cleanup;
+   }
+
+   LOG_INFO("notification: image fetched, %zu bytes (HTTP %ld)", buf.size, http_code);
+
+   /* Hand off to render thread via dirty flag (ownership transfer) */
+   pthread_mutex_lock(&s_image.image_mutex);
+   free(s_image.image_data);
+   s_image.image_data = buf.data;
+   s_image.image_data_size = buf.size;
+   s_image.image_dirty = true;
+   buf.data = NULL; /* transferred */
+   pthread_mutex_unlock(&s_image.image_mutex);
+
+cleanup:
+   if (headers) {
+      curl_slist_free_all(headers);
+   }
+   if (curl) {
+      curl_easy_cleanup(curl);
+   }
+   free(buf.data); /* only non-NULL if we didn't hand off */
+
+   /* Zero auth header buffer to prevent token lingering in stack memory */
+   explicit_bzero(auth_header, sizeof(auth_header));
+
+   /* Clear in-progress flag so the next request can launch */
+   pthread_mutex_lock(&s_image.image_mutex);
+   s_image.fetch_in_progress = false;
+   pthread_mutex_unlock(&s_image.image_mutex);
+
+   return NULL;
+}
+
+/* =============================================================================
  * State Machine Helpers
  * ============================================================================= */
 
@@ -182,6 +386,18 @@ void notification_init(void) {
 }
 
 void notification_shutdown(void) {
+   /* Signal the fetch thread to stop writing to shared state, then join it */
+   s_shutting_down = true;
+
+   pthread_mutex_lock(&s_image.image_mutex);
+   bool need_join = s_image.fetch_in_progress;
+   pthread_t join_tid = s_image.fetch_thread;
+   pthread_mutex_unlock(&s_image.image_mutex);
+
+   if (need_join) {
+      pthread_join(join_tid, NULL);
+   }
+
    phone_free_photo();
 
    pthread_mutex_lock(&s_image.image_mutex);
@@ -370,9 +586,25 @@ void notification_handle_image_request(struct json_object *root) {
 
    image_set_state(NOTIF_STATE_SHOWING, NOTIF_FADE_IN_IMAGE_MS);
 
+   /* Kick off async HTTP fetch if URL is present and no fetch currently in progress.
+    * The fetch thread is tracked so shutdown can join it; fetch_in_progress prevents
+    * concurrent fetches from racing on the handoff buffer. */
+   bool should_launch = (s_image.image_url[0] && !s_image.fetch_in_progress);
+   if (should_launch) {
+      s_image.fetch_in_progress = true;
+   }
    pthread_mutex_unlock(&s_image.image_mutex);
 
-   /* TODO: Kick off async HTTP fetch for image_url using service token */
+   if (should_launch) {
+      if (pthread_create(&s_image.fetch_thread, NULL, image_fetch_thread, NULL) != 0) {
+         LOG_ERROR("notification: failed to create image fetch thread");
+         pthread_mutex_lock(&s_image.image_mutex);
+         s_image.fetch_in_progress = false;
+         pthread_mutex_unlock(&s_image.image_mutex);
+      }
+   } else if (s_image.image_url[0]) {
+      LOG_INFO("notification: fetch already in progress, skipping duplicate request");
+   }
 }
 
 /* =============================================================================
@@ -552,6 +784,12 @@ SDL_Texture *notification_get_photo_texture(SDL_Renderer *renderer) {
       return s_phone.photo_texture;
    }
 
+   /* Fast path: no new data means no mutex needed (called every frame).
+    * A stale false read just defers texture creation by one frame. */
+   if (!s_phone.photo_dirty) {
+      return s_phone.photo_texture;
+   }
+
    /* Check if MQTT thread delivered new photo data */
    pthread_mutex_lock(&s_phone.mutex);
    if (s_phone.photo_dirty && s_phone.photo_data && s_phone.photo_data_size > 0) {
@@ -571,10 +809,55 @@ SDL_Texture *notification_get_photo_texture(SDL_Renderer *renderer) {
          }
       }
       s_phone.photo_dirty = false;
+
+      /* Free raw bytes once texture is created; photo notifications don't need
+       * to reuse the raw data, and keeping it wastes heap on the Pi. */
+      free(s_phone.photo_data);
+      s_phone.photo_data = NULL;
+      s_phone.photo_data_size = 0;
    }
    pthread_mutex_unlock(&s_phone.mutex);
 
    return s_phone.photo_texture;
+}
+
+SDL_Texture *notification_get_image_texture(SDL_Renderer *renderer) {
+   if (!renderer) {
+      return s_image.image_texture;
+   }
+
+   /* Fast path: no new data means no mutex needed (called every frame).
+    * A stale false read just defers texture creation by one frame. */
+   if (!s_image.image_dirty) {
+      return s_image.image_texture;
+   }
+
+   /* Check if fetch thread delivered new image data */
+   pthread_mutex_lock(&s_image.image_mutex);
+   if (s_image.image_dirty && s_image.image_data && s_image.image_data_size > 0) {
+      if (s_image.image_texture) {
+         SDL_DestroyTexture(s_image.image_texture);
+         s_image.image_texture = NULL;
+      }
+
+      SDL_RWops *rw = SDL_RWFromMem(s_image.image_data, (int)s_image.image_data_size);
+      if (rw) {
+         SDL_Surface *surface = IMG_Load_RW(rw, 1);
+         if (surface) {
+            s_image.image_texture = SDL_CreateTextureFromSurface(renderer, surface);
+            SDL_FreeSurface(surface);
+         }
+      }
+      s_image.image_dirty = false;
+
+      /* Free raw bytes after texture creation to reclaim heap (up to 5MB) */
+      free(s_image.image_data);
+      s_image.image_data = NULL;
+      s_image.image_data_size = 0;
+   }
+   pthread_mutex_unlock(&s_image.image_mutex);
+
+   return s_image.image_texture;
 }
 
 const notif_phone_t *notification_get_phone(void) {

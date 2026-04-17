@@ -48,4 +48,10 @@ const char *get_mqtt_username(void);
 /** @brief Returns the MQTT password, or empty string if not set. */
 const char *get_mqtt_password(void);
 
+/** @brief Returns the DAWN base URL (e.g. "https://192.168.1.50:3000"), or empty string. */
+const char *get_dawn_url(void);
+
+/** @brief Returns the DAWN service token for Bearer auth, or empty string. */
+const char *get_dawn_service_token(void);
+
 #endif /* CONFIG_SECRETS_H */
