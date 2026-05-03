@@ -1,0 +1,26 @@
+# Version control
+.git
+.gitignore
+
+# Build artifacts
+build/
+
+# Documentation (not needed in container)
+docs/
+*.md
+!CMakeLists.txt
+
+# Editor and IDE files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Scratch/temp
+scratch/
+
+# Secrets
+# Note: secrets.h is NOT excluded — it contains only placeholders and is
+# required for compilation. Real secrets should never be committed to the repo.
+googleapi.key

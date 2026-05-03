@@ -1,0 +1,142 @@
+# Dockerfile.dev - MIRAGE Development/Build Container (x86/x64)
+#
+# Builds the MIRAGE C application with all dependencies.
+# Includes Xvfb for headless build verification and Mosquitto for MQTT testing.
+#
+# No mock hardware — MIRAGE C source has zero mock support.
+# See meta-issue #30 for mock hardware standardization.
+#
+# Usage:
+#   docker build -f Dockerfile.dev -t mirage-dev .
+#   docker run --rm -it mirage-dev
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
+    && rm -rf /var/lib/apt/lists/*
+
+# MIRAGE dependencies (from CMakeLists.txt)
+RUN apt-get update && apt-get install -y \
+    libudev-dev \
+    libxext-dev \
+    libwebp-dev \
+    libpulse-dev \
+    libvorbis-dev \
+    libjson-c-dev \
+    libsamplerate0-dev \
+    libfreetype6-dev \
+    libcurl4-openssl-dev \
+    libmosquitto-dev \
+    mosquitto \
+    mosquitto-clients \
+    libsndfile1-dev \
+    libssl-dev \
+    libgd-dev \
+    libasound2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# SDL2 build dependencies
+RUN apt-get update && apt-get install -y \
+    libdrm-dev \
+    libgbm-dev \
+    libgl1-mesa-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev \
+    libibus-1.0-dev \
+    libdbus-1-dev \
+    libx11-dev \
+    libxrandr-dev \
+    libxcursor-dev \
+    libxinerama-dev \
+    libxi-dev \
+    libxss-dev \
+    libxxf86vm-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libharfbuzz-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# GStreamer
+RUN apt-get update && apt-get install -y \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-base \
+    && rm -rf /var/lib/apt/lists/*
+
+# OpenGL / GLEW
+RUN apt-get update && apt-get install -y \
+    libglew-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# SDL2_gfx (from apt — not built from source)
+RUN apt-get update && apt-get install -y \
+    libsdl2-gfx-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Xvfb for headless build verification
+RUN apt-get update && apt-get install -y \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build SDL2 from source (MIRAGE requires 2.28.2+)
+ENV SDL2_VERSION=2.28.2
+ENV SDL2_IMAGE_VERSION=2.6.3
+ENV SDL2_TTF_VERSION=2.20.2
+
+WORKDIR /tmp
+
+RUN wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz" \
+    && tar -xzf "SDL2-${SDL2_VERSION}.tar.gz" \
+    && cd "SDL2-${SDL2_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2-${SDL2_VERSION}"*
+
+RUN wget -q "https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL2_IMAGE_VERSION}/SDL2_image-${SDL2_IMAGE_VERSION}.tar.gz" \
+    && tar -xzf "SDL2_image-${SDL2_IMAGE_VERSION}.tar.gz" \
+    && cd "SDL2_image-${SDL2_IMAGE_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2_image-${SDL2_IMAGE_VERSION}"*
+
+RUN wget -q "https://github.com/libsdl-org/SDL_ttf/releases/download/release-${SDL2_TTF_VERSION}/SDL2_ttf-${SDL2_TTF_VERSION}.tar.gz" \
+    && tar -xzf "SDL2_ttf-${SDL2_TTF_VERSION}.tar.gz" \
+    && cd "SDL2_ttf-${SDL2_TTF_VERSION}" \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd /tmp \
+    && rm -rf "SDL2_ttf-${SDL2_TTF_VERSION}"*
+
+# Copy MIRAGE source
+WORKDIR /opt/mirage
+COPY . .
+
+# Build MIRAGE
+RUN mkdir -p build \
+    && cd build \
+    && cmake .. \
+    && make -j$(nproc)
+
+# Start mosquitto in background, then drop to shell
+CMD ["bash", "-c", "mosquitto -d && echo 'MIRAGE build complete. Binary at /opt/mirage/build/mirage' && exec bash"]
