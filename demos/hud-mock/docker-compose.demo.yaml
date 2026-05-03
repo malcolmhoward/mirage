@@ -1,0 +1,49 @@
+name: mirage-hud-mock
+
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mock-publisher:
+    build: ./mock_publisher
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+    environment:
+      MQTT_BROKER: mqtt-broker
+      AURA_TOPIC: aura
+      STAT_TOPIC: stat
+      PUBLISH_INTERVAL: "1.0"
+    restart: on-failure
+
+  mock-dawn:
+    build: ./mock_dawn
+    depends_on:
+      mock-publisher:
+        condition: service_started
+    environment:
+      MQTT_BROKER: mqtt-broker
+      AURA_TOPIC: aura
+    restart: on-failure
+
+  mirage:
+    image: mirage:dev
+    depends_on:
+      mock-publisher:
+        condition: service_started
+    environment:
+      DISPLAY: "${DISPLAY:-:0}"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    command: >
+      bash -c "sleep 3 && /opt/mirage/build/mirage --broker mqtt-broker"
+    restart: on-failure

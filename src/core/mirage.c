@@ -1524,6 +1524,7 @@ int main(int argc, char **argv) {
 
    off_t last_size = -1;
    off_t last_last_size = -1;
+   const char *broker_host = "127.0.0.1";
    /* End Variable Inits */
 
    sdl_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI;
@@ -1541,8 +1542,10 @@ int main(int argc, char **argv) {
     * s  - stream on startup
     * t  - record and stream on startup
     * u: - USB/serial with port
+    * B: - MQTT broker hostname (default: 127.0.0.1)
     */
-   static struct option long_options[] = { { "black-background", no_argument, NULL, 'b' },
+   static struct option long_options[] = { { "broker", required_argument, NULL, 'B' },
+                                           { "black-background", no_argument, NULL, 'b' },
                                            { "camera", required_argument, NULL, 'c' },
                                            { "device", required_argument, NULL, 'd' },
                                            { "fullscreen", no_argument, NULL, 'f' },
@@ -1578,13 +1581,16 @@ int main(int argc, char **argv) {
    }
 
    while (1) {
-      opt = getopt_long(argc, argv, "bc:d:fhH::l:n:p:rstu", long_options, &option_index);
+      opt = getopt_long(argc, argv, "B:bc:d:fhH::l:n:p:rstu", long_options, &option_index);
 
       if (opt == -1) {
          break;
       }
 
       switch (opt) {
+         case 'B':
+            broker_host = optarg;
+            break;
          case 'b':
             no_camera_mode = 1;
             printf("No camera mode enabled - cameras disabled\n");
@@ -1909,9 +1915,11 @@ int main(int argc, char **argv) {
    /* Set Last Will and Testament for automatic offline notification */
    component_status_set_lwt(mosq);
 
-   /* Connect to MQTT server (host/port from config.json, defaults to 127.0.0.1:1883) */
-   OLOG_INFO("Connecting to MQTT broker at %s:%d", get_mqtt_host(), get_mqtt_port());
-   rc = mosquitto_connect(mosq, get_mqtt_host(), get_mqtt_port(), 60);
+   /* Connect: --broker overrides config.json's host; port always from config.json. */
+   const char *mqtt_host =
+      (broker_host && strcmp(broker_host, "127.0.0.1") != 0) ? broker_host : get_mqtt_host();
+   OLOG_INFO("Connecting to MQTT broker at %s:%d", mqtt_host, get_mqtt_port());
+   rc = mosquitto_connect(mosq, mqtt_host, get_mqtt_port(), 60);
    if (rc != MOSQ_ERR_SUCCESS) {
       mosquitto_destroy(mosq);
       OLOG_ERROR("Error: %s", mosquitto_strerror(rc));
