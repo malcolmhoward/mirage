@@ -2,6 +2,14 @@
 
 <img src="https://www.oasisproject.net/assets/screenshot_gtc.png" alt="MIRAGE HUD" width="800" />
 
+## Overview
+
+M.I.R.A.G.E. is the primary visual interface for the O.A.S.I.S. ecosystem. It renders a real-time heads-up display (HUD) on dual high-resolution screens mounted inside a helmet, overlaying sensor data, navigation, object detection, and system status onto the wearer's field of view.
+
+MIRAGE receives telemetry from all other O.A.S.I.S. components via MQTT — orientation from the IMU, environmental readings from sensors, GPS positioning, and connectivity status from each armor piece — and composites this data into a fully configurable UI driven by `config.json`. It also sends text-to-speech commands to D.A.W.N. for audio feedback and streams video to remote viewers.
+
+Built in C with SDL2 for rendering, MIRAGE runs on NVIDIA Jetson platforms and supports stereo display output, camera passthrough, recording/streaming, and hotkey-driven UI toggling.
+
 ## Application Notes
 
 * Google API/Maps - A Google API key is required for the current implementation of the maps overlay for access to Google Maps. Getting an API key is currently beyond the scope of this document. Please see Google's documentation for details.
@@ -331,3 +339,81 @@ The "Components" section of the `config.json` is dedicated to monitoring various
 * **`online file`:** The file (usually green) shown once a connection to the component has been successfully made, signaling that the component is active and functioning.
 * **`warning file`:** The file (commonly yellow) displayed when the component enters a warning state, such as overheating or low battery, prompting user attention to potential issues.
 * **`offline file`:** The visual (typically red) used to indicate that the component has lost connection or is otherwise not communicating, alerting the user to a significant problem.
+
+## Communication
+
+MIRAGE communicates with all other O.A.S.I.S. components via MQTT. See the [O.A.S.I.S. Communication Protocols](https://www.oasisproject.net/architecture/mqtt-protocols/) for full message format details.
+
+### Subscribed Topics
+
+| Topic | Purpose | Key Payload Fields |
+|-------|---------|-------------------|
+| `hud` | HUD switching and control | `action`: set/switchHUD, `value`: HUD name, `transitionType` |
+| `helmet` | Faceplate commands (forwarded to serial) | Raw command string |
+| `stat` | System metrics and battery status | `device`: SystemMetrics/Fan/BatteryStatus |
+| *Armor components* | Per-piece connectivity and telemetry | `device`, `temp`, `voltage`, orientation data |
+
+Armor component topics are dynamically subscribed based on `config.json` entries (e.g., `shoulder/left`, `chest`, `repulsor/right`, `thigh/left`).
+
+### Additional Received Messages
+
+MIRAGE also processes these message types on subscribed topics:
+
+| Device Type | Purpose | Key Fields |
+|-------------|---------|------------|
+| `Motion` | IMU orientation for compass/pitch/roll | `heading`, `pitch`, `roll` |
+| `Enviro` | Environmental sensor readings | `temp`, `humidity`, `co2_ppm`, `air_quality` |
+| `GPS` | Position and navigation data | `latitude`, `longitude`, `altitude`, `speed`, `satellites` |
+| `audio` | Audio playback commands | `command`: play/stop, `arg1`: filename |
+| `ai` | AI model state changes | `name`, `state` |
+| `map` | Map zoom/type/refresh control | `action`, `value` |
+| `record`/`stream` | Recording and streaming control | `action`: enable/disable |
+
+### Published Topics
+
+| Topic | Purpose | Payload |
+|-------|---------|---------|
+| `dawn` | Text-to-speech requests | `{"device": "text to speech", "action": "play", "value": "<text>"}` |
+| `dawn` | AI snapshot notifications | Image path and metadata |
+
+MIRAGE publishes to the `dawn` topic for audio feedback — armor connection/disconnection announcements, HUD switch confirmations, recording status alerts, and startup/shutdown messages.
+
+### QoS and Configuration
+
+- All subscriptions use **QoS level 1** (at least once delivery)
+- MQTT broker address configured at build time or via environment
+- Armor component deregistration timeout configurable via `armor_deregister` setting
+
+## Troubleshooting
+
+### Display Issues
+
+* **Black screen on startup**: Verify DisplayPort cable connections to the Wisecoco driver board. Check that the Jetson is outputting to the correct display.
+* **Stereo offset incorrect**: Adjust the `Stereo Offset` value in `config.json`. Negative values shift left, positive shift right.
+* **Low frame rate**: Check `Stream Width`/`Stream Height` — streaming at high resolution impacts performance. Verify GPU utilization with `jtop`.
+
+### Camera Issues
+
+* **Camera not detected**: Run `sudo /opt/nvidia/jetson-io/jetson-io.py` to verify CSI connector configuration. Ensure IMX477 Dual is selected.
+* **CSI cable connection**: The Arducam CSI to HDMI extension modules require firm seating at both ends. Reseat cables if the camera feed is intermittent.
+
+### Build Issues
+
+* **Missing dependencies**: Ensure all packages from the Installation Notes are installed. The `libmosquitto-dev` and `mosquitto` packages are required for MQTT.
+* **CMake errors**: Verify Jetson Inference is built and installed before building MIRAGE.
+
+### MQTT Issues
+
+* **Armor pieces showing offline (red)**: Check that the component is publishing to the correct MQTT topic matching the `device` field in `config.json`. Verify the MQTT broker is running: `systemctl status mosquitto`.
+* **No audio feedback**: Verify D.A.W.N. is running and subscribed to the `dawn` topic. Check MQTT broker connectivity.
+
+### SPI Issues
+
+* **SPI device not found**: Verify SPI is enabled via `jetson-io.py` (Configure Jetson 40pin Header → Enable 'spi1'). A reboot may be required after configuration changes.
+
+## Related Components
+
+- [D.A.W.N.](https://www.oasisproject.net/components/dawn/) - Receives text-to-speech commands from MIRAGE via the `dawn` MQTT topic; provides voice command processing
+- [A.U.R.A.](https://www.oasisproject.net/components/aura/) - Publishes sensor telemetry (environmental, GPS, IMU) and faceplate status that MIRAGE displays on the HUD
+- [S.P.A.R.K.](https://www.oasisproject.net/components/spark/) - Publishes repulsor/peripheral telemetry (voltage, temperature, audio commands) displayed on the armor status panel
+- [B.E.A.C.O.N.](https://www.oasisproject.net/components/beacon/) - Provides the physical mounting hardware (HUD frame, speaker chassis) that houses MIRAGE's displays and cameras
