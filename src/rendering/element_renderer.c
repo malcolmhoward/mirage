@@ -779,24 +779,18 @@ void render_text_element(element *curr_element) {
          curr_element->surface = NULL;
       }
 
-      /* Check if text contains line break delimiters */
-      if (strchr(render_text, LINE_BREAK_DELIMITER) != NULL) {
+      /* Wrap when either (a) wrap_width > 0 from config (word-wrap to that pixel width),
+       * or (b) the text already contains explicit newline delimiters. SDL_ttf treats
+       * wrapLength=0 as "wrap only on explicit \n", which is the desired behavior for
+       * case (b). When both apply, wrap_width takes precedence as the harder constraint. */
+      if (curr_element->wrap_width > 0) {
+         curr_element->surface = TTF_RenderUTF8_Blended_Wrapped(curr_element->ttf_font, render_text,
+                                                                curr_element->font_color,
+                                                                (Uint32)curr_element->wrap_width);
+      } else if (strchr(render_text, LINE_BREAK_DELIMITER) != NULL) {
          /* Create wrapped text surface using newline handling */
          curr_element->surface = TTF_RenderUTF8_Blended_Wrapped(curr_element->ttf_font, render_text,
                                                                 curr_element->font_color, 0);
-
-         /* Note: wrapLength=0 means only wrap on explicit newlines */
-
-         /* This is a place holder. */
-         /* TTF_SetFontLineSkip() function is available since SDL_ttf 2.22.0. */
-#if 0
-         /* Calculate line height for proper vertical spacing */
-         int line_height = TTF_FontHeight(curr_element->ttf_font);
-         int line_spacing = (int)(line_height * LINE_SPACING_FACTOR);
-
-         /* Set the line spacing for better readability */
-         TTF_SetFontLineSkip(curr_element->ttf_font, line_spacing);
-#endif
       } else {
          /* Standard single-line text rendering */
          curr_element->surface = TTF_RenderUTF8_Blended(curr_element->ttf_font, render_text,
@@ -807,7 +801,14 @@ void render_text_element(element *curr_element) {
          curr_element->dst_rect.w = curr_element->surface->w;
          curr_element->dst_rect.h = curr_element->surface->h;
 
-         if (curr_element->surface != NULL && alpha_override > 0.0f) {
+         /* max_height clamp — clip bottom overflow rather than vertical-scaling. The draw
+          * path below detects the clamp by comparing dst_rect.h against the texture's
+          * native height and passes a matching src rect to SDL so cropping wins over scale. */
+         if (curr_element->max_height > 0 && curr_element->dst_rect.h > curr_element->max_height) {
+            curr_element->dst_rect.h = curr_element->max_height;
+         }
+
+         if (alpha_override > 0.0f) {
             // Apply alpha to the surface color
             curr_element->font_color.a = (Uint8)(alpha_override * 255);
          }
@@ -864,13 +865,32 @@ void render_text_element(element *curr_element) {
    if (curr_element->texture != NULL) {
       SDL_SetTextureAlphaMod(curr_element->texture, render_alpha);
 
+      /* When max_height clipped dst_rect.h below the texture's native size, pass a
+       * matching src rect so SDL crops the bottom rather than vertical-scaling the
+       * full texture into a shorter dst. src_ptr stays NULL otherwise (full texture). */
+      SDL_Rect text_src;
+      SDL_Rect *src_ptr = NULL;
+      if (curr_element->max_height > 0) {
+         int tex_w = 0;
+         int tex_h = 0;
+         if (SDL_QueryTexture(curr_element->texture, NULL, NULL, &tex_w, &tex_h) == 0 &&
+             tex_h > curr_element->dst_rect.h) {
+            text_src.x = 0;
+            text_src.y = 0;
+            text_src.w = tex_w;
+            text_src.h = curr_element->dst_rect.h;
+            src_ptr = &text_src;
+         }
+      }
+
       if (curr_element->angle == ANGLE_OPPOSITE_ROLL) {
-         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r,
+         renderStereo(curr_element->texture, src_ptr, &dst_rect_l, &dst_rect_r,
                       -1.0 * this_motion->roll);
       } else if (curr_element->angle == ANGLE_ROLL) {
-         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, this_motion->roll);
+         renderStereo(curr_element->texture, src_ptr, &dst_rect_l, &dst_rect_r, this_motion->roll);
       } else {
-         renderStereo(curr_element->texture, NULL, &dst_rect_l, &dst_rect_r, curr_element->angle);
+         renderStereo(curr_element->texture, src_ptr, &dst_rect_l, &dst_rect_r,
+                      curr_element->angle);
       }
 
       SDL_SetTextureAlphaMod(curr_element->texture, 255);

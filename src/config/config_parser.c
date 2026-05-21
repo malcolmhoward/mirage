@@ -576,6 +576,25 @@ static int parse_common_element_properties(struct json_object *element_obj, elem
       }
    }
 
+   /* Parse wrap_width — pixel width at which text elements wrap. 0 (default) preserves
+    * the legacy single-line behavior; > 0 enables word-wrapping in element_renderer.c. */
+   if (json_object_object_get_ex(element_obj, "wrap_width", &tmpobj)) {
+      int w = json_object_get_int(tmpobj);
+      if (w > 0) {
+         curr_element->wrap_width = w;
+      }
+   }
+
+   /* Parse max_height — pixel height cap for text elements. 0 (default) uses the rendered
+    * surface's natural height; > 0 clips bottom overflow. Intended for wrapped text inside
+    * fixed-size containers (e.g., SMS preview in a notification popup). */
+   if (json_object_object_get_ex(element_obj, "max_height", &tmpobj)) {
+      int h = json_object_get_int(tmpobj);
+      if (h > 0) {
+         curr_element->max_height = h;
+      }
+   }
+
    /* Parse HUD associations */
    json_object_object_get_ex(element_obj, "huds", &tmpobj);
    if (tmpobj != NULL && json_object_get_type(tmpobj) == json_type_array) {

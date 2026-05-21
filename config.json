@@ -413,7 +413,7 @@
          "name": "phone_notif_bg",
          "file": "notification-phone-bg.png",
          "dest_x": 880,
-         "dest_y": 80,
+         "dest_y": 110,
          "layer": 10,
          "huds": ["default", "environmental", "armor"],
          "notification_group": "phone"
@@ -424,7 +424,7 @@
          "name": "phone_notif_photo",
          "file": "contact-placeholder.png",
          "dest_x": 900,
-         "dest_y": 138,
+         "dest_y": 168,
          "width": 128,
          "height": 128,
          "layer": 11,
@@ -438,7 +438,7 @@
          "size": 22,
          "color": "0x02, 0xDF, 0xF1, 0xFF",
          "dest_x": 1048,
-         "dest_y": 130,
+         "dest_y": 160,
          "layer": 11,
          "huds": ["default", "environmental", "armor"],
          "notification_group": "phone"
@@ -450,7 +450,7 @@
          "size": 34,
          "color": "0xFF, 0xFF, 0xFF, 0xFF",
          "dest_x": 1048,
-         "dest_y": 160,
+         "dest_y": 190,
          "layer": 11,
          "huds": ["default", "environmental", "armor"],
          "notification_group": "phone"
@@ -462,7 +462,7 @@
          "size": 22,
          "color": "0x5A, 0x8A, 0x8D, 0xFF",
          "dest_x": 1048,
-         "dest_y": 200,
+         "dest_y": 230,
          "layer": 11,
          "huds": ["default", "environmental", "armor"],
          "notification_group": "phone"
@@ -474,10 +474,12 @@
          "size": 20,
          "color": "0xFF, 0xFF, 0xFF, 0xFF",
          "dest_x": 1048,
-         "dest_y": 230,
+         "dest_y": 260,
          "layer": 11,
          "huds": ["default", "environmental", "armor"],
-         "notification_group": "phone"
+         "notification_group": "phone",
+         "wrap_width": 372,
+         "max_height": 90
       },
       {
          "type": "static",

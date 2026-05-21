@@ -315,6 +315,16 @@ typedef struct _element {
    /* Notification group — links element to a notification slot (resolved at parse time) */
    int notification_group; /* notif_group_t enum from notification.h */
 
+   /* Text wrap width in pixels (0 = single-line, no wrapping). Applies to text elements;
+    * the renderer calls TTF_RenderUTF8_Blended_Wrapped with this width when > 0. */
+   int wrap_width;
+
+   /* Maximum render height in pixels (0 = unbounded, the surface's natural height is used).
+    * When > 0, the renderer clips dst_rect.h to this cap and passes a matching src rect so
+    * overflow is cropped from the bottom rather than scaled. Pairs with wrap_width to keep
+    * wrapped text from bleeding past a fixed-size container. */
+   int max_height;
+
    /* Transition state - used for fade/zoom effects */
    float transition_alpha;
    int in_transition;
