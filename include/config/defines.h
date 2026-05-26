@@ -411,10 +411,20 @@ enum {
    "mux. hlssink2 name=mux playlist-root=http://%s/hls/ " \
    "location=/var/www/html/hls/segment%%d.ts "            \
    "playlist-location=/var/www/html/hls/playlist.m3u8"
+/**
+ * @brief Default RTMP ingest URL. Used when MIRAGE_RTMP_URL is unset or empty.
+ *
+ * Override at runtime by setting the MIRAGE_RTMP_URL environment variable —
+ * e.g. `MIRAGE_RTMP_URL=rtmp://localhost:1935/live/` for a local nginx-rtmp
+ * relay. The stream key from get_youtube_stream_key() is appended after this
+ * URL, so the URL should end with a `/`.
+ */
+#define GST_PIPE_RTMP_DEFAULT_URL "rtmp://a.rtmp.youtube.com/live2/"
+
 #define GST_PIPE_RTMP_OUT                                                         \
    "flvmux name=mux streamable=true latency=100000000 ! "                         \
    "queue name=mux_queue max-size-buffers=50 max-size-time=0 max-size-bytes=0 ! " \
-   "rtmpsink location='rtmp://a.rtmp.youtube.com/live2/%s live=1' sync=false async=false"
+   "rtmpsink location='%s%s live=1' sync=false async=false"
 
 /* === UTILITY COMPONENTS === */
 #define GST_PIPE_QUEUE "queue ! mux."
@@ -455,7 +465,7 @@ enum {
    "filesink location=%s "                                                         \
    "flvmux name=streammux streamable=true latency=100000000 ! "                    \
    "queue name=rtmp_queue max-size-buffers=50 max-size-time=0 max-size-bytes=0 ! " \
-   "rtmpsink location='rtmp://a.rtmp.youtube.com/live2/%s live=1' sync=false async=false"
+   "rtmpsink location='%s%s live=1' sync=false async=false"
 
 /* Streaming-only pipeline */
 #define GST_STR_PIPELINE      \

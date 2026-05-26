@@ -489,12 +489,20 @@ void *video_next_thread(void *arg) {
       return NULL;
    }
 
+   /* Resolve RTMP destination URL: MIRAGE_RTMP_URL env var overrides the
+    * default YouTube ingest URL. Falls back to GST_PIPE_RTMP_DEFAULT_URL
+    * when unset or empty so existing deployments see no behavior change. */
+   const char *rtmp_url = getenv("MIRAGE_RTMP_URL");
+   if (rtmp_url == NULL || rtmp_url[0] == '\0') {
+      rtmp_url = GST_PIPE_RTMP_DEFAULT_URL;
+   }
+
    /* Build pipeline description based on output type */
    if (this_vod.output == RECORD_STREAM) {
       OLOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENCSTR_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE, this_vod.filename, get_youtube_stream_key());
+                 RECORD_PULSE_AUDIO_DEVICE, this_vod.filename, rtmp_url, get_youtube_stream_key());
    } else if (this_vod.output == RECORD) {
       OLOG_INFO("New recording: %s", this_vod.filename);
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_ENC_PIPELINE, window_width, window_height,
@@ -503,7 +511,7 @@ void *video_next_thread(void *arg) {
    } else if (this_vod.output == STREAM) {
       g_snprintf(descr, GSTREAMER_PIPELINE_LENGTH, GST_STR_PIPELINE, window_width, window_height,
                  TARGET_RECORDING_FPS, STREAM_WIDTH, STREAM_HEIGHT, STREAM_BITRATE,
-                 RECORD_PULSE_AUDIO_DEVICE, get_youtube_stream_key());
+                 RECORD_PULSE_AUDIO_DEVICE, rtmp_url, get_youtube_stream_key());
    } else {
       OLOG_ERROR("Invalid destination passed.");
       this_vod.output = DISABLED;
