@@ -165,3 +165,45 @@ Current large files (monitor):
 ## License
 
 GPLv3 or later. Every new source file includes the GPL header block.
+
+---
+
+## O.A.S.I.S. Ecosystem Context
+
+MIRAGE is part of the O.A.S.I.S. ecosystem. For ecosystem-level coordination, roadmaps, and cross-component ADRs, see [S.C.O.P.E.](https://github.com/The-OASIS-Project).
+
+| Component | Interaction |
+|-----------|-------------|
+| **AURA** | Receives sensor data (motion, orientation, environment, GPS) |
+| **DAWN** | Receives AI state and TTS notifications; sends image capture requests (OCP snapshot protocol) |
+| **SPARK** | Receives armor component status and audio commands |
+
+*For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).*
+
+## Branch Naming Convention
+
+**Critical**: Branch names must include the GitHub issue number being addressed.
+
+### Format
+```
+feat/<component>/<issue#>-<short-description>
+```
+
+### Before Creating a Branch
+
+1. **Identify the issue** you're working on (check GitHub Issues)
+2. **Use that issue's number** in the branch name
+3. **Verify** the issue number matches the work being done
+
+### Examples
+```bash
+# Working on issue #3 "Apply PFT foundation files to MIRAGE"
+git checkout -b feat/mirage/3-foundation-files
+
+# Working on issue #5 "Add thermal camera support"
+git checkout -b feat/mirage/5-thermal-camera
+```
+
+### Common Mistake
+- Using arbitrary numbers or the wrong issue number
+- Always check `gh issue list` or GitHub Issues before creating a branch
